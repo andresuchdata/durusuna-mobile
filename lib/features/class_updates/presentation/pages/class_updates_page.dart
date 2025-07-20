@@ -7,7 +7,7 @@ import '../../../../shared/models/user.dart';
 import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../widgets/class_update_card.dart';
-import '../widgets/create_update_dialog.dart';
+import 'create_update_page.dart';
 
 class ClassUpdatesPage extends ConsumerStatefulWidget {
   final String classId;
@@ -48,17 +48,21 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
     }
   }
 
-  void _showCreateUpdateDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => CreateUpdateDialog(
-        classId: widget.classId,
-        onUpdateCreated: () {
-          ref.read(classUpdatesProvider(widget.classId).notifier)
-              .loadUpdates(refresh: true);
-        },
+  void _showCreateUpdateDialog() async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => CreateUpdatePage(
+          classId: widget.classId,
+        ),
       ),
     );
+
+    // Refresh updates if the form was submitted successfully
+    if (result == true) {
+      ref
+          .read(classUpdatesProvider(widget.classId).notifier)
+          .loadUpdates(refresh: true);
+    }
   }
 
   @override
@@ -82,7 +86,8 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
-              ref.read(classUpdatesProvider(widget.classId).notifier)
+              ref
+                  .read(classUpdatesProvider(widget.classId).notifier)
                   .loadUpdates(refresh: true);
             },
           ),
@@ -90,7 +95,8 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          await ref.read(classUpdatesProvider(widget.classId).notifier)
+          await ref
+              .read(classUpdatesProvider(widget.classId).notifier)
               .loadUpdates(refresh: true);
         },
         child: Column(
@@ -165,7 +171,8 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
                             if (index == updatesState.updates.length) {
                               return const Padding(
                                 padding: EdgeInsets.all(16.0),
-                                child: Center(child: CircularProgressIndicator()),
+                                child:
+                                    Center(child: CircularProgressIndicator()),
                               );
                             }
 
@@ -173,19 +180,20 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
                             return ClassUpdateCard(
                               update: update,
                               onReaction: (emoji) {
-                                ref.read(classUpdatesProvider(widget.classId)
-                                    .notifier)
+                                ref
+                                    .read(classUpdatesProvider(widget.classId)
+                                        .notifier)
                                     .toggleReaction(update.id, emoji);
                               },
                               onComment: () {
                                 _showCommentsBottomSheet(update);
                               },
-                              onEdit: canPost && 
-                                     update.authorId == authState.user?.id
+                              onEdit: canPost &&
+                                      update.authorId == authState.user?.id
                                   ? () => _showEditUpdateDialog(update)
                                   : null,
-                              onDelete: canPost && 
-                                       update.authorId == authState.user?.id
+                              onDelete: canPost &&
+                                      update.authorId == authState.user?.id
                                   ? () => _confirmDeleteUpdate(update)
                                   : null,
                             );
@@ -212,8 +220,8 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
           Text(
             'No updates yet',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: AppTheme.textSecondary,
-            ),
+                  color: AppTheme.textSecondary,
+                ),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -228,18 +236,22 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
     );
   }
 
-  void _showEditUpdateDialog(ClassUpdate update) {
-    showDialog(
-      context: context,
-      builder: (context) => CreateUpdateDialog(
-        classId: widget.classId,
-        editingUpdate: update,
-        onUpdateCreated: () {
-          ref.read(classUpdatesProvider(widget.classId).notifier)
-              .loadUpdates(refresh: true);
-        },
+  void _showEditUpdateDialog(ClassUpdate update) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => CreateUpdatePage(
+          classId: widget.classId,
+          editingUpdate: update,
+        ),
       ),
     );
+
+    // Refresh updates if the form was submitted successfully
+    if (result == true) {
+      ref
+          .read(classUpdatesProvider(widget.classId).notifier)
+          .loadUpdates(refresh: true);
+    }
   }
 
   void _confirmDeleteUpdate(ClassUpdate update) {
@@ -259,7 +271,8 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
             onPressed: () async {
               Navigator.of(context).pop();
               try {
-                await ref.read(classUpdatesProvider(widget.classId).notifier)
+                await ref
+                    .read(classUpdatesProvider(widget.classId).notifier)
                     .deleteUpdate(update.id);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -312,7 +325,8 @@ class CommentsBottomSheet extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<CommentsBottomSheet> createState() => _CommentsBottomSheetState();
+  ConsumerState<CommentsBottomSheet> createState() =>
+      _CommentsBottomSheetState();
 }
 
 class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
@@ -394,8 +408,8 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                   Text(
                     'Comments',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                   const Spacer(),
                   Text(
@@ -490,7 +504,8 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
 
 // Individual comment widget
 class CommentWidget extends StatelessWidget {
-  final dynamic comment; // Using dynamic for now since we'd need the full comment model
+  final dynamic
+      comment; // Using dynamic for now since we'd need the full comment model
 
   const CommentWidget({super.key, required this.comment});
 
@@ -532,7 +547,8 @@ class CommentWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  timeago.format(DateTime.now().subtract(const Duration(hours: 2))),
+                  timeago.format(
+                      DateTime.now().subtract(const Duration(hours: 2))),
                   style: const TextStyle(
                     color: AppTheme.textTertiary,
                     fontSize: 12,
@@ -545,4 +561,4 @@ class CommentWidget extends StatelessWidget {
       ),
     );
   }
-} 
+}
