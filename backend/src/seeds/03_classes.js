@@ -8,9 +8,10 @@ exports.seed = async function(knex) {
   // Get school and user IDs from previous seeds
   const schools = await knex('schools').select('id').limit(2);
   const teachers = await knex('users').where('user_type', 'teacher').select('id').limit(2);
+  const students = await knex('users').where('user_type', 'student').select('id').limit(2);
   
-  if (schools.length === 0 || teachers.length === 0) {
-    console.log('No schools or teachers found. Make sure to run previous seeds first.');
+  if (schools.length === 0 || teachers.length === 0 || students.length === 0) {
+    console.log('No schools, teachers, or students found. Make sure to run previous seeds first.');
     return;
   }
 
@@ -18,6 +19,8 @@ exports.seed = async function(knex) {
   const highSchoolId = schools[1].id;
   const teacher1Id = teachers[0].id;
   const teacher2Id = teachers[1].id;
+  const student1Id = students[0].id; // This will be student@demo.com
+  const student2Id = students[1].id; // This will be student2@demo.com
 
   // Deletes ALL existing entries
   await knex('classes').del();
@@ -111,6 +114,38 @@ exports.seed = async function(knex) {
       user_id: teacher2Id,
       class_id: englishClassId,
       role_in_class: 'teacher',
+      is_active: true,
+      created_at: new Date(),
+      updated_at: new Date()
+    },
+    
+    // Students enrolled in classes
+    // Student 1 (student@demo.com) in Math class
+    {
+      id: uuidv4(),
+      user_id: student1Id,
+      class_id: mathClassId,
+      role_in_class: 'student',
+      is_active: true,
+      created_at: new Date(),
+      updated_at: new Date()
+    },
+    // Student 1 in Science class
+    {
+      id: uuidv4(),
+      user_id: student1Id,
+      class_id: scienceClassId,
+      role_in_class: 'student',
+      is_active: true,
+      created_at: new Date(),
+      updated_at: new Date()
+    },
+    // Student 2 (student2@demo.com) in English class
+    {
+      id: uuidv4(),
+      user_id: student2Id,
+      class_id: englishClassId,
+      role_in_class: 'student',
       is_active: true,
       created_at: new Date(),
       updated_at: new Date()

@@ -554,15 +554,27 @@ router.get('/:updateId/comments', auth, async (req, res) => {
       author_id: comment.author_id,
       content: comment.content,
       reply_to_id: comment.reply_to_id,
+      reactions: safeJsonParse(comment.reactions, {}),
       is_edited: comment.is_edited,
       edited_at: comment.edited_at,
+      is_deleted: comment.is_deleted || false,
+      deleted_at: comment.deleted_at,
       created_at: comment.created_at,
       updated_at: comment.updated_at,
       author: {
         id: comment.author_id,
-        name: comment.author_name,
+        first_name: comment.author_name ? comment.author_name.split(' ')[0] : '',
+        last_name: comment.author_name ? comment.author_name.split(' ').slice(1).join(' ') : '',
         email: comment.author_email,
-        avatar_url: comment.author_avatar
+        phone: null,
+        avatar_url: comment.author_avatar || "",
+        user_type: 'student', // Default, could be enhanced later
+        role: 'user',
+        school_id: null,
+        is_active: true,
+        last_active_at: null,
+        created_at: comment.created_at,
+        updated_at: comment.updated_at
       }
     }));
 
@@ -675,15 +687,27 @@ router.post('/:updateId/comments', auth, validate(commentSchema), async (req, re
       author_id: createdComment.author_id,
       content: createdComment.content,
       reply_to_id: createdComment.reply_to_id,
+      reactions: safeJsonParse(createdComment.reactions, {}),
       is_edited: createdComment.is_edited,
       edited_at: createdComment.edited_at,
+      is_deleted: createdComment.is_deleted || false,
+      deleted_at: createdComment.deleted_at,
       created_at: createdComment.created_at,
       updated_at: createdComment.updated_at,
       author: {
         id: createdComment.author_id,
-        name: createdComment.author_name,
+        first_name: createdComment.author_name ? createdComment.author_name.split(' ')[0] : '',
+        last_name: createdComment.author_name ? createdComment.author_name.split(' ').slice(1).join(' ') : '',
         email: createdComment.author_email,
-        avatar_url: createdComment.author_avatar
+        phone: null,
+        avatar_url: createdComment.author_avatar || "",
+        user_type: 'student', // Default, could be enhanced later
+        role: 'user',
+        school_id: null,
+        is_active: true,
+        last_active_at: null,
+        created_at: createdComment.created_at,
+        updated_at: createdComment.updated_at
       }
     };
 

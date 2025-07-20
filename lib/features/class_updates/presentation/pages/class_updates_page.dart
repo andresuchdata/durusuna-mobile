@@ -299,25 +299,26 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
     );
   }
 
-  void _showCommentsBottomSheet(ClassUpdate update) async {
-    final result = await showModalBottomSheet<bool>(
+  void _showCommentsBottomSheet(ClassUpdate update) {
+    showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) => CommentsBottomSheet(
         update: update,
         classId: widget.classId,
+        onCommentPosted: () {
+          // Refresh the main feed when comments are posted
+          ref
+              .read(classUpdatesProvider(widget.classId).notifier)
+              .loadUpdates(refresh: true);
+        },
       ),
     );
-
-    // Refresh updates if a comment was posted
-    if (result == true) {
-      ref
-          .read(classUpdatesProvider(widget.classId).notifier)
-          .loadUpdates(refresh: true);
-    }
   }
 }
 
@@ -325,11 +326,13 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
 class CommentsBottomSheet extends ConsumerStatefulWidget {
   final ClassUpdate update;
   final String classId;
+  final VoidCallback? onCommentPosted;
 
   const CommentsBottomSheet({
     super.key,
     required this.update,
     required this.classId,
+    this.onCommentPosted,
   });
 
   @override
@@ -340,6 +343,7 @@ class CommentsBottomSheet extends ConsumerStatefulWidget {
 class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  final ScrollController _scrollController = ScrollController();
   bool _isPosting = false;
   bool _isLoading = true;
   List<ClassUpdateComment> _comments = [];
@@ -355,6 +359,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
   void dispose() {
     _commentController.dispose();
     _focusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -397,18 +402,34 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
       );
 
       _commentController.clear();
-      _focusNode.unfocus();
 
       // Refresh comments list
       await _loadComments();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comment posted')),
+          const SnackBar(
+            content: Text('Comment posted'),
+            duration: Duration(seconds: 2),
+          ),
         );
 
-        // Close the bottom sheet and signal success
-        Navigator.of(context).pop(true);
+        // Scroll to bottom to show new comment
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+
+        // Keep focus on input for continued conversation
+        _focusNode.requestFocus();
+
+        // Notify parent to refresh main feed
+        widget.onCommentPosted?.call();
       }
     } catch (e) {
       if (mounted) {
@@ -507,7 +528,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                               ),
                             )
                           : ListView.builder(
-                              controller: scrollController,
+                              controller: _scrollController,
                               padding: const EdgeInsets.all(16),
                               itemCount: _comments.length,
                               itemBuilder: (context, index) {

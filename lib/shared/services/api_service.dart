@@ -5,11 +5,10 @@ import '../../core/constants/api_constants.dart';
 
 class ApiService {
   late final Dio _dio;
-  static const String _baseUrl = ApiConstants.baseUrl;
 
   ApiService() {
     _dio = Dio(BaseOptions(
-      baseUrl: _baseUrl,
+      baseUrl: ApiConstants.baseUrl,
       connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 30),
       sendTimeout: const Duration(seconds: 30),
@@ -31,21 +30,24 @@ class ApiService {
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
-        
+
         print('REQUEST[${options.method}] => PATH: ${options.path}');
         handler.next(options);
       },
       onResponse: (response, handler) {
-        print('RESPONSE[${response.statusCode}] => PATH: ${response.requestOptions.path}');
+        print(
+            'RESPONSE[${response.statusCode}] => PATH: ${response.requestOptions.path}');
         handler.next(response);
       },
       onError: (error, handler) async {
-        print('ERROR[${error.response?.statusCode}] => PATH: ${error.requestOptions.path}');
+        print(
+            'ERROR[${error.response?.statusCode}] => PATH: ${error.requestOptions.path}');
         print('ERROR MESSAGE: ${error.message}');
-        
+
         // Handle token expiration
         if (error.response?.statusCode == 401) {
-          final refreshToken = StorageService.getToken(); // In production, store refresh token separately
+          final refreshToken = StorageService
+              .getToken(); // In production, store refresh token separately
           if (refreshToken != null) {
             try {
               // Attempt to refresh the token
@@ -53,8 +55,9 @@ class ApiService {
               if (refreshResponse != null) {
                 // Retry the original request with new token
                 final originalRequest = error.requestOptions;
-                originalRequest.headers['Authorization'] = 'Bearer ${refreshResponse['accessToken']}';
-                
+                originalRequest.headers['Authorization'] =
+                    'Bearer ${refreshResponse['accessToken']}';
+
                 final retryResponse = await _dio.request(
                   originalRequest.path,
                   options: Options(
@@ -64,7 +67,7 @@ class ApiService {
                   data: originalRequest.data,
                   queryParameters: originalRequest.queryParameters,
                 );
-                
+
                 return handler.resolve(retryResponse);
               }
             } catch (refreshError) {
@@ -76,7 +79,7 @@ class ApiService {
             await _handleLogout();
           }
         }
-        
+
         handler.next(error);
       },
     ));
@@ -98,7 +101,7 @@ class ApiService {
       final response = await _dio.post('/auth/refresh', data: {
         'refreshToken': refreshToken,
       });
-      
+
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
         await StorageService.saveToken(data['accessToken']);
@@ -291,4 +294,4 @@ class ApiException implements Exception {
 // Provider for ApiService
 final apiServiceProvider = Provider<ApiService>((ref) {
   return ApiService();
-}); 
+});
