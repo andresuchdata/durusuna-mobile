@@ -105,7 +105,7 @@ router.post('/register', validate(registerSchema), rateLimitSensitive, async (re
     await trx.commit();
 
     // Generate tokens
-    const tokens = generateTokenPair(newUser.id);
+    const tokens = generateTokenPair(newUser);
 
     // Remove sensitive information
     const userResponse = {
@@ -114,6 +114,7 @@ router.post('/register', validate(registerSchema), rateLimitSensitive, async (re
       first_name: newUser.first_name,
       last_name: newUser.last_name,
       user_type: newUser.user_type,
+      role: newUser.role,
       school_id: newUser.school_id,
       phone: newUser.phone,
       date_of_birth: newUser.date_of_birth,
@@ -127,8 +128,9 @@ router.post('/register', validate(registerSchema), rateLimitSensitive, async (re
     res.status(201).json({
       message: 'User registered successfully',
       user: userResponse,
-      access_token: tokens.accessToken,
-      refresh_token: tokens.refreshToken
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: process.env.JWT_EXPIRE || '7d'
     });
 
   } catch (error) {
@@ -179,7 +181,7 @@ router.post('/login', validate(loginSchema), rateLimitSensitive, async (req, res
     }
 
     // Generate tokens
-    const tokens = generateTokenPair(user.id);
+    const tokens = generateTokenPair(user);
 
     // Update last login
     await db('users')
@@ -196,6 +198,7 @@ router.post('/login', validate(loginSchema), rateLimitSensitive, async (req, res
       first_name: user.first_name,
       last_name: user.last_name,
       user_type: user.user_type,
+      role: user.role,
       school_id: user.school_id,
       school_name: user.school_name,
       phone: user.phone,
@@ -204,16 +207,18 @@ router.post('/login', validate(loginSchema), rateLimitSensitive, async (req, res
       employee_id: user.employee_id,
       avatar_url: user.avatar_url,
       is_active: user.is_active,
-      is_verified: user.is_verified,
-      last_login_at: user.last_login_at,
-      created_at: user.created_at
+      is_verified: user.email_verified,
+      last_active_at: user.last_login_at,
+      created_at: user.created_at,
+      updated_at: user.updated_at
     };
 
     res.json({
       message: 'Login successful',
       user: userResponse,
-      access_token: tokens.accessToken,
-      refresh_token: tokens.refreshToken
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: process.env.JWT_EXPIRE || '7d'
     });
 
   } catch (error) {
@@ -241,6 +246,7 @@ router.get('/me', authenticate, async (req, res) => {
         'users.first_name',
         'users.last_name',
         'users.user_type',
+        'users.role',
         'users.school_id',
         'schools.name as school_name',
         'schools.address as school_address',
@@ -250,7 +256,7 @@ router.get('/me', authenticate, async (req, res) => {
         'users.employee_id',
         'users.avatar_url',
         'users.is_active',
-        'users.is_verified',
+        'users.email_verified',
         'users.last_login_at',
         'users.created_at'
       )
@@ -312,6 +318,7 @@ router.put('/me', authenticate, validate(profileUpdateSchema), async (req, res) 
         'users.first_name',
         'users.last_name',
         'users.user_type',
+        'users.role',
         'users.school_id',
         'schools.name as school_name',
         'users.phone',
@@ -320,7 +327,7 @@ router.put('/me', authenticate, validate(profileUpdateSchema), async (req, res) 
         'users.employee_id',
         'users.avatar_url',
         'users.is_active',
-        'users.is_verified',
+        'users.email_verified',
         'users.last_login_at',
         'users.created_at',
         'users.updated_at'
@@ -431,7 +438,7 @@ router.post('/refresh', async (req, res) => {
     
     // Check if user still exists and is active
     const user = await db('users')
-      .where('id', decoded.userId)
+      .where('id', decoded.id)
       .where('is_active', true)
       .first();
 
@@ -443,11 +450,12 @@ router.post('/refresh', async (req, res) => {
     }
 
     // Generate new tokens
-    const tokens = generateTokenPair(user.id);
+    const tokens = generateTokenPair(user);
 
     res.json({
-      access_token: tokens.accessToken,
-      refresh_token: tokens.refreshToken
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: process.env.JWT_EXPIRE || '7d'
     });
 
   } catch (error) {

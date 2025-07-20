@@ -132,7 +132,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                 color: AppTheme.infoColor,
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Class management coming soon')),
+                    const SnackBar(
+                        content: Text('Class management coming soon')),
                   );
                 },
               ),
@@ -228,8 +229,8 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget _buildClassUpdatesTab(User user) {
     // For now, show a sample class. In real app, user would select their class
     return const ClassUpdatesPage(
-      classId: 'sample-class-id',
-      className: 'Sample Class',
+      classId: '550e8400-e29b-41d4-a716-446655440001',
+      className: 'Mathematics 5A',
     );
   }
 
@@ -269,7 +270,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   children: [
                     Icon(Icons.logout, size: 20, color: AppTheme.errorColor),
                     SizedBox(width: 8),
-                    Text('Logout', style: TextStyle(color: AppTheme.errorColor)),
+                    Text('Logout',
+                        style: TextStyle(color: AppTheme.errorColor)),
                   ],
                 ),
               ),
@@ -333,7 +335,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
                       color: _getUserTypeColor(user.userType).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
