@@ -1,0 +1,634 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:timeago/timeago.dart' as timeago;
+import '../../../../core/constants/app_theme.dart';
+import '../../../../shared/services/chat_service.dart';
+import '../../../../shared/services/auth_service.dart';
+import '../../../../shared/services/socket_service.dart';
+import '../../../../shared/models/message.dart';
+import '../widgets/message_bubble.dart';
+import '../widgets/chat_input.dart';
+
+class ChatPage extends ConsumerStatefulWidget {
+  final Conversation conversation;
+
+  const ChatPage({
+    super.key,
+    required this.conversation,
+  });
+
+  @override
+  ConsumerState<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends ConsumerState<ChatPage> {
+  final ScrollController _scrollController = ScrollController();
+  final TextEditingController _messageController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    
+    // Join conversation room for real-time updates
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final socketService = ref.read(socketServiceProvider);
+      socketService.joinConversation(widget.conversation.id);
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _messageController.dispose();
+    _focusNode.dispose();
+    
+    // Leave conversation room
+    final socketService = ref.read(socketServiceProvider);
+    socketService.leaveConversation(widget.conversation.id);
+    
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      final state = ref.read(chatMessagesProvider(widget.conversation.otherUser.id));
+      if (!state.isLoadingMore && state.hasMore) {
+        ref.read(chatMessagesProvider(widget.conversation.otherUser.id).notifier)
+            .loadMessages(loadMore: true);
+      }
+    }
+  }
+
+  Future<void> _sendMessage({String? content, MessageType? messageType}) async {
+    if (content?.trim().isEmpty ?? true) return;
+
+    try {
+      await ref.read(chatMessagesProvider(widget.conversation.otherUser.id).notifier)
+          .sendMessage(
+            content: content,
+            messageType: messageType ?? MessageType.text,
+          );
+
+      _messageController.clear();
+      _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send message: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _handleTyping(bool isTyping) {
+    final socketService = ref.read(socketServiceProvider);
+    if (isTyping) {
+      socketService.startTyping(widget.conversation.otherUser.id);
+    } else {
+      socketService.stopTyping(widget.conversation.otherUser.id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authStateProvider);
+    final messagesState = ref.watch(chatMessagesProvider(widget.conversation.otherUser.id));
+    
+    // Listen for new messages from socket
+    ref.listen(messageStreamProvider, (previous, next) {
+      next.whenData((message) {
+        if (message.senderId == widget.conversation.otherUser.id ||
+            message.receiverId == widget.conversation.otherUser.id) {
+          ref.read(chatMessagesProvider(widget.conversation.otherUser.id).notifier)
+              .addMessage(message);
+          
+          if (message.senderId == widget.conversation.otherUser.id) {
+            _scrollToBottom();
+          }
+        }
+      });
+    });
+
+    // Listen for typing indicators
+    ref.listen(typingStreamProvider, (previous, next) {
+      next.whenData((typing) {
+        if (typing.userId == widget.conversation.otherUser.id) {
+          ref.read(chatMessagesProvider(widget.conversation.otherUser.id).notifier)
+              .setTyping(typing.isTyping);
+        }
+      });
+    });
+
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 1,
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: AppTheme.primaryColor,
+              backgroundImage: widget.conversation.otherUser.avatarUrl != null
+                  ? NetworkImage(widget.conversation.otherUser.avatarUrl!)
+                  : null,
+              child: widget.conversation.otherUser.avatarUrl == null
+                  ? Text(
+                      '${widget.conversation.otherUser.firstName[0]}${widget.conversation.otherUser.lastName[0]}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.conversation.otherUser.displayName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    widget.conversation.isOnline
+                        ? 'Online'
+                        : messagesState.isTyping
+                            ? 'Typing...'
+                            : 'Last seen ${timeago.format(widget.conversation.lastActivity)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: widget.conversation.isOnline || messagesState.isTyping
+                          ? AppTheme.successColor
+                          : AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.call),
+            onPressed: () {
+              // TODO: Implement voice call
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Voice call coming soon')),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.videocam),
+            onPressed: () {
+              // TODO: Implement video call
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Video call coming soon')),
+              );
+            },
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              switch (value) {
+                case 'clear':
+                  _showClearChatDialog();
+                  break;
+                case 'block':
+                  _showBlockUserDialog();
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'clear',
+                child: Row(
+                  children: [
+                    Icon(Icons.clear_all, size: 20),
+                    SizedBox(width: 8),
+                    Text('Clear Chat'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'block',
+                child: Row(
+                  children: [
+                    Icon(Icons.block, size: 20, color: AppTheme.errorColor),
+                    SizedBox(width: 8),
+                    Text('Block User', style: TextStyle(color: AppTheme.errorColor)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Messages list
+          Expanded(
+            child: messagesState.isLoading && messagesState.messages.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : messagesState.messages.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        controller: _scrollController,
+                        reverse: true,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: messagesState.messages.length +
+                            (messagesState.isLoadingMore ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == messagesState.messages.length) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Center(child: CircularProgressIndicator()),
+                            );
+                          }
+
+                          final message = messagesState.messages[index];
+                          final isMe = message.senderId == authState.user?.id;
+                          final showTimestamp = _shouldShowTimestamp(
+                            message,
+                            index < messagesState.messages.length - 1
+                                ? messagesState.messages[index + 1]
+                                : null,
+                          );
+
+                          return Column(
+                            children: [
+                              if (showTimestamp)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  child: Text(
+                                    _formatTimestamp(message.createdAt),
+                                    style: const TextStyle(
+                                      color: AppTheme.textTertiary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              MessageBubble(
+                                message: message,
+                                isMe: isMe,
+                                onReply: (msg) => _replyToMessage(msg),
+                                onEdit: isMe ? (msg) => _editMessage(msg) : null,
+                                onDelete: isMe ? (msg) => _deleteMessage(msg) : null,
+                              ),
+                              const SizedBox(height: 4),
+                            ],
+                          );
+                        },
+                      ),
+          ),
+
+          // Typing indicator
+          if (messagesState.isTyping)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 12,
+                    backgroundColor: AppTheme.primaryColor,
+                    child: Text(
+                      widget.conversation.otherUser.firstName[0],
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 8,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: List.generate(3, (index) {
+                              return AnimatedContainer(
+                                duration: Duration(milliseconds: 600 + (index * 200)),
+                                curve: Curves.easeInOut,
+                                width: 4,
+                                height: 4,
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.textSecondary,
+                                  shape: BoxShape.circle,
+                                ),
+                              );
+                            }),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Chat input
+          ChatInput(
+            controller: _messageController,
+            focusNode: _focusNode,
+            onSend: (content) => _sendMessage(content: content),
+            onTyping: _handleTyping,
+            onAttachment: () => _showAttachmentOptions(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircleAvatar(
+            radius: 40,
+            backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+            child: Icon(
+              Icons.chat_bubble_outline,
+              size: 40,
+              color: AppTheme.primaryColor,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Start the conversation',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Send a message to ${widget.conversation.otherUser.firstName}',
+            style: const TextStyle(
+              color: AppTheme.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _shouldShowTimestamp(Message current, Message? previous) {
+    if (previous == null) return true;
+    
+    final currentDate = DateTime(
+      current.createdAt.year,
+      current.createdAt.month,
+      current.createdAt.day,
+    );
+    
+    final previousDate = DateTime(
+      previous.createdAt.year,
+      previous.createdAt.month,
+      previous.createdAt.day,
+    );
+    
+    return !currentDate.isAtSameDate(previousDate);
+  }
+
+  String _formatTimestamp(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+    
+    if (messageDate == today) {
+      return 'Today';
+    } else if (messageDate == today.subtract(const Duration(days: 1))) {
+      return 'Yesterday';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
+
+  void _replyToMessage(Message message) {
+    // TODO: Implement reply functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Reply feature coming soon')),
+    );
+  }
+
+  void _editMessage(Message message) {
+    // TODO: Implement edit functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Edit feature coming soon')),
+    );
+  }
+
+  void _deleteMessage(Message message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Message'),
+        content: const Text('Are you sure you want to delete this message?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              try {
+                final chatService = ref.read(chatServiceProvider);
+                await chatService.deleteMessage(message.id);
+                ref.read(chatMessagesProvider(widget.conversation.otherUser.id).notifier)
+                    .deleteMessage(message.id);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to delete message: $e'),
+                      backgroundColor: AppTheme.errorColor,
+                    ),
+                  );
+                }
+              }
+            },
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAttachmentOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Share',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildAttachmentOption(
+                  icon: Icons.photo_camera,
+                  label: 'Camera',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    // TODO: Implement camera
+                  },
+                ),
+                _buildAttachmentOption(
+                  icon: Icons.photo_library,
+                  label: 'Gallery',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    // TODO: Implement gallery
+                  },
+                ),
+                _buildAttachmentOption(
+                  icon: Icons.attach_file,
+                  label: 'Document',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    // TODO: Implement file picker
+                  },
+                ),
+                _buildAttachmentOption(
+                  icon: Icons.location_on,
+                  label: 'Location',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    // TODO: Implement location sharing
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttachmentOption({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearChatDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear Chat'),
+        content: const Text('Are you sure you want to clear this chat? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // TODO: Implement clear chat
+            },
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBlockUserDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Block User'),
+        content: Text('Are you sure you want to block ${widget.conversation.otherUser.firstName}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // TODO: Implement block user
+            },
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+extension DateTimeExtension on DateTime {
+  bool isAtSameDate(DateTime other) {
+    return year == other.year && month == other.month && day == other.day;
+  }
+} 
