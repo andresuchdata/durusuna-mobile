@@ -43,3 +43,44 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Environment variables and secrets
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+**/.env
+**/secrets.json
+**/config.json
+
+# Node.js backend
+backend/node_modules/
+backend/uploads/
+backend/logs/
+backend/*.log
+backend/.env
+
+# API keys and credentials
+firebase_options.dart
+google-services.json
+GoogleService-Info.plist
+
+# SSL certificates and keys
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.keystore
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
