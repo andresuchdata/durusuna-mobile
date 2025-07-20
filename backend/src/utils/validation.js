@@ -76,6 +76,7 @@ const profileUpdateSchema = Joi.object({
   last_name: Joi.string().min(2).max(50).optional(),
   phone: Joi.string().pattern(/^\+?[\d\s\-\(\)]+$/).optional().allow(''),
   date_of_birth: Joi.date().max('now').optional().allow(null),
+  avatar_url: Joi.string().uri().optional().allow(''),
   preferences: Joi.object().optional()
 });
 

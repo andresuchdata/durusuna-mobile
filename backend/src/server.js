@@ -17,6 +17,7 @@ const classRoutes = require('./routes/classes');
 const lessonRoutes = require('./routes/lessons');
 const messageRoutes = require('./routes/messages');
 const uploadRoutes = require('./routes/uploads');
+const classUpdatesRoutes = require('./routes/class_updates');
 const socketHandler = require('./services/socketService');
 
 const app = express();
@@ -67,6 +68,7 @@ app.use('/api/classes', classRoutes);
 app.use('/api/lessons', lessonRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/class-updates', classUpdatesRoutes);
 
 // Socket.io connection handling
 socketHandler(io);
