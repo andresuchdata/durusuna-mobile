@@ -7,6 +7,16 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
+// Helper function to safely parse JSON
+const safeJsonParse = (jsonString, fallback = null) => {
+  try {
+    return jsonString && jsonString.trim() ? JSON.parse(jsonString) : fallback;
+  } catch (error) {
+    logger.warn('Failed to parse JSON:', { jsonString, error: error.message });
+    return fallback;
+  }
+};
+
 /**
  * @route GET /api/class-updates/:classId
  * @desc Get class updates for a specific class
@@ -37,9 +47,19 @@ router.get('/:classId', auth, async (req, res) => {
       .where('class_updates.is_deleted', false)
       .select(
         'class_updates.*',
-        db.raw("CONCAT(users.first_name, ' ', users.last_name) as author_name"),
+        'users.id as author_user_id',
+        'users.first_name as author_first_name',
+        'users.last_name as author_last_name',
         'users.email as author_email',
-        'users.avatar_url as author_avatar'
+        'users.phone as author_phone',
+        'users.avatar_url as author_avatar',
+        'users.user_type as author_user_type',
+        'users.role as author_role',
+        'users.school_id as author_school_id',
+        'users.is_active as author_is_active',
+        'users.last_login_at as author_last_active_at',
+        'users.created_at as author_created_at',
+        'users.updated_at as author_updated_at'
       );
 
     // Filter by type if specified
@@ -82,18 +102,29 @@ router.get('/:classId', auth, async (req, res) => {
       title: update.title,
       content: update.content,
       update_type: update.update_type,
-      attachments: update.attachments ? JSON.parse(update.attachments) : [],
-      reactions: update.reactions ? JSON.parse(update.reactions) : {},
+              attachments: safeJsonParse(update.attachments, []),
+        reactions: safeJsonParse(update.reactions, {}),
       is_pinned: update.is_pinned,
       is_edited: update.is_edited,
       edited_at: update.edited_at,
+      is_deleted: update.is_deleted,
+      deleted_at: update.deleted_at,
       created_at: update.created_at,
       updated_at: update.updated_at,
       author: {
-        id: update.author_id,
-        name: update.author_name,
+        id: update.author_user_id,
+        first_name: update.author_first_name,
+        last_name: update.author_last_name,
         email: update.author_email,
-        avatar_url: update.author_avatar
+        phone: update.author_phone,
+        avatar_url: update.author_avatar || "",
+        user_type: update.author_user_type,
+        role: update.author_role,
+        school_id: update.author_school_id,
+        is_active: update.author_is_active,
+        last_active_at: update.author_last_active_at,
+        created_at: update.author_created_at,
+        updated_at: update.author_updated_at
       },
       comments_count: commentCountMap[update.id] || 0
     }));
@@ -128,22 +159,45 @@ router.post('/create', auth, validate(classUpdateSchema), async (req, res) => {
       attachments = []
     } = req.body;
 
-    // Check if user has access to this class and is a teacher
-    const userClass = await db('user_classes')
-      .join('users', 'user_classes.user_id', 'users.id')
-      .where({
-        'user_classes.user_id': req.user.id,
-        'user_classes.class_id': class_id
-      })
-      .select('users.user_type', 'user_classes.role_in_class')
+    // Get current user details
+    const currentUser = await db('users')
+      .where('id', req.user.id)
+      .select('user_type', 'role', 'school_id')
       .first();
 
-    if (!userClass) {
-      return res.status(403).json({ error: 'Access denied to this class' });
+    if (!currentUser) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    if (userClass.user_type !== 'teacher' && userClass.role_in_class !== 'teacher') {
-      return res.status(403).json({ error: 'Only teachers can create class updates' });
+    // Check if user is an admin teacher - they can create updates for any class in their school
+    if (currentUser.role === 'admin' && currentUser.user_type === 'teacher') {
+      // Verify the class exists and belongs to their school
+      const targetClass = await db('classes')
+        .where('id', class_id)
+        .where('school_id', currentUser.school_id)
+        .first();
+
+      if (!targetClass) {
+        return res.status(404).json({ error: 'Class not found or access denied' });
+      }
+    } else {
+      // For non-admin users, check if they're enrolled in the specific class
+      const userClass = await db('user_classes')
+        .join('users', 'user_classes.user_id', 'users.id')
+        .where({
+          'user_classes.user_id': req.user.id,
+          'user_classes.class_id': class_id
+        })
+        .select('users.user_type', 'user_classes.role_in_class')
+        .first();
+
+      if (!userClass) {
+        return res.status(403).json({ error: 'Access denied to this class' });
+      }
+
+      if (userClass.user_type !== 'teacher' && userClass.role_in_class !== 'teacher') {
+        return res.status(403).json({ error: 'Only teachers can create class updates' });
+      }
     }
 
     // Create the class update
@@ -172,9 +226,19 @@ router.post('/create', auth, validate(classUpdateSchema), async (req, res) => {
       .where('class_updates.id', updateId)
       .select(
         'class_updates.*',
-        db.raw("CONCAT(users.first_name, ' ', users.last_name) as author_name"),
+        'users.id as author_user_id',
+        'users.first_name as author_first_name',
+        'users.last_name as author_last_name',
         'users.email as author_email',
-        'users.avatar_url as author_avatar'
+        'users.phone as author_phone',
+        'users.avatar_url as author_avatar',
+        'users.user_type as author_user_type',
+        'users.role as author_role',
+        'users.school_id as author_school_id',
+        'users.is_active as author_is_active',
+        'users.last_login_at as author_last_active_at',
+        'users.created_at as author_created_at',
+        'users.updated_at as author_updated_at'
       )
       .first();
 
@@ -185,18 +249,29 @@ router.post('/create', auth, validate(classUpdateSchema), async (req, res) => {
       title: createdUpdate.title,
       content: createdUpdate.content,
       update_type: createdUpdate.update_type,
-      attachments: createdUpdate.attachments ? JSON.parse(createdUpdate.attachments) : [],
-      reactions: createdUpdate.reactions ? JSON.parse(createdUpdate.reactions) : {},
+      attachments: safeJsonParse(createdUpdate.attachments, []),
+      reactions: safeJsonParse(createdUpdate.reactions, {}),
       is_pinned: createdUpdate.is_pinned,
       is_edited: createdUpdate.is_edited,
       edited_at: createdUpdate.edited_at,
+      is_deleted: createdUpdate.is_deleted,
+      deleted_at: createdUpdate.deleted_at,
       created_at: createdUpdate.created_at,
       updated_at: createdUpdate.updated_at,
       author: {
-        id: createdUpdate.author_id,
-        name: createdUpdate.author_name,
-        email: createdUpdate.author_email,
-        avatar_url: createdUpdate.author_avatar
+        id: createdUpdate.author_user_id,
+        first_name: createdUpdate.author_first_name || "",
+        last_name: createdUpdate.author_last_name || "",
+        email: createdUpdate.author_email || "",
+        phone: createdUpdate.author_phone || "",
+        avatar_url: createdUpdate.author_avatar || "",
+        user_type: createdUpdate.author_user_type || "",
+        role: createdUpdate.author_role || "",
+        school_id: createdUpdate.author_school_id || null,
+        is_active: createdUpdate.author_is_active || false,
+        last_active_at: createdUpdate.author_last_active_at || "",
+        created_at: createdUpdate.author_created_at || "",
+        updated_at: createdUpdate.author_updated_at || ""
       },
       comments_count: 0
     };
@@ -279,9 +354,19 @@ router.put('/:updateId', auth, async (req, res) => {
       .where('class_updates.id', updateId)
       .select(
         'class_updates.*',
-        db.raw("CONCAT(users.first_name, ' ', users.last_name) as author_name"),
+        'users.id as author_user_id',
+        'users.first_name as author_first_name',
+        'users.last_name as author_last_name',
         'users.email as author_email',
-        'users.avatar_url as author_avatar'
+        'users.phone as author_phone',
+        'users.avatar_url as author_avatar',
+        'users.user_type as author_user_type',
+        'users.role as author_role',
+        'users.school_id as author_school_id',
+        'users.is_active as author_is_active',
+        'users.last_login_at as author_last_active_at',
+        'users.created_at as author_created_at',
+        'users.updated_at as author_updated_at'
       )
       .first();
 
@@ -292,11 +377,13 @@ router.put('/:updateId', auth, async (req, res) => {
       title: updatedRecord.title,
       content: updatedRecord.content,
       update_type: updatedRecord.update_type,
-      attachments: updatedRecord.attachments ? JSON.parse(updatedRecord.attachments) : [],
-      reactions: updatedRecord.reactions ? JSON.parse(updatedRecord.reactions) : {},
+      attachments: safeJsonParse(updatedRecord.attachments, []),
+      reactions: safeJsonParse(updatedRecord.reactions, {}),
       is_pinned: updatedRecord.is_pinned,
       is_edited: updatedRecord.is_edited,
       edited_at: updatedRecord.edited_at,
+      is_deleted: updatedRecord.is_deleted,
+      deleted_at: updatedRecord.deleted_at,
       created_at: updatedRecord.created_at,
       updated_at: updatedRecord.updated_at,
       author: {
@@ -622,11 +709,13 @@ router.put('/:updateId/pin', auth, async (req, res) => {
       title: updatedRecord.title,
       content: updatedRecord.content,
       update_type: updatedRecord.update_type,
-      attachments: updatedRecord.attachments ? JSON.parse(updatedRecord.attachments) : [],
-      reactions: updatedRecord.reactions ? JSON.parse(updatedRecord.reactions) : {},
+      attachments: safeJsonParse(updatedRecord.attachments, []),
+      reactions: safeJsonParse(updatedRecord.reactions, {}),
       is_pinned: updatedRecord.is_pinned,
       is_edited: updatedRecord.is_edited,
       edited_at: updatedRecord.edited_at,
+      is_deleted: updatedRecord.is_deleted,
+      deleted_at: updatedRecord.deleted_at,
       created_at: updatedRecord.created_at,
       updated_at: updatedRecord.updated_at,
       author: {
@@ -684,7 +773,7 @@ router.post('/:updateId/reactions', auth, async (req, res) => {
     }
 
     // Parse existing reactions
-    const reactions = existingUpdate.reactions ? JSON.parse(existingUpdate.reactions) : {};
+    const reactions = safeJsonParse(existingUpdate.reactions, {});
     
     // Initialize emoji count if it doesn't exist
     if (!reactions[emoji]) {
@@ -750,7 +839,7 @@ router.delete('/:updateId/reactions', auth, async (req, res) => {
     }
 
     // Parse existing reactions
-    const reactions = existingUpdate.reactions ? JSON.parse(existingUpdate.reactions) : {};
+    const reactions = safeJsonParse(existingUpdate.reactions, {});
     
     // Decrease reaction count if it exists
     if (reactions[emoji] && reactions[emoji] > 0) {
