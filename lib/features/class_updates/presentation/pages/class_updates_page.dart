@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_update.dart';
+import '../../../../shared/models/class_update_comment.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/services/auth_service.dart';
@@ -298,8 +299,8 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
     );
   }
 
-  void _showCommentsBottomSheet(ClassUpdate update) {
-    showModalBottomSheet(
+  void _showCommentsBottomSheet(ClassUpdate update) async {
+    final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -310,6 +311,13 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
         classId: widget.classId,
       ),
     );
+
+    // Refresh updates if a comment was posted
+    if (result == true) {
+      ref
+          .read(classUpdatesProvider(widget.classId).notifier)
+          .loadUpdates(refresh: true);
+    }
   }
 }
 
@@ -333,12 +341,47 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
   final TextEditingController _commentController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isPosting = false;
+  bool _isLoading = true;
+  List<ClassUpdateComment> _comments = [];
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadComments();
+  }
 
   @override
   void dispose() {
     _commentController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadComments() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final service = ref.read(classUpdatesServiceProvider);
+      final comments = await service.getComments(widget.update.id);
+
+      if (mounted) {
+        setState(() {
+          _comments = comments;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _postComment() async {
@@ -356,10 +399,16 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
       _commentController.clear();
       _focusNode.unfocus();
 
+      // Refresh comments list
+      await _loadComments();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Comment posted')),
         );
+
+        // Close the bottom sheet and signal success
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
@@ -413,7 +462,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                   ),
                   const Spacer(),
                   Text(
-                    '${widget.update.commentsCount ?? 0}',
+                    '${_comments.length}',
                     style: const TextStyle(
                       color: AppTheme.textSecondary,
                     ),
@@ -426,15 +475,46 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
 
             // Comments list
             Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                padding: const EdgeInsets.all(16),
-                itemCount: widget.update.comments?.length ?? 0,
-                itemBuilder: (context, index) {
-                  final comment = widget.update.comments![index];
-                  return CommentWidget(comment: comment);
-                },
-              ),
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(),
+                    )
+                  : _error != null
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Failed to load comments',
+                                style: TextStyle(color: AppTheme.errorColor),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: _loadComments,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _comments.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No comments yet.\nBe the first to comment!',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: scrollController,
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _comments.length,
+                              itemBuilder: (context, index) {
+                                final comment = _comments[index];
+                                return CommentWidget(comment: comment);
+                              },
+                            ),
             ),
 
             // Comment input
@@ -504,8 +584,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
 
 // Individual comment widget
 class CommentWidget extends StatelessWidget {
-  final dynamic
-      comment; // Using dynamic for now since we'd need the full comment model
+  final ClassUpdateComment comment;
 
   const CommentWidget({super.key, required this.comment});
 
@@ -520,7 +599,11 @@ class CommentWidget extends StatelessWidget {
             radius: 16,
             backgroundColor: AppTheme.primaryColor,
             child: Text(
-              'U', // Would use actual user initials
+              comment.author != null &&
+                      comment.author!.firstName.isNotEmpty &&
+                      comment.author!.lastName.isNotEmpty
+                  ? '${comment.author!.firstName[0]}${comment.author!.lastName[0]}'
+                  : 'U',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
@@ -534,7 +617,9 @@ class CommentWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'User Name', // Would use actual user name
+                  comment.author != null
+                      ? '${comment.author!.firstName} ${comment.author!.lastName}'
+                      : 'Unknown User',
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
@@ -542,13 +627,12 @@ class CommentWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'This is a sample comment that would show the actual comment content.',
+                  comment.content,
                   style: const TextStyle(fontSize: 14),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  timeago.format(
-                      DateTime.now().subtract(const Duration(hours: 2))),
+                  timeago.format(comment.createdAt),
                   style: const TextStyle(
                     color: AppTheme.textTertiary,
                     fontSize: 12,

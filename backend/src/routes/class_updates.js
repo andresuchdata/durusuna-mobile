@@ -507,14 +507,29 @@ router.get('/:updateId/comments', auth, async (req, res) => {
     }
 
     // Check if user has access to the class
-    const userClass = await db('user_classes')
-      .where({
-        user_id: req.user.id,
-        class_id: update.class_id
-      })
-      .first();
+    let hasAccess = false;
 
-    if (!userClass) {
+    if (req.user.user_type === 'teacher' && req.user.role === 'admin') {
+      // Admin teachers can view comments on any class in their school
+      const classInfo = await db('classes')
+        .where('id', update.class_id)
+        .where('school_id', req.user.school_id)
+        .first();
+      
+      hasAccess = !!classInfo;
+    } else {
+      // Regular users need to be enrolled in the class
+      const userClass = await db('user_classes')
+        .where({
+          user_id: req.user.id,
+          class_id: update.class_id
+        })
+        .first();
+      
+      hasAccess = !!userClass;
+    }
+
+    if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied to this class' });
     }
 
@@ -587,14 +602,29 @@ router.post('/:updateId/comments', auth, validate(commentSchema), async (req, re
     }
 
     // Check if user has access to the class
-    const userClass = await db('user_classes')
-      .where({
-        user_id: req.user.id,
-        class_id: update.class_id
-      })
-      .first();
+    let hasAccess = false;
 
-    if (!userClass) {
+    if (req.user.user_type === 'teacher' && req.user.role === 'admin') {
+      // Admin teachers can comment on updates in any class in their school
+      const classInfo = await db('classes')
+        .where('id', update.class_id)
+        .where('school_id', req.user.school_id)
+        .first();
+      
+      hasAccess = !!classInfo;
+    } else {
+      // Regular users need to be enrolled in the class
+      const userClass = await db('user_classes')
+        .where({
+          user_id: req.user.id,
+          class_id: update.class_id
+        })
+        .first();
+      
+      hasAccess = !!userClass;
+    }
+
+    if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied to this class' });
     }
 

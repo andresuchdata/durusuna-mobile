@@ -56,7 +56,7 @@ class ClassUpdateCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                
+
                 // Author info and timestamp
                 Expanded(
                   child: Column(
@@ -107,7 +107,7 @@ class ClassUpdateCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 // More options
                 if (onEdit != null || onDelete != null)
                   PopupMenuButton<String>(
@@ -138,9 +138,11 @@ class ClassUpdateCard extends StatelessWidget {
                           value: 'delete',
                           child: Row(
                             children: [
-                              Icon(Icons.delete, size: 20, color: AppTheme.errorColor),
+                              Icon(Icons.delete,
+                                  size: 20, color: AppTheme.errorColor),
                               SizedBox(width: 8),
-                              Text('Delete', style: TextStyle(color: AppTheme.errorColor)),
+                              Text('Delete',
+                                  style: TextStyle(color: AppTheme.errorColor)),
                             ],
                           ),
                         ),
@@ -150,7 +152,7 @@ class ClassUpdateCard extends StatelessWidget {
               ],
             ),
           ),
-          
+
           // Title
           if (update.title != null && update.title!.isNotEmpty)
             Padding(
@@ -163,7 +165,7 @@ class ClassUpdateCard extends StatelessWidget {
                 ),
               ),
             ),
-          
+
           // Content
           Padding(
             padding: const EdgeInsets.all(16),
@@ -175,23 +177,23 @@ class ClassUpdateCard extends StatelessWidget {
               ),
             ),
           ),
-          
+
           // Attachments
           if (update.hasAttachments)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _buildAttachments(),
             ),
-          
+
           // Reactions
           if (update.hasReactions)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: _buildReactions(),
             ),
-          
+
           const Divider(height: 1),
-          
+
           // Action buttons
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -200,28 +202,44 @@ class ClassUpdateCard extends StatelessWidget {
                 Expanded(
                   child: TextButton.icon(
                     onPressed: () => _showReactionPicker(context),
-                    icon: const Icon(Icons.thumb_up_outlined, size: 20),
-                    label: Text(
-                      update.totalReactions > 0
-                          ? '${update.totalReactions}'
-                          : 'React',
+                    icon: const Icon(Icons.thumb_up_outlined, size: 18),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        update.totalReactions > 0
+                            ? '${update.totalReactions}'
+                            : 'React',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     ),
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 8),
                     ),
                   ),
                 ),
                 Expanded(
                   child: TextButton.icon(
                     onPressed: onComment,
-                    icon: const Icon(Icons.comment_outlined, size: 20),
-                    label: Text(
-                      update.hasComments
-                          ? '${update.commentsCount}'
-                          : 'Comment',
+                    icon: const Icon(Icons.comment_outlined, size: 18),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        update.hasComments
+                            ? '${update.commentsCount}'
+                            : 'Comment',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     ),
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 8),
                     ),
                   ),
                 ),
@@ -230,10 +248,20 @@ class ClassUpdateCard extends StatelessWidget {
                     onPressed: () {
                       // TODO: Implement share functionality
                     },
-                    icon: const Icon(Icons.share_outlined, size: 20),
-                    label: const Text('Share'),
+                    icon: const Icon(Icons.share_outlined, size: 18),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Share',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ),
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 8),
                     ),
                   ),
                 ),
@@ -329,9 +357,7 @@ class ClassUpdateCard extends StatelessWidget {
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                '👍', '❤️', '😊', '😮', '😢', '😡'
-              ].map((emoji) {
+              children: ['👍', '❤️', '😊', '😮', '😢', '😡'].map((emoji) {
                 return GestureDetector(
                   onTap: () {
                     Navigator.of(context).pop();
@@ -370,4 +396,4 @@ class ClassUpdateCard extends StatelessWidget {
         return AppTheme.successColor.withOpacity(0.1);
     }
   }
-} 
+}
