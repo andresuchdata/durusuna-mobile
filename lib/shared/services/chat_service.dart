@@ -482,11 +482,14 @@ final chatServiceProvider = Provider<ChatService>((ref) {
   return ChatService(apiService);
 });
 
+// Provider to track currently viewed conversation
+final currentConversationProvider = StateProvider<String?>((ref) => null);
+
 // Conversations provider
 final conversationsProvider =
     StateNotifierProvider<ConversationsNotifier, ConversationsState>((ref) {
   final chatService = ref.read(chatServiceProvider);
-  return ConversationsNotifier(chatService);
+  return ConversationsNotifier(chatService, ref);
 });
 
 class ConversationsState {
@@ -515,8 +518,10 @@ class ConversationsState {
 
 class ConversationsNotifier extends StateNotifier<ConversationsState> {
   final ChatService _chatService;
+  final Ref _ref;
 
-  ConversationsNotifier(this._chatService) : super(ConversationsState()) {
+  ConversationsNotifier(this._chatService, this._ref)
+      : super(ConversationsState()) {
     print('📱 ConversationsNotifier created - loading conversations...');
     loadConversations();
   }
@@ -557,20 +562,34 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
       final currentUserId = StorageService.getUser()?['id'];
       final isFromOtherUser = message.senderId != currentUserId;
 
+      // Check if user is currently viewing this conversation
+      final currentlyViewedConversationId =
+          _ref.read(currentConversationProvider);
+      final isViewingThisConversation =
+          currentlyViewedConversationId == conversationId;
+
       print(
           '🔄 Current user: $currentUserId, Message sender: ${message.senderId}');
       print('🔄 Is from other user: $isFromOtherUser');
+      print('🔄 Currently viewed conversation: $currentlyViewedConversationId');
+      print('🔄 Is viewing this conversation: $isViewingThisConversation');
+
+      // Only increment unread count if:
+      // 1. Message is from another user
+      // 2. User is NOT currently viewing this conversation
+      final shouldIncrementUnread =
+          isFromOtherUser && !isViewingThisConversation;
 
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = conversation.copyWith(
         lastMessage: message,
         lastActivity: message.createdAt,
-        // Increment unread count only if message is from another user
-        unreadCount: isFromOtherUser
+        unreadCount: shouldIncrementUnread
             ? conversation.unreadCount + 1
             : conversation.unreadCount,
       );
 
+      print('🔄 Should increment unread: $shouldIncrementUnread');
       print(
           '🔄 Updated unread count: ${conversation.unreadCount} → ${updatedConversations[index].unreadCount}');
 

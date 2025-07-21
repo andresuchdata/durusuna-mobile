@@ -45,6 +45,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       print(
           '📱 ChatPage: Realtime service connected: ${realtimeService.isConnected}');
 
+      // Set current conversation ID to prevent unread count increments
+      ref.read(currentConversationProvider.notifier).state =
+          widget.conversation.id;
+      print(
+          '📱 ChatPage: Set current conversation ID to ${widget.conversation.id}');
+
       realtimeService.joinConversation(widget.conversation.id);
 
       // Update last seen when entering conversation
@@ -69,6 +75,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       try {
         final realtimeService = ref.read(realtimeServiceProvider);
         realtimeService.leaveConversation(widget.conversation.id);
+
+        // Clear current conversation ID so unread counts can increment again
+        ref.read(currentConversationProvider.notifier).state = null;
+        print('📱 ChatPage: Cleared current conversation ID');
       } catch (e) {
         print('⚠️ Error leaving conversation room during dispose: $e');
       }
@@ -146,59 +156,52 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _scrollToBottom({bool animated = true}) {
-    // iOS needs more aggressive timing handling
-    final isIOS = Platform.isIOS;
-    final delay = isIOS ? const Duration(milliseconds: 150) : Duration.zero;
+    print('📱 _scrollToBottom() called - Animated: $animated');
 
-    print('📱 _scrollToBottom() called - iOS: $isIOS, Animated: $animated');
+    // Use a more aggressive approach for both platforms
+    void attemptScroll(int attempt) {
+      if (!mounted) return;
 
-    // First attempt with post-frame callback
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(delay, () {
-        if (_scrollController.hasClients && mounted) {
-          final targetPosition = _scrollController.position.maxScrollExtent;
-          print('📱 _scrollToBottom() - Target position: $targetPosition');
+      print('📱 _scrollToBottom() attempt $attempt');
 
-          if (animated && !isIOS) {
-            // Use animation for Android
+      if (_scrollController.hasClients) {
+        final targetPosition = _scrollController.position.maxScrollExtent;
+        print('📱 _scrollToBottom() - Target position: $targetPosition');
+
+        if (targetPosition > 0) {
+          if (animated && attempt == 1) {
+            // First attempt with animation
             _scrollController.animateTo(
               targetPosition,
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOut,
             );
           } else {
-            // Use jump for iOS or when not animated (more reliable)
+            // Fallback with jump (more reliable)
             _scrollController.jumpTo(targetPosition);
-
-            // For iOS, follow up with animated scroll after jump
-            if (animated && isIOS) {
-              Future.delayed(const Duration(milliseconds: 50), () {
-                if (_scrollController.hasClients && mounted) {
-                  _scrollController.animateTo(
-                    _scrollController.position.maxScrollExtent,
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOut,
-                  );
-                }
-              });
-            }
           }
-        } else {
-          print(
-              '⚠️ _scrollToBottom() - ScrollController not ready, retrying...');
-          // Retry with longer delay for iOS
-          final retryDelay = isIOS
-              ? const Duration(milliseconds: 300)
-              : const Duration(milliseconds: 100);
-          Future.delayed(retryDelay, () {
-            if (_scrollController.hasClients && mounted) {
-              final targetPosition = _scrollController.position.maxScrollExtent;
-              print(
-                  '📱 _scrollToBottom() RETRY - Target position: $targetPosition');
-              _scrollController.jumpTo(targetPosition);
-            }
-          });
+          return; // Success, exit
         }
+      }
+
+      // Retry if failed or controller not ready
+      if (attempt < 4) {
+        // Max 4 attempts
+        final delay =
+            Duration(milliseconds: 100 * attempt); // Progressive delay
+        print(
+            '⚠️ _scrollToBottom() - Attempt $attempt failed, retrying in ${delay.inMilliseconds}ms');
+        Future.delayed(delay, () => attemptScroll(attempt + 1));
+      } else {
+        print('❌ _scrollToBottom() - All attempts failed');
+      }
+    }
+
+    // Start with post-frame callback
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Small delay to ensure ListView is fully rendered
+      Future.delayed(const Duration(milliseconds: 50), () {
+        attemptScroll(1);
       });
     });
   }
