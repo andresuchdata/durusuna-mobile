@@ -93,8 +93,13 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       } else {
         // Create a new conversation object for new chat
         // The actual backend conversation will be created when first message is sent
+        print(
+            '📞 ContactsPage - Creating new conversation for user: ${user.id}');
+        final conversationId = 'new_${user.id}';
+        print('📞 ContactsPage - Generated conversation ID: $conversationId');
+
         conversation = Conversation(
-          id: 'new_${user.id}', // Special ID format for new conversations
+          id: conversationId, // Special ID format for new conversations
           type: 'direct',
           participants: [user],
           otherUser: user,

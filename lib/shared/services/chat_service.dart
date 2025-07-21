@@ -103,6 +103,12 @@ class ChatService {
     Map<String, dynamic>? metadata,
   }) async {
     try {
+      print('📤 ChatService.sendMessage() called with:');
+      print('📤   conversationId: $conversationId');
+      print('📤   receiverId: $receiverId');
+      print('📤   content: $content');
+      print('📤   messageType: ${messageType.name}');
+
       final data = <String, dynamic>{
         'message_type': messageType.name,
         if (conversationId != null) 'conversation_id': conversationId,
@@ -111,6 +117,8 @@ class ChatService {
         if (replyToId != null) 'reply_to_id': replyToId,
         if (metadata != null) 'metadata': metadata,
       };
+
+      print('📤 Request data: $data');
 
       final response = await _apiService.post(
         ApiConstants.sendMessage,
@@ -692,14 +700,23 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     Map<String, dynamic>? metadata,
   }) async {
     try {
+      print(
+          '📤 ChatMessagesNotifier.sendMessage() - conversationId: $_conversationWithId');
       final Message message;
       final bool isNewConversation = _conversationWithId.startsWith('new_');
+      print('📤 Is new conversation: $isNewConversation');
 
       // Handle new conversations
       if (isNewConversation) {
         // Extract user ID from the conversation ID format: 'new_userId'
         final receiverId =
             _conversationWithId.substring(4); // Remove 'new_' prefix
+        print('📤 Extracted receiverId: "$receiverId"');
+
+        if (receiverId.isEmpty) {
+          throw Exception(
+              'Invalid receiver ID extracted from conversation ID: $_conversationWithId');
+        }
 
         message = await _chatService.sendMessage(
           receiverId: receiverId,
@@ -713,6 +730,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         _ref.read(conversationsProvider.notifier).loadConversations();
       } else {
         // Use existing conversation ID
+        print('📤 Using existing conversationId: $_conversationWithId');
         message = await _chatService.sendMessage(
           conversationId: _conversationWithId,
           content: content,
