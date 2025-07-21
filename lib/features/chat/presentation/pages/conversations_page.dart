@@ -123,6 +123,26 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                         },
                       ),
       ),
+      // Debug FAB to test green dot
+      floatingActionButton: FloatingActionButton(
+        mini: true,
+        onPressed: () {
+          // Test: Toggle online status for first conversation
+          final conversations = conversationsState.conversations;
+          if (conversations.isNotEmpty) {
+            final firstConversation = conversations.first;
+            if (firstConversation.otherUser != null) {
+              final currentStatus = firstConversation.isOnline;
+              print(
+                  '🧪 DEBUG TEST: Toggling ${firstConversation.otherUser!.displayName} from $currentStatus to ${!currentStatus}');
+              ref.read(conversationsProvider.notifier).updateUserStatus(
+                  firstConversation.otherUser!.id, !currentStatus);
+            }
+          }
+        },
+        child: const Icon(Icons.bug_report, size: 16),
+        tooltip: 'Test Green Dot',
+      ),
     );
   }
 
@@ -254,6 +274,10 @@ class ConversationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Debug: Print conversation status every time it builds
+    print(
+        '🏗️ Building ConversationTile for ${displayName} - type: ${conversation.type}, isOnline: ${conversation.isOnline}');
+
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Stack(
@@ -274,20 +298,36 @@ class ConversationTile extends StatelessWidget {
                   )
                 : null,
           ),
-          if (conversation.type == 'direct' && conversation.isOnline)
+          if (conversation.type == 'direct' && conversation.isOnline) ...[
+            // Debug log when green dot should show in conversations list
+            Builder(
+              builder: (context) {
+                print(
+                    '🟢 CONVERSATIONS: Green dot should show for ${conversation.otherUser?.displayName} - isOnline: ${conversation.isOnline}');
+                return const SizedBox.shrink();
+              },
+            ),
             Positioned(
               bottom: 0,
               right: 0,
               child: Container(
-                width: 16,
-                height: 16,
+                width: 18,
+                height: 18,
                 decoration: BoxDecoration(
-                  color: AppTheme.successColor,
+                  color: Colors.green, // Force bright green like chat page
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
                 ),
               ),
             ),
+          ],
           if (conversation.type == 'group')
             Positioned(
               bottom: 0,

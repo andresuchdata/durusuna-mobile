@@ -571,14 +571,35 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
   }
 
   void updateUserStatus(String userId, bool isOnline) {
+    print(
+        '🔄 ConversationsNotifier.updateUserStatus() - User: $userId, Online: $isOnline');
+    print('🔄 Current conversations count: ${state.conversations.length}');
+
     final index = state.conversations
         .indexWhere((c) => c.type == 'direct' && c.otherUser?.id == userId);
+
     if (index != -1) {
+      print('🔄 Found conversation at index $index for user $userId');
+      final conversation = state.conversations[index];
+      print(
+          '🔄 Before: ${conversation.otherUser?.displayName} - isOnline: ${conversation.isOnline}');
+
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = updatedConversations[index].copyWith(
         isOnline: isOnline,
       );
       state = state.copyWith(conversations: updatedConversations);
+
+      print(
+          '🔄 After: ${updatedConversations[index].otherUser?.displayName} - isOnline: ${updatedConversations[index].isOnline}');
+    } else {
+      print('🔄 No conversation found for user $userId');
+      // Debug: List all conversations
+      for (int i = 0; i < state.conversations.length; i++) {
+        final conv = state.conversations[i];
+        print(
+            '🔄 Conversation $i: type=${conv.type}, otherUserId=${conv.otherUser?.id}, displayName=${conv.otherUser?.displayName}');
+      }
     }
   }
 

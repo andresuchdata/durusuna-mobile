@@ -57,9 +57,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _messageController.dispose();
     _focusNode.dispose();
 
-    // Leave conversation room
-    final realtimeService = ref.read(realtimeServiceProvider);
-    realtimeService.leaveConversation(widget.conversation.id);
+    // Leave conversation room - only if widget is still mounted
+    if (mounted) {
+      try {
+        final realtimeService = ref.read(realtimeServiceProvider);
+        realtimeService.leaveConversation(widget.conversation.id);
+      } catch (e) {
+        print('⚠️ Error leaving conversation room during dispose: $e');
+      }
+    }
 
     super.dispose();
   }
@@ -189,6 +195,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final messagesState =
         ref.watch(chatMessagesProvider(widget.conversation.id));
 
+    // Debug: Print green dot status every build
+    print(
+        '🟢 Build: Green dot status - type: ${widget.conversation.type}, online: $_isOtherUserOnline, typing: ${messagesState.isTyping}');
+
+    // Safety check: If someone is typing, they must be online
+    if (messagesState.isTyping && !_isOtherUserOnline) {
+      print(
+          '🔄 Safety check: User is typing but not marked online - fixing this');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _isOtherUserOnline = true;
+          });
+        }
+      });
+    }
+
     // Auto-scroll to bottom when messages finish loading initially
     ref.listen(chatMessagesProvider(widget.conversation.id), (previous, next) {
       if (previous?.isLoading == true &&
@@ -302,6 +325,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
             // If someone is typing, they're definitely online - show green dot
             final otherUserId = widget.conversation.otherUser?.id;
+            print(
+                '🔍 Debug: otherUserId=$otherUserId, typing.userId=${typing.userId}, typing.isTyping=${typing.isTyping}');
+            print('🔍 Debug: Current _isOtherUserOnline=$_isOtherUserOnline');
+
             if (otherUserId != null &&
                 typing.userId == otherUserId &&
                 typing.isTyping) {
@@ -310,6 +337,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               setState(() {
                 _isOtherUserOnline = true;
               });
+              print(
+                  '🔍 Debug: After setState _isOtherUserOnline=$_isOtherUserOnline');
             }
           } else {
             print(
@@ -395,12 +424,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     bottom: 0,
                     right: 0,
                     child: Container(
-                      width: 14,
-                      height: 14,
+                      width: 16,
+                      height: 16,
                       decoration: BoxDecoration(
-                        color: AppTheme.successColor,
+                        color: Colors.green, // Force bright green
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
+                        border: Border.all(color: Colors.white, width: 3),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 2,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
                       ),
                     ),
                   ),

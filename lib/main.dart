@@ -72,10 +72,12 @@ class DurusunaMobileApp extends ConsumerWidget {
         data: (presence) {
           print(
               '📱 App: Global presence update - User: ${presence.userId}, Online: ${presence.isOnline}');
+          print('📱 App: Updating conversations list with presence change');
           // Update conversation list with latest presence
           ref
               .read(conversationsProvider.notifier)
               .updateUserStatus(presence.userId, presence.isOnline);
+          print('📱 App: Conversations list update completed');
         },
         loading: () {},
         error: (error, stack) {
