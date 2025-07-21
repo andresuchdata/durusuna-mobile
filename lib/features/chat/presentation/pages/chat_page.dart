@@ -26,10 +26,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final TextEditingController _messageController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
 
+  // Track online status of the other user dynamically
+  late bool _isOtherUserOnline;
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+
+    // Initialize online status from conversation
+    _isOtherUserOnline = widget.conversation.isOnline;
 
     // Join conversation room for real-time updates
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -248,11 +254,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ref
                   .read(chatMessagesProvider(widget.conversation.id).notifier)
                   .addMessage(realtimeMessage.message);
+            }
 
-              if (realtimeMessage.action == 'created') {
-                print('📱 ChatPage: Scrolling to bottom for new message');
+            // Auto-scroll to bottom for any new message (own or from others)
+            if (realtimeMessage.action == 'created') {
+              print('📱 ChatPage: Scrolling to bottom for new message');
+              WidgetsBinding.instance.addPostFrameCallback((_) {
                 _scrollToBottom();
-              }
+              });
             }
           } else {
             print(
@@ -305,6 +314,41 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       );
     });
 
+    // Listen for presence updates (online/offline status)
+    ref.listen(realtimePresenceProvider, (previous, next) {
+      print('👤 ChatPage: realtimePresenceProvider state change');
+      next?.when(
+        data: (presence) {
+          print(
+              '👤 ChatPage: Received presence event - User: ${presence.userId}, Online: ${presence.isOnline}');
+
+          // Check if this presence update is for the other user in this conversation
+          final otherUserId = widget.conversation.otherUser?.id;
+          print('👤 ChatPage: Other user ID: $otherUserId');
+          print(
+              '👤 ChatPage: Current user ID: ${ref.read(authStateProvider).user?.id}');
+
+          if (otherUserId != null && presence.userId == otherUserId) {
+            print(
+                '👤 ChatPage: Updating presence for other user: ${presence.isOnline ? "Online" : "Offline"}');
+            setState(() {
+              _isOtherUserOnline = presence.isOnline;
+            });
+          } else {
+            print(
+                '👤 ChatPage: Ignoring presence event (not for other user in this conversation)');
+          }
+        },
+        loading: () {
+          print('👤 ChatPage: Realtime presence loading...');
+        },
+        error: (error, stack) {
+          print('❌ ChatPage: Error listening to presence updates: $error');
+          print('❌ Stack: $stack');
+        },
+      );
+    });
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -313,21 +357,40 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         titleSpacing: 0,
         title: Row(
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: AppTheme.primaryColor,
-              backgroundImage: _getAvatarUrl().isNotEmpty
-                  ? NetworkImage(_getAvatarUrl())
-                  : null,
-              child: _getAvatarUrl().isEmpty
-                  ? Text(
-                      _getInitials(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
+            Stack(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: AppTheme.primaryColor,
+                  backgroundImage: _getAvatarUrl().isNotEmpty
+                      ? NetworkImage(_getAvatarUrl())
+                      : null,
+                  child: _getAvatarUrl().isEmpty
+                      ? Text(
+                          _getInitials(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        )
+                      : null,
+                ),
+                // Online indicator for direct conversations
+                if (widget.conversation.type == 'direct' && _isOtherUserOnline)
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: AppTheme.successColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
                       ),
-                    )
-                  : null,
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -343,17 +406,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     ),
                   ),
                   Text(
-                    widget.conversation.isOnline
+                    _isOtherUserOnline
                         ? 'Online'
                         : messagesState.isTyping
                             ? 'Typing...'
                             : 'Last seen ${timeago.format(widget.conversation.lastActivity)}',
                     style: TextStyle(
                       fontSize: 12,
-                      color:
-                          widget.conversation.isOnline || messagesState.isTyping
-                              ? AppTheme.successColor
-                              : AppTheme.textSecondary,
+                      color: _isOtherUserOnline || messagesState.isTyping
+                          ? AppTheme.successColor
+                          : AppTheme.textSecondary,
                     ),
                   ),
                 ],

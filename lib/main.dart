@@ -9,6 +9,7 @@ import 'core/storage/storage_service.dart';
 import 'core/utils/global_auth_handler.dart';
 import 'shared/providers/app_providers.dart';
 import 'shared/services/realtime_service.dart';
+import 'shared/services/chat_service.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 
@@ -61,6 +62,24 @@ class DurusunaMobileApp extends ConsumerWidget {
         },
         error: (error, stack) {
           print('📱 App: Realtime connection error: $error');
+        },
+      );
+    });
+
+    // Listen for presence updates to keep conversations list in sync
+    ref.listen(realtimePresenceProvider, (previous, next) {
+      next?.when(
+        data: (presence) {
+          print(
+              '📱 App: Global presence update - User: ${presence.userId}, Online: ${presence.isOnline}');
+          // Update conversation list with latest presence
+          ref
+              .read(conversationsProvider.notifier)
+              .updateUserStatus(presence.userId, presence.isOnline);
+        },
+        loading: () {},
+        error: (error, stack) {
+          print('📱 App: Error in global presence listener: $error');
         },
       );
     });
