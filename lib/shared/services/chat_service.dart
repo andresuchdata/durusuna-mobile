@@ -3,7 +3,6 @@ import '../models/message.dart';
 import '../models/user.dart';
 import '../../core/constants/api_constants.dart';
 import 'api_service.dart';
-import 'socket_service.dart';
 
 class ChatService {
   final ApiService _apiService;
@@ -651,6 +650,9 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     if (loadMore && state.isLoadingMore) return;
     if (!loadMore && state.isLoading) return;
 
+    print(
+        '📋 ChatMessagesNotifier.loadMessages() - conversationId: $_conversationWithId, loadMore: $loadMore');
+
     if (mounted) {
       state = state.copyWith(
         isLoading: !loadMore,
@@ -665,10 +667,29 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         page: loadMore ? state.currentPage + 1 : 1,
       );
 
+      print(
+          '📋 Loaded ${messages.length} messages for conversation $_conversationWithId');
+
+      // Debug: Print first few messages
+      if (messages.isNotEmpty) {
+        print(
+            '📋 First message: ${messages.first.content} (${messages.first.createdAt})');
+        if (messages.length > 1) {
+          print(
+              '📋 Last message: ${messages.last.content} (${messages.last.createdAt})');
+        }
+      }
+
+      // Ensure conversation's last message is included
+      if (!loadMore && messages.isNotEmpty) {
+        await _ensureLastMessageIncluded(messages);
+      }
+
       if (mounted) {
         if (loadMore) {
+          // Prepend older messages to the beginning for chronological order
           state = state.copyWith(
-            messages: [...state.messages, ...messages],
+            messages: [...messages, ...state.messages],
             isLoadingMore: false,
             hasMore: messages.length == 50,
             currentPage: state.currentPage + 1,
@@ -681,8 +702,10 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
             currentPage: 1,
           );
         }
+        print('📋 Updated state with ${state.messages.length} total messages');
       }
     } catch (e) {
+      print('❌ Error loading messages: $e');
       if (mounted) {
         state = state.copyWith(
           isLoading: false,
@@ -693,16 +716,65 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
+  /// Ensure the conversation's last message is included in the loaded messages
+  Future<void> _ensureLastMessageIncluded(List<Message> loadedMessages) async {
+    try {
+      // Get the conversation from the conversations provider to check its last message
+      final conversationsState = _ref.read(conversationsProvider);
+      final conversation =
+          conversationsState.conversations.cast<Conversation?>().firstWhere(
+                (c) => c?.id == _conversationWithId,
+                orElse: () => null,
+              );
+
+      if (conversation?.lastMessage != null) {
+        final lastMessage = conversation!.lastMessage!;
+        print(
+            '📋 Conversation last message: ${lastMessage.content} (${lastMessage.createdAt})');
+
+        // Check if the last message is already in the loaded messages
+        final isIncluded = loadedMessages.any((m) => m.id == lastMessage.id);
+        print('📋 Last message included in loaded messages: $isIncluded');
+
+        if (!isIncluded) {
+          print('📋 Adding missing last message to the list');
+          // Add the last message at the end (chronological order)
+          loadedMessages.add(lastMessage);
+        }
+      }
+    } catch (e) {
+      print('⚠️ Error ensuring last message included: $e');
+    }
+  }
+
   Future<void> sendMessage({
     String? content,
     MessageType messageType = MessageType.text,
     String? replyToId,
     Map<String, dynamic>? metadata,
   }) async {
+    // Create optimistic message immediately with temporary ID
+    final optimisticMessage = Message(
+      id: 'temp_${DateTime.now().millisecondsSinceEpoch}', // Temporary ID
+      content: content,
+      messageType: messageType,
+      isFromMe: true,
+      createdAt: DateTime.now(),
+    );
+
+    // Add optimistic message immediately for instant UI feedback
+    if (mounted) {
+      print(
+          '📤 Adding OPTIMISTIC message: ${optimisticMessage.content} (temp ID: ${optimisticMessage.id})');
+      state = state.copyWith(
+        messages: [...state.messages, optimisticMessage],
+      );
+    }
+
     try {
       print(
           '📤 ChatMessagesNotifier.sendMessage() - conversationId: $_conversationWithId');
-      final Message message;
+      final Message serverMessage;
       final bool isNewConversation = _conversationWithId.startsWith('new_');
       print('📤 Is new conversation: $isNewConversation');
 
@@ -718,7 +790,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
               'Invalid receiver ID extracted from conversation ID: $_conversationWithId');
         }
 
-        message = await _chatService.sendMessage(
+        serverMessage = await _chatService.sendMessage(
           receiverId: receiverId,
           content: content,
           messageType: messageType,
@@ -731,7 +803,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       } else {
         // Use existing conversation ID
         print('📤 Using existing conversationId: $_conversationWithId');
-        message = await _chatService.sendMessage(
+        serverMessage = await _chatService.sendMessage(
           conversationId: _conversationWithId,
           content: content,
           messageType: messageType,
@@ -740,15 +812,27 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         );
       }
 
-      // Add message to the beginning of the list (newest first)
+      // Replace optimistic message with server response
       if (mounted) {
-        state = state.copyWith(
-          messages: [message, ...state.messages],
-        );
+        print(
+            '📤 Replacing optimistic message with server response: ${serverMessage.content} (ID: ${serverMessage.id})');
+        final updatedMessages = state.messages.map((msg) {
+          return msg.id == optimisticMessage.id ? serverMessage : msg;
+        }).toList();
+
+        state = state.copyWith(messages: updatedMessages);
       }
     } catch (e) {
+      // Remove optimistic message on error
       if (mounted) {
-        state = state.copyWith(error: e.toString());
+        print('❌ Removing optimistic message due to error: ${e.toString()}');
+        final updatedMessages = state.messages
+            .where((msg) => msg.id != optimisticMessage.id)
+            .toList();
+        state = state.copyWith(
+          messages: updatedMessages,
+          error: e.toString(),
+        );
       }
       rethrow;
     }
@@ -757,9 +841,14 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
   void addMessage(Message message) {
     // Check if message already exists
     if (mounted && !state.messages.any((m) => m.id == message.id)) {
+      print(
+          '💬 Adding REAL-TIME message: ${message.content} (ID: ${message.id})');
       state = state.copyWith(
-        messages: [message, ...state.messages],
+        messages: [...state.messages, message],
       );
+    } else {
+      print(
+          '⚠️ Message already exists, skipping: ${message.content} (ID: ${message.id})');
     }
   }
 
@@ -769,6 +858,39 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       final updatedMessages = [...state.messages];
       updatedMessages[index] = updatedMessage;
       state = state.copyWith(messages: updatedMessages);
+    }
+  }
+
+  void replaceMessage(Message serverMessage) {
+    // Try to find optimistic message by content and timestamp (since it has temp ID)
+    final now = DateTime.now();
+    final recentThreshold =
+        now.subtract(const Duration(seconds: 5)); // Recent messages only
+
+    final optimisticIndex = state.messages.indexWhere((m) =>
+            m.content == serverMessage.content &&
+            m.createdAt.isAfter(recentThreshold) &&
+            m.id.startsWith('temp_') // Is a temporary message
+        );
+
+    if (optimisticIndex != -1) {
+      print(
+          '🔄 Replacing TEMPORARY message with server version: ${serverMessage.content} (${state.messages[optimisticIndex].id} → ${serverMessage.id})');
+      final updatedMessages = [...state.messages];
+      updatedMessages[optimisticIndex] = serverMessage;
+      state = state.copyWith(messages: updatedMessages);
+    } else {
+      // Check if it already exists with real ID (avoid duplicates)
+      final existsIndex =
+          state.messages.indexWhere((m) => m.id == serverMessage.id);
+      if (existsIndex == -1) {
+        print(
+            '⚠️ Could not find temporary message to replace, adding new: ${serverMessage.content} (ID: ${serverMessage.id})');
+        addMessage(serverMessage);
+      } else {
+        print(
+            'ℹ️ Message already exists with server ID, skipping: ${serverMessage.content} (ID: ${serverMessage.id})');
+      }
     }
   }
 

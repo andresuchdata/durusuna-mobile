@@ -6,6 +6,11 @@ class ApiConstants {
       ? 'http://10.0.2.2:3001/api' // Android emulator
       : 'http://localhost:3001/api'; // iOS simulator and others
 
+  // Socket URL (without /api suffix)
+  static final String socketUrl = Platform.isAndroid
+      ? 'http://10.0.2.2:3001' // Android emulator
+      : 'http://localhost:3001'; // iOS simulator and others
+
   // Development/Production configuration
   static const bool enableLogging = true; // Set to false in production
 

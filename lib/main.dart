@@ -8,6 +8,7 @@ import 'core/constants/app_theme.dart';
 import 'core/storage/storage_service.dart';
 import 'core/utils/global_auth_handler.dart';
 import 'shared/providers/app_providers.dart';
+import 'shared/services/realtime_service.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 
@@ -49,9 +50,28 @@ class DurusunaMobileApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
 
+    // Watch realtime connection status for debugging
+    ref.listen(realtimeConnectionProvider, (previous, next) {
+      next?.when(
+        data: (isConnected) {
+          print('📱 App: Realtime connection status changed: $isConnected');
+        },
+        loading: () {
+          print('📱 App: Realtime connection loading...');
+        },
+        error: (error, stack) {
+          print('📱 App: Realtime connection error: $error');
+        },
+      );
+    });
+
     // Initialize GlobalAuthHandler with navigator key and ref
     WidgetsBinding.instance.addPostFrameCallback((_) {
       GlobalAuthHandler.initialize(navigatorKey, ref);
+
+      // Initialize RealtimeService for app-wide socket connection
+      print('📱 App: Initializing RealtimeService...');
+      ref.read(realtimeServiceProvider);
     });
 
     return MaterialApp(

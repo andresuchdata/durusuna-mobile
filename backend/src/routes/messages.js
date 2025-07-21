@@ -430,7 +430,7 @@ router.post('/send', auth, validate(messageSchema), async (req, res) => {
             created_at: new Date(),
             updated_at: new Date()
           })
-          .returning('id');
+          .returning('*');
 
         conversationId = newConversation.id;
 
@@ -451,6 +451,17 @@ router.post('/send', auth, validate(messageSchema), async (req, res) => {
             role: 'member'
           }
         ]);
+
+        // Emit conversation created event
+        try {
+          const io = req.app.get('io');
+          if (io) {
+            io.emitConversationCreated(newConversation, [req.user.id, receiverId]);
+            logger.info(`Emitted conversation created event for conversation ${conversationId}`);
+          }
+        } catch (socketError) {
+          logger.error('Error emitting conversation created event:', socketError);
+        }
       }
     } else {
       return res.status(400).json({ error: 'Either conversation_id or receiver_id is required' });
@@ -570,8 +581,28 @@ router.post('/send', auth, validate(messageSchema), async (req, res) => {
       conversation_id: conversationId
     });
 
-    // TODO: Emit socket event for real-time messaging
-    // socketService.emitToUser(receiver_id, 'new_message', formattedMessage);
+    // Emit real-time socket events
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        // Emit new message to conversation participants
+        io.emitNewMessage(formattedMessage, conversationId);
+        
+        // Also emit to user-specific rooms for notifications
+        if (receiverId) {
+          io.emitToUser(receiverId, 'message:new', {
+            message: formattedMessage,
+            action: 'created',
+            conversationId: conversationId,
+          });
+        }
+        
+        logger.info(`Emitted new message event for conversation ${conversationId}`);
+      }
+    } catch (socketError) {
+      logger.error('Error emitting socket event:', socketError);
+      // Don't fail the request if socket emission fails
+    }
 
   } catch (error) {
     logger.error('Error sending message:', error);
