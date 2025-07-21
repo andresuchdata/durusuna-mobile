@@ -67,13 +67,14 @@ const handleConnection = (socket) => {
   logger.info(`🏠 User ${userId} joined personal room: user_${userId}`);
 
   // Broadcast user is online
-  socket.broadcast.emit('presence:online', {
+  const presenceData = {
     userId: userId,
     isOnline: true,
     timestamp: new Date().toISOString(),
-  });
+  };
   
-  logger.info(`📡 Broadcasted online presence for user ${userId}`);
+  socket.broadcast.emit('presence:online', presenceData);
+  logger.info(`📡 Broadcasted online presence for user ${userId}`, presenceData);
 
   // === CONVERSATION MANAGEMENT ===
   
@@ -281,14 +282,15 @@ const handleConnection = (socket) => {
     }
     
     // Broadcast user offline
-    socket.broadcast.emit('presence:offline', {
+    const offlineData = {
       userId: userId,
       isOnline: false,
       timestamp: new Date().toISOString(),
       lastSeen: new Date().toISOString(),
-    });
+    };
     
-    logger.info(`📡 Broadcasted offline presence for user ${userId}`);
+    socket.broadcast.emit('presence:offline', offlineData);
+    logger.info(`📡 Broadcasted offline presence for user ${userId}`, offlineData);
     
     // Clean up conversation rooms
     let cleanedRooms = 0;

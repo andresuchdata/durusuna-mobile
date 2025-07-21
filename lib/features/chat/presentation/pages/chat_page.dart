@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -48,6 +49,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       // Update last seen when entering conversation
       realtimeService.updateLastSeen(widget.conversation.id);
+
+      // Clear unread count for this conversation
+      ref
+          .read(conversationsProvider.notifier)
+          .markConversationAsRead(widget.conversation.id);
+      print('📱 ChatPage: Marked conversation as read (cleared unread count)');
     });
   }
 
@@ -125,7 +132,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           );
 
       _messageController.clear();
-      _scrollToBottom();
+      _scrollToBottom(animated: true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -138,14 +145,62 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
+  void _scrollToBottom({bool animated = true}) {
+    // iOS needs more aggressive timing handling
+    final isIOS = Platform.isIOS;
+    final delay = isIOS ? const Duration(milliseconds: 150) : Duration.zero;
+
+    print('📱 _scrollToBottom() called - iOS: $isIOS, Animated: $animated');
+
+    // First attempt with post-frame callback
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(delay, () {
+        if (_scrollController.hasClients && mounted) {
+          final targetPosition = _scrollController.position.maxScrollExtent;
+          print('📱 _scrollToBottom() - Target position: $targetPosition');
+
+          if (animated && !isIOS) {
+            // Use animation for Android
+            _scrollController.animateTo(
+              targetPosition,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          } else {
+            // Use jump for iOS or when not animated (more reliable)
+            _scrollController.jumpTo(targetPosition);
+
+            // For iOS, follow up with animated scroll after jump
+            if (animated && isIOS) {
+              Future.delayed(const Duration(milliseconds: 50), () {
+                if (_scrollController.hasClients && mounted) {
+                  _scrollController.animateTo(
+                    _scrollController.position.maxScrollExtent,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                  );
+                }
+              });
+            }
+          }
+        } else {
+          print(
+              '⚠️ _scrollToBottom() - ScrollController not ready, retrying...');
+          // Retry with longer delay for iOS
+          final retryDelay = isIOS
+              ? const Duration(milliseconds: 300)
+              : const Duration(milliseconds: 100);
+          Future.delayed(retryDelay, () {
+            if (_scrollController.hasClients && mounted) {
+              final targetPosition = _scrollController.position.maxScrollExtent;
+              print(
+                  '📱 _scrollToBottom() RETRY - Target position: $targetPosition');
+              _scrollController.jumpTo(targetPosition);
+            }
+          });
+        }
+      });
+    });
   }
 
   Future<void> _refreshMessages() async {
@@ -217,9 +272,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (previous?.isLoading == true &&
           next.isLoading == false &&
           next.messages.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          print('📱 ChatPage: Auto-scrolling to bottom after messages loaded');
-          _scrollToBottom();
+        print('📱 ChatPage: Auto-scrolling to bottom after messages loaded');
+        // Use non-animated scroll for initial load (faster and more reliable on iOS)
+        _scrollToBottom(animated: false);
+
+        // Add a backup animated scroll for iOS after a longer delay
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            print('📱 ChatPage: Backup animated scroll for iOS');
+            _scrollToBottom(animated: true);
+          }
         });
       }
     });
@@ -282,9 +344,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             // Auto-scroll to bottom for any new message (own or from others)
             if (realtimeMessage.action == 'created') {
               print('📱 ChatPage: Scrolling to bottom for new message');
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _scrollToBottom();
-              });
+              _scrollToBottom(animated: true);
             }
           } else {
             print(
@@ -531,19 +591,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ),
       body: Column(
         children: [
-          // Messages list with pull-to-refresh
+          // Messages list
           Expanded(
             child: messagesState.isLoading && messagesState.messages.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : messagesState.messages.isEmpty
-                    ? RefreshIndicator(
-                        onRefresh: _refreshMessages,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          child: SizedBox(
-                            height: MediaQuery.of(context).size.height * 0.6,
-                            child: _buildEmptyState(),
-                          ),
+                    ? SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.6,
+                          child: _buildEmptyState(),
                         ),
                       )
                     : RefreshIndicator(
@@ -554,7 +611,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.all(16),
                           itemCount: messagesState.messages.length +
-                              (messagesState.isLoadingMore ? 1 : 0),
+                              (messagesState.isLoadingMore ? 1 : 0) +
+                              1, // +1 for bottom spacing
                           itemBuilder: (context, index) {
                             // Show loading indicator at the top when loading older messages
                             if (messagesState.isLoadingMore && index == 0) {
@@ -569,9 +627,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             final messageIndex =
                                 messagesState.isLoadingMore ? index - 1 : index;
 
+                            // Bottom spacing item (for better swipe refresh UX)
+                            if (messageIndex >= messagesState.messages.length) {
+                              return const SizedBox(height: 60);
+                            }
+
                             // Return empty container if index is out of bounds
-                            if (messageIndex < 0 ||
-                                messageIndex >= messagesState.messages.length) {
+                            if (messageIndex < 0) {
                               return const SizedBox.shrink();
                             }
 

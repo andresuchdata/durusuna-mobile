@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/message.dart';
 import '../models/user.dart';
 import '../../core/constants/api_constants.dart';
+import '../../core/storage/storage_service.dart';
 import 'api_service.dart';
 
 class ChatService {
@@ -543,19 +544,44 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
   }
 
   void updateConversationLastMessage(String conversationId, Message message) {
+    print(
+        '🔄 ConversationsNotifier.updateConversationLastMessage() - Conversation: $conversationId');
+    print('🔄 Message from: ${message.senderId}, content: ${message.content}');
+
     final index = state.conversations.indexWhere((c) => c.id == conversationId);
     if (index != -1) {
+      final conversation = state.conversations[index];
+      print('🔄 Found conversation: ${conversation.otherUser?.displayName}');
+
+      // Check if message is from another user (should increment unread count)
+      final currentUserId = StorageService.getUser()?['id'];
+      final isFromOtherUser = message.senderId != currentUserId;
+
+      print(
+          '🔄 Current user: $currentUserId, Message sender: ${message.senderId}');
+      print('🔄 Is from other user: $isFromOtherUser');
+
       final updatedConversations = [...state.conversations];
-      updatedConversations[index] = updatedConversations[index].copyWith(
+      updatedConversations[index] = conversation.copyWith(
         lastMessage: message,
         lastActivity: message.createdAt,
+        // Increment unread count only if message is from another user
+        unreadCount: isFromOtherUser
+            ? conversation.unreadCount + 1
+            : conversation.unreadCount,
       );
 
+      print(
+          '🔄 Updated unread count: ${conversation.unreadCount} → ${updatedConversations[index].unreadCount}');
+
       // Move to top
-      final conversation = updatedConversations.removeAt(index);
-      updatedConversations.insert(0, conversation);
+      final updatedConversation = updatedConversations.removeAt(index);
+      updatedConversations.insert(0, updatedConversation);
 
       state = state.copyWith(conversations: updatedConversations);
+      print('🔄 Conversation moved to top and state updated');
+    } else {
+      print('🔄 Conversation not found in list');
     }
   }
 

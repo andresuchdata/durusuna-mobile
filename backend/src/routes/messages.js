@@ -153,7 +153,11 @@ router.get('/conversations', auth, async (req, res) => {
         unread_count: parseInt(conv.unread_count) || 0,
         last_activity: conv.last_message_at,
         created_at: conv.conversation_created_at,
-        updated_at: conv.conversation_updated_at
+        updated_at: conv.conversation_updated_at,
+        // For direct chats, check if the other user is online
+        is_online: conv.type === 'direct' && otherUser 
+          ? (req.app.get('io') ? req.app.get('io').isUserOnline(otherUser.id) : false)
+          : false
       };
     });
 

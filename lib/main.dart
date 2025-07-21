@@ -86,6 +86,28 @@ class DurusunaMobileApp extends ConsumerWidget {
       );
     });
 
+    // Listen for new messages to update conversations list in real-time
+    ref.listen(realtimeMessagesProvider, (previous, next) {
+      next?.when(
+        data: (realtimeMessage) {
+          print(
+              '📱 App: Global message update - Conversation: ${realtimeMessage.conversationId}');
+          print('📱 App: Message content: ${realtimeMessage.message.content}');
+
+          // Update conversation's last message and unread count
+          ref
+              .read(conversationsProvider.notifier)
+              .updateConversationLastMessage(
+                  realtimeMessage.conversationId, realtimeMessage.message);
+          print('📱 App: Conversations list updated with new message');
+        },
+        loading: () {},
+        error: (error, stack) {
+          print('📱 App: Error in global message listener: $error');
+        },
+      );
+    });
+
     // Initialize GlobalAuthHandler with navigator key and ref
     WidgetsBinding.instance.addPostFrameCallback((_) {
       GlobalAuthHandler.initialize(navigatorKey, ref);
