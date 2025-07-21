@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/constants/api_constants.dart';
+import '../../core/utils/global_auth_handler.dart';
 
 class ApiService {
   late final Dio _dio;
@@ -44,40 +45,52 @@ class ApiService {
             'ERROR[${error.response?.statusCode}] => PATH: ${error.requestOptions.path}');
         print('ERROR MESSAGE: ${error.message}');
 
-        // Handle token expiration
+        // Handle unauthorized responses (401)
         if (error.response?.statusCode == 401) {
-          final refreshToken = StorageService
-              .getToken(); // In production, store refresh token separately
-          if (refreshToken != null) {
-            try {
-              // Attempt to refresh the token
-              final refreshResponse = await _refreshToken(refreshToken);
-              if (refreshResponse != null) {
-                // Retry the original request with new token
-                final originalRequest = error.requestOptions;
-                originalRequest.headers['Authorization'] =
-                    'Bearer ${refreshResponse['accessToken']}';
+          // Check if this is already a logout/login request to avoid loops
+          final isAuthRequest = error.requestOptions.path.contains('/auth/');
 
-                final retryResponse = await _dio.request(
-                  originalRequest.path,
-                  options: Options(
-                    method: originalRequest.method,
-                    headers: originalRequest.headers,
-                  ),
-                  data: originalRequest.data,
-                  queryParameters: originalRequest.queryParameters,
-                );
+          if (!isAuthRequest && GlobalAuthHandler.isInitialized) {
+            final refreshToken = StorageService.getToken();
 
-                return handler.resolve(retryResponse);
+            if (refreshToken != null) {
+              try {
+                // Attempt to refresh the token
+                final refreshResponse = await _refreshToken(refreshToken);
+                if (refreshResponse != null) {
+                  // Retry the original request with new token
+                  final originalRequest = error.requestOptions;
+                  originalRequest.headers['Authorization'] =
+                      'Bearer ${refreshResponse['accessToken']}';
+
+                  final retryResponse = await _dio.request(
+                    originalRequest.path,
+                    options: Options(
+                      method: originalRequest.method,
+                      headers: originalRequest.headers,
+                    ),
+                    data: originalRequest.data,
+                    queryParameters: originalRequest.queryParameters,
+                  );
+
+                  return handler.resolve(retryResponse);
+                }
+              } catch (refreshError) {
+                // Refresh failed, logout user
+                print('Token refresh failed: $refreshError');
+                await GlobalAuthHandler.tokenRefreshFailed();
               }
-            } catch (refreshError) {
-              // Refresh failed, logout user
-              await _handleLogout();
+            } else {
+              // No refresh token available
+              await GlobalAuthHandler.handleUnauthorized(
+                customMessage: 'Your session has expired. Please log in again.',
+              );
             }
-          } else {
-            // No refresh token, logout user
+          } else if (!isAuthRequest) {
+            // GlobalAuthHandler not initialized - use fallback
             await _handleLogout();
           }
+          // If it's an auth request (login/logout), let it fail normally
         }
 
         handler.next(error);
@@ -114,9 +127,14 @@ class ApiService {
   }
 
   Future<void> _handleLogout() async {
-    await StorageService.clearUser();
-    // Navigate to login screen - this would be handled by the app state management
-    // The auth provider will detect the token removal and update the UI accordingly
+    // Use global auth handler for consistent logout behavior
+    if (GlobalAuthHandler.isInitialized) {
+      await GlobalAuthHandler.sessionTimeout();
+    } else {
+      // Fallback if global handler not initialized
+      await StorageService.clearUser();
+      print('GlobalAuthHandler not initialized - using fallback logout');
+    }
   }
 
   // GET request

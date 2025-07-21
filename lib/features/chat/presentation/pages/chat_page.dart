@@ -30,7 +30,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    
+
     // Join conversation room for real-time updates
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final socketService = ref.read(socketServiceProvider);
@@ -43,20 +43,52 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _scrollController.dispose();
     _messageController.dispose();
     _focusNode.dispose();
-    
+
     // Leave conversation room
     final socketService = ref.read(socketServiceProvider);
     socketService.leaveConversation(widget.conversation.id);
-    
+
     super.dispose();
+  }
+
+  String _getDisplayName() {
+    if (widget.conversation.type == 'group') {
+      return widget.conversation.name ?? 'Group Chat';
+    }
+    final otherUser = widget.conversation.otherUser;
+    return otherUser?.displayName ?? 'Unknown User';
+  }
+
+  String _getAvatarUrl() {
+    if (widget.conversation.type == 'group') {
+      return widget.conversation.avatarUrl ?? '';
+    }
+    return widget.conversation.otherUser?.avatarUrl ?? '';
+  }
+
+  String _getInitials() {
+    if (widget.conversation.type == 'group') {
+      final name = widget.conversation.name ?? 'Group';
+      final words = name.split(' ');
+      if (words.length >= 2) {
+        return '${words[0][0]}${words[1][0]}';
+      }
+      return name.isNotEmpty ? name[0].toUpperCase() : 'G';
+    }
+    final otherUser = widget.conversation.otherUser;
+    if (otherUser != null) {
+      return '${otherUser.firstName[0]}${otherUser.lastName[0]}';
+    }
+    return 'U';
   }
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
-      final state = ref.read(chatMessagesProvider(widget.conversation.otherUser.id));
+      final state = ref.read(chatMessagesProvider(widget.conversation.id));
       if (!state.isLoadingMore && state.hasMore) {
-        ref.read(chatMessagesProvider(widget.conversation.otherUser.id).notifier)
+        ref
+            .read(chatMessagesProvider(widget.conversation.id).notifier)
             .loadMessages(loadMore: true);
       }
     }
@@ -66,7 +98,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (content?.trim().isEmpty ?? true) return;
 
     try {
-      await ref.read(chatMessagesProvider(widget.conversation.otherUser.id).notifier)
+      await ref
+          .read(chatMessagesProvider(widget.conversation.id).notifier)
           .sendMessage(
             content: content,
             messageType: messageType ?? MessageType.text,
@@ -99,26 +132,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _handleTyping(bool isTyping) {
     final socketService = ref.read(socketServiceProvider);
     if (isTyping) {
-      socketService.startTyping(widget.conversation.otherUser.id);
+      socketService.startTyping(widget.conversation.id);
     } else {
-      socketService.stopTyping(widget.conversation.otherUser.id);
+      socketService.stopTyping(widget.conversation.id);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-    final messagesState = ref.watch(chatMessagesProvider(widget.conversation.otherUser.id));
-    
+    final messagesState =
+        ref.watch(chatMessagesProvider(widget.conversation.id));
+
     // Listen for new messages from socket
     ref.listen(messageStreamProvider, (previous, next) {
       next.whenData((message) {
-        if (message.senderId == widget.conversation.otherUser.id ||
-            message.receiverId == widget.conversation.otherUser.id) {
-          ref.read(chatMessagesProvider(widget.conversation.otherUser.id).notifier)
+        if (message.senderId == widget.conversation.id ||
+            message.receiverId == widget.conversation.id) {
+          ref
+              .read(chatMessagesProvider(widget.conversation.id).notifier)
               .addMessage(message);
-          
-          if (message.senderId == widget.conversation.otherUser.id) {
+
+          if (message.senderId == widget.conversation.id) {
             _scrollToBottom();
           }
         }
@@ -128,8 +163,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     // Listen for typing indicators
     ref.listen(typingStreamProvider, (previous, next) {
       next.whenData((typing) {
-        if (typing.userId == widget.conversation.otherUser.id) {
-          ref.read(chatMessagesProvider(widget.conversation.otherUser.id).notifier)
+        if (typing.userId == widget.conversation.id) {
+          ref
+              .read(chatMessagesProvider(widget.conversation.id).notifier)
               .setTyping(typing.isTyping);
         }
       });
@@ -146,12 +182,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             CircleAvatar(
               radius: 20,
               backgroundColor: AppTheme.primaryColor,
-              backgroundImage: widget.conversation.otherUser.avatarUrl != null
-                  ? NetworkImage(widget.conversation.otherUser.avatarUrl!)
+              backgroundImage: _getAvatarUrl().isNotEmpty
+                  ? NetworkImage(_getAvatarUrl())
                   : null,
-              child: widget.conversation.otherUser.avatarUrl == null
+              child: _getAvatarUrl().isEmpty
                   ? Text(
-                      '${widget.conversation.otherUser.firstName[0]}${widget.conversation.otherUser.lastName[0]}',
+                      _getInitials(),
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -165,7 +201,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.conversation.otherUser.displayName,
+                    _getDisplayName(),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -180,9 +216,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             : 'Last seen ${timeago.format(widget.conversation.lastActivity)}',
                     style: TextStyle(
                       fontSize: 12,
-                      color: widget.conversation.isOnline || messagesState.isTyping
-                          ? AppTheme.successColor
-                          : AppTheme.textSecondary,
+                      color:
+                          widget.conversation.isOnline || messagesState.isTyping
+                              ? AppTheme.successColor
+                              : AppTheme.textSecondary,
                     ),
                   ),
                 ],
@@ -237,7 +274,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   children: [
                     Icon(Icons.block, size: 20, color: AppTheme.errorColor),
                     SizedBox(width: 8),
-                    Text('Block User', style: TextStyle(color: AppTheme.errorColor)),
+                    Text('Block User',
+                        style: TextStyle(color: AppTheme.errorColor)),
                   ],
                 ),
               ),
@@ -280,7 +318,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             children: [
                               if (showTimestamp)
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 16),
                                   child: Text(
                                     _formatTimestamp(message.createdAt),
                                     style: const TextStyle(
@@ -293,8 +332,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 message: message,
                                 isMe: isMe,
                                 onReply: (msg) => _replyToMessage(msg),
-                                onEdit: isMe ? (msg) => _editMessage(msg) : null,
-                                onDelete: isMe ? (msg) => _deleteMessage(msg) : null,
+                                onEdit:
+                                    isMe ? (msg) => _editMessage(msg) : null,
+                                onDelete:
+                                    isMe ? (msg) => _deleteMessage(msg) : null,
                               ),
                               const SizedBox(height: 4),
                             ],
@@ -313,7 +354,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     radius: 12,
                     backgroundColor: AppTheme.primaryColor,
                     child: Text(
-                      widget.conversation.otherUser.firstName[0],
+                      _getInitials()[0],
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
@@ -323,7 +364,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.grey[200],
                       borderRadius: BorderRadius.circular(16),
@@ -338,7 +380,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: List.generate(3, (index) {
                               return AnimatedContainer(
-                                duration: Duration(milliseconds: 600 + (index * 200)),
+                                duration:
+                                    Duration(milliseconds: 600 + (index * 200)),
                                 curve: Curves.easeInOut,
                                 width: 4,
                                 height: 4,
@@ -388,12 +431,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           Text(
             'Start the conversation',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: AppTheme.textSecondary,
-            ),
+                  color: AppTheme.textSecondary,
+                ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Send a message to ${widget.conversation.otherUser.firstName}',
+            'Send a message to ${_getDisplayName()}',
             style: const TextStyle(
               color: AppTheme.textTertiary,
             ),
@@ -405,19 +448,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   bool _shouldShowTimestamp(Message current, Message? previous) {
     if (previous == null) return true;
-    
+
     final currentDate = DateTime(
       current.createdAt.year,
       current.createdAt.month,
       current.createdAt.day,
     );
-    
+
     final previousDate = DateTime(
       previous.createdAt.year,
       previous.createdAt.month,
       previous.createdAt.day,
     );
-    
+
     return !currentDate.isAtSameDate(previousDate);
   }
 
@@ -425,7 +468,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
-    
+
     if (messageDate == today) {
       return 'Today';
     } else if (messageDate == today.subtract(const Duration(days: 1))) {
@@ -466,7 +509,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               try {
                 final chatService = ref.read(chatServiceProvider);
                 await chatService.deleteMessage(message.id);
-                ref.read(chatMessagesProvider(widget.conversation.otherUser.id).notifier)
+                ref
+                    .read(chatMessagesProvider(widget.conversation.id).notifier)
                     .deleteMessage(message.id);
               } catch (e) {
                 if (mounted) {
@@ -583,7 +627,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear Chat'),
-        content: const Text('Are you sure you want to clear this chat? This action cannot be undone.'),
+        content: const Text(
+            'Are you sure you want to clear this chat? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -607,7 +652,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Block User'),
-        content: Text('Are you sure you want to block ${widget.conversation.otherUser.firstName}?'),
+        content: Text('Are you sure you want to block ${_getDisplayName()}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -631,4 +676,4 @@ extension DateTimeExtension on DateTime {
   bool isAtSameDate(DateTime other) {
     return year == other.year && month == other.month && day == other.day;
   }
-} 
+}

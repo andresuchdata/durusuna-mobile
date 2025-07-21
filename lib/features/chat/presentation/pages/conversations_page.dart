@@ -168,6 +168,40 @@ class ConversationTile extends StatelessWidget {
     required this.onTap,
   });
 
+  String get displayName {
+    if (conversation.type == 'group') {
+      return conversation.name ?? 'Group Chat';
+    }
+    final otherUser = conversation.otherUser;
+    if (otherUser != null) {
+      return otherUser.displayName;
+    }
+    return 'Unknown User';
+  }
+
+  String get avatarUrl {
+    if (conversation.type == 'group') {
+      return conversation.avatarUrl ?? '';
+    }
+    return conversation.otherUser?.avatarUrl ?? '';
+  }
+
+  String get initials {
+    if (conversation.type == 'group') {
+      final name = conversation.name ?? 'Group';
+      final words = name.split(' ');
+      if (words.length >= 2) {
+        return '${words[0][0]}${words[1][0]}';
+      }
+      return name.isNotEmpty ? name[0].toUpperCase() : 'G';
+    }
+    final otherUser = conversation.otherUser;
+    if (otherUser != null) {
+      return '${otherUser.firstName[0]}${otherUser.lastName[0]}';
+    }
+    return 'U';
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -177,12 +211,11 @@ class ConversationTile extends StatelessWidget {
           CircleAvatar(
             radius: 28,
             backgroundColor: AppTheme.primaryColor,
-            backgroundImage: conversation.otherUser.avatarUrl != null
-                ? NetworkImage(conversation.otherUser.avatarUrl!)
-                : null,
-            child: conversation.otherUser.avatarUrl == null
+            backgroundImage:
+                avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+            child: avatarUrl.isEmpty
                 ? Text(
-                    '${conversation.otherUser.firstName[0]}${conversation.otherUser.lastName[0]}',
+                    initials,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
@@ -191,7 +224,7 @@ class ConversationTile extends StatelessWidget {
                   )
                 : null,
           ),
-          if (conversation.isOnline)
+          if (conversation.type == 'direct' && conversation.isOnline)
             Positioned(
               bottom: 0,
               right: 0,
@@ -205,13 +238,32 @@ class ConversationTile extends StatelessWidget {
                 ),
               ),
             ),
+          if (conversation.type == 'group')
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.8),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: const Icon(
+                  Icons.group,
+                  size: 10,
+                  color: Colors.white,
+                ),
+              ),
+            ),
         ],
       ),
       title: Row(
         children: [
           Expanded(
             child: Text(
-              conversation.otherUser.displayName,
+              displayName,
               style: TextStyle(
                 fontWeight: conversation.unreadCount > 0
                     ? FontWeight.w600

@@ -43,6 +43,12 @@ class ChatService {
     int limit = 50,
   }) async {
     try {
+      // Handle new conversations that don't exist yet
+      if (conversationWithId.startsWith('new_')) {
+        // Return empty list for new conversations
+        return [];
+      }
+
       final response = await _apiService.get(
         '${ApiConstants.getConversationMessages}/$conversationWithId',
         queryParameters: {
@@ -74,16 +80,18 @@ class ChatService {
 
   /// Send a message
   Future<Message> sendMessage({
-    required String receiverId,
+    String? conversationId,
+    String? receiverId, // For backward compatibility
     String? content,
     MessageType messageType = MessageType.text,
     String? replyToId,
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      final data = {
-        'receiver_id': receiverId,
+      final data = <String, dynamic>{
         'message_type': messageType.name,
+        if (conversationId != null) 'conversation_id': conversationId,
+        if (receiverId != null) 'receiver_id': receiverId,
         if (content != null) 'content': content,
         if (replyToId != null) 'reply_to_id': replyToId,
         if (metadata != null) 'metadata': metadata,
@@ -283,30 +291,55 @@ class ChatService {
 // Conversation model for chat list
 class Conversation {
   final String id;
-  final User otherUser;
+  final String type; // 'direct' or 'group'
+  final String? name; // For group chats
+  final String? description; // For group chats
+  final String? avatarUrl; // For group chats
+  final List<User> participants; // All participants
+  final User? otherUser; // For direct chats, the other participant
   final Message? lastMessage;
   final int unreadCount;
   final DateTime lastActivity;
-  final bool isOnline;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final bool isOnline; // For direct chats
 
   Conversation({
     required this.id,
-    required this.otherUser,
+    required this.type,
+    this.name,
+    this.description,
+    this.avatarUrl,
+    required this.participants,
+    this.otherUser,
     this.lastMessage,
     required this.unreadCount,
     required this.lastActivity,
+    required this.createdAt,
+    required this.updatedAt,
     required this.isOnline,
   });
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
     return Conversation(
       id: json['id'],
-      otherUser: User.fromJson(json['other_user']),
+      type: json['type'] ?? 'direct',
+      name: json['name'],
+      description: json['description'],
+      avatarUrl: json['avatar_url'],
+      participants: (json['participants'] as List?)
+              ?.map((p) => User.fromJson(p))
+              .toList() ??
+          [],
+      otherUser:
+          json['other_user'] != null ? User.fromJson(json['other_user']) : null,
       lastMessage: json['last_message'] != null
           ? Message.fromJson(json['last_message'])
           : null,
       unreadCount: json['unread_count'] ?? 0,
       lastActivity: DateTime.parse(json['last_activity']),
+      createdAt: DateTime.parse(json['created_at']),
+      updatedAt: DateTime.parse(json['updated_at']),
       isOnline: json['is_online'] ?? false,
     );
   }
@@ -314,28 +347,49 @@ class Conversation {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'other_user': otherUser.toJson(),
+      'type': type,
+      'name': name,
+      'description': description,
+      'avatar_url': avatarUrl,
+      'participants': participants.map((p) => p.toJson()).toList(),
+      'other_user': otherUser?.toJson(),
       'last_message': lastMessage?.toJson(),
       'unread_count': unreadCount,
       'last_activity': lastActivity.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
       'is_online': isOnline,
     };
   }
 
   Conversation copyWith({
     String? id,
+    String? type,
+    String? name,
+    String? description,
+    String? avatarUrl,
+    List<User>? participants,
     User? otherUser,
     Message? lastMessage,
     int? unreadCount,
     DateTime? lastActivity,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     bool? isOnline,
   }) {
     return Conversation(
       id: id ?? this.id,
+      type: type ?? this.type,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      participants: participants ?? this.participants,
       otherUser: otherUser ?? this.otherUser,
       lastMessage: lastMessage ?? this.lastMessage,
       unreadCount: unreadCount ?? this.unreadCount,
       lastActivity: lastActivity ?? this.lastActivity,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       isOnline: isOnline ?? this.isOnline,
     );
   }
@@ -441,8 +495,8 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
   }
 
   void updateUserStatus(String userId, bool isOnline) {
-    final index =
-        state.conversations.indexWhere((c) => c.otherUser.id == userId);
+    final index = state.conversations
+        .indexWhere((c) => c.type == 'direct' && c.otherUser?.id == userId);
     if (index != -1) {
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = updatedConversations[index].copyWith(
@@ -568,13 +622,31 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      final message = await _chatService.sendMessage(
-        receiverId: _conversationWithId,
-        content: content,
-        messageType: messageType,
-        replyToId: replyToId,
-        metadata: metadata,
-      );
+      final Message message;
+
+      // Handle new conversations
+      if (_conversationWithId.startsWith('new_')) {
+        // Extract user ID from the conversation ID format: 'new_userId'
+        final receiverId =
+            _conversationWithId.substring(4); // Remove 'new_' prefix
+
+        message = await _chatService.sendMessage(
+          receiverId: receiverId,
+          content: content,
+          messageType: messageType,
+          replyToId: replyToId,
+          metadata: metadata,
+        );
+      } else {
+        // Use existing conversation ID
+        message = await _chatService.sendMessage(
+          conversationId: _conversationWithId,
+          content: content,
+          messageType: messageType,
+          replyToId: replyToId,
+          metadata: metadata,
+        );
+      }
 
       // Add message to the beginning of the list (newest first)
       if (mounted) {

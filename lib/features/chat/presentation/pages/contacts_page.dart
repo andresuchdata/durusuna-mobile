@@ -71,21 +71,55 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     ref.read(contactsProvider.notifier).loadContacts();
   }
 
-  void _startChat(User user) {
-    // Create conversation and navigate to chat
-    final conversation = Conversation(
-      id: '${user.id}_new',
-      otherUser: user,
-      unreadCount: 0,
-      lastActivity: DateTime.now(),
-      isOnline: false,
-    );
+  void _startChat(User user) async {
+    try {
+      // First check if conversation already exists
+      await ref.read(conversationsProvider.notifier).loadConversations();
+      final conversations = ref.read(conversationsProvider).conversations;
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => ChatPage(conversation: conversation),
-      ),
-    );
+      // Look for existing conversation with this user
+      final existingConversation = conversations
+          .cast<Conversation?>()
+          .firstWhere(
+            (conv) =>
+                conv != null && conv.participants.any((p) => p.id == user.id),
+            orElse: () => null,
+          );
+
+      final Conversation conversation;
+      if (existingConversation != null) {
+        // Use existing conversation
+        conversation = existingConversation;
+      } else {
+        // Create a new conversation object for new chat
+        // The actual backend conversation will be created when first message is sent
+        conversation = Conversation(
+          id: 'new_${user.id}', // Special ID format for new conversations
+          type: 'direct',
+          participants: [user],
+          otherUser: user,
+          unreadCount: 0,
+          lastActivity: DateTime.now(),
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          isOnline: false,
+        );
+      }
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => ChatPage(conversation: conversation),
+        ),
+      );
+    } catch (e) {
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to open conversation: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override

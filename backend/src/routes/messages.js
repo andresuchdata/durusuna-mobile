@@ -34,90 +34,135 @@ router.get('/conversations', auth, async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
-    // Get conversations with latest message info (simplified approach)
-    const conversations = await db('messages as m1')
+    // Get conversations where the user is a participant
+    const conversations = await db('conversations')
       .select(
-        'other_user.id as other_user_id',
-        'other_user.first_name as other_user_first_name',
-        'other_user.last_name as other_user_last_name',
-        'other_user.avatar_url as other_user_avatar',
-        'other_user.user_type as other_user_type',
-        'other_user.is_active as other_user_is_active',
-        'm1.content as last_message_content',
-        'm1.message_type as last_message_type',
-        'm1.created_at as last_message_at',
-        'm1.sender_id as last_message_sender_id'
+        'conversations.id',
+        'conversations.type',
+        'conversations.name',
+        'conversations.description',
+        'conversations.avatar_url as conversation_avatar',
+        'conversations.last_message_at',
+        'conversations.created_at as conversation_created_at',
+        'conversations.updated_at as conversation_updated_at',
+        'last_msg.id as last_message_id',
+        'last_msg.content as last_message_content',
+        'last_msg.message_type as last_message_type',
+        'last_msg.sender_id as last_message_sender_id',
+        'last_msg.created_at as last_message_created_at',
+        'participant.unread_count'
       )
-      .join('users as other_user', function() {
-        this.on(function() {
-          this.on('other_user.id', '=', 'm1.sender_id')
-              .andOn('m1.receiver_id', '=', db.raw('?', [req.user.id]))
-              .orOn('other_user.id', '=', 'm1.receiver_id')
-              .andOn('m1.sender_id', '=', db.raw('?', [req.user.id]));
-        });
-      })
-      .where(function() {
-        this.where('m1.sender_id', req.user.id)
-            .orWhere('m1.receiver_id', req.user.id);
-      })
-      .where('other_user.id', '!=', req.user.id)
-      .where('other_user.is_active', true)
-      .whereIn('m1.id', function() {
-        this.select(db.raw('MAX(messages.id)'))
-            .from('messages')
-            .where(function() {
-              this.where('messages.sender_id', req.user.id)
-                  .orWhere('messages.receiver_id', req.user.id);
-            })
-            .groupByRaw('LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id)');
-      })
-      .groupBy([
-        'other_user.id',
-        'other_user.first_name',
-        'other_user.last_name',
-        'other_user.avatar_url',
-        'other_user.user_type',
-        'other_user.is_active',
-        'm1.content',
-        'm1.message_type',
-        'm1.created_at',
-        'm1.sender_id'
-      ])
-      .orderBy('m1.created_at', 'desc')
+      .join('conversation_participants as participant', 'conversations.id', 'participant.conversation_id')
+      .leftJoin('messages as last_msg', 'conversations.last_message_id', 'last_msg.id')
+      .where('participant.user_id', req.user.id)
+      .where('participant.is_active', true)
+      .where('conversations.is_active', true)
+      .orderBy('conversations.last_message_at', 'desc')
       .limit(limit)
       .offset(offset);
 
+    if (conversations.length === 0) {
+      return res.json({
+        conversations: [],
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          hasMore: false
+        }
+      });
+    }
+
+    // For each conversation, get the other participant(s)
+    const conversationIds = conversations.map(c => c.id);
+    const allParticipants = await db('conversation_participants')
+      .join('users', 'conversation_participants.user_id', 'users.id')
+      .whereIn('conversation_participants.conversation_id', conversationIds)
+      .where('conversation_participants.is_active', true)
+      .where('users.is_active', true)
+      .select(
+        'conversation_participants.conversation_id',
+        'users.id',
+        'users.first_name',
+        'users.last_name',
+        'users.email',
+        'users.avatar_url',
+        'users.user_type',
+        'users.role',
+        'users.is_active',
+        'users.created_at',
+        'users.updated_at'
+      );
+
+    // Group participants by conversation
+    const participantsByConversation = {};
+    allParticipants.forEach(participant => {
+      if (!participantsByConversation[participant.conversation_id]) {
+        participantsByConversation[participant.conversation_id] = [];
+      }
+      participantsByConversation[participant.conversation_id].push(participant);
+    });
+
     // Format response
-    const formattedConversations = conversations.map(conv => ({
-      id: `${Math.min(req.user.id, conv.other_user_id)}_${Math.max(req.user.id, conv.other_user_id)}`,
-      other_user: {
-        id: conv.other_user_id,
-        first_name: conv.other_user_first_name,
-        last_name: conv.other_user_last_name,
-        email: '', // Not included in conversation query
-        avatar_url: conv.other_user_avatar,
-        user_type: conv.other_user_type,
-        role: 'user', // Default role
-        is_active: conv.other_user_is_active,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      last_message: {
-        content: conv.last_message_content,
-        message_type: conv.last_message_type,
-        created_at: conv.last_message_at,
-        is_from_me: conv.last_message_sender_id === req.user.id
-      },
-      unread_count: 0, // TODO: Implement unread count properly
-      last_activity: conv.last_message_at
-    }));
+    const formattedConversations = conversations.map(conv => {
+      const participants = participantsByConversation[conv.id] || [];
+      const otherParticipants = participants.filter(p => p.id !== req.user.id);
+      
+      // For direct chats, use the other participant as otherUser
+      // For group chats, use the first other participant or null
+      const otherUser = conv.type === 'direct' && otherParticipants.length > 0 
+        ? otherParticipants[0] 
+        : null;
+
+      return {
+        id: conv.id, // Use actual conversation ID
+        type: conv.type,
+        name: conv.name, // For group chats
+        description: conv.description,
+        avatar_url: conv.conversation_avatar,
+        participants: participants.map(p => ({
+          id: p.id,
+          first_name: p.first_name,
+          last_name: p.last_name,
+          email: p.email,
+          avatar_url: p.avatar_url,
+          user_type: p.user_type,
+          role: p.role,
+          is_active: Boolean(p.is_active),
+          created_at: p.created_at,
+          updated_at: p.updated_at
+        })),
+        other_user: otherUser ? {
+          id: otherUser.id,
+          first_name: otherUser.first_name,
+          last_name: otherUser.last_name,
+          email: otherUser.email,
+          avatar_url: otherUser.avatar_url,
+          user_type: otherUser.user_type,
+          role: otherUser.role,
+          is_active: Boolean(otherUser.is_active),
+          created_at: otherUser.created_at,
+          updated_at: otherUser.updated_at
+        } : null,
+        last_message: conv.last_message_content ? {
+          id: conv.last_message_id,
+          content: conv.last_message_content,
+          message_type: conv.last_message_type,
+          created_at: conv.last_message_created_at,
+          is_from_me: conv.last_message_sender_id === req.user.id
+        } : null,
+        unread_count: parseInt(conv.unread_count) || 0,
+        last_activity: conv.last_message_at,
+        created_at: conv.conversation_created_at,
+        updated_at: conv.conversation_updated_at
+      };
+    });
 
     res.json({
       conversations: formattedConversations,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        hasMore: conversations.length === parseInt(limit)
+        hasMore: formattedConversations.length === parseInt(limit)
       }
     });
 
@@ -128,41 +173,38 @@ router.get('/conversations', auth, async (req, res) => {
 });
 
 /**
- * @route GET /api/messages/conversation/:userId
+ * @route GET /api/messages/conversation/:conversationId
  * @desc Get messages for a specific conversation
  * @access Private
  */
-router.get('/conversation/:userId', auth, async (req, res) => {
+router.get('/conversation/:conversationId', auth, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { conversationId } = req.params;
     const { page = 1, limit = 50 } = req.query;
     const offset = (page - 1) * limit;
 
-    // Verify other user exists and is active
-    const otherUser = await db('users')
-      .where('id', userId)
-      .where('is_active', true)
+    // Verify conversation exists and user is a participant
+    const participant = await db('conversation_participants')
+      .join('conversations', 'conversation_participants.conversation_id', 'conversations.id')
+      .where('conversation_participants.conversation_id', conversationId)
+      .where('conversation_participants.user_id', req.user.id)
+      .where('conversation_participants.is_active', true)
+      .where('conversations.is_active', true)
+      .select('conversations.*')
       .first();
 
-    if (!otherUser) {
-      return res.status(404).json({ error: 'User not found' });
+    if (!participant) {
+      return res.status(404).json({ error: 'Conversation not found or access denied' });
     }
 
-    // Get messages between the two users (simplified query without attachments for now)
+    // Get messages in this conversation
     const messages = await db('messages')
       .leftJoin('users as sender', 'messages.sender_id', 'sender.id')
-      .where(function() {
-        this.where({
-          'messages.sender_id': req.user.id,
-          'messages.receiver_id': userId
-        }).orWhere({
-          'messages.sender_id': userId,
-          'messages.receiver_id': req.user.id
-        });
-      })
+      .where('messages.conversation_id', conversationId)
       .where('messages.is_deleted', false)
       .select(
         'messages.id',
+        'messages.conversation_id',
         'messages.sender_id',
         'messages.receiver_id',
         'messages.content',
@@ -229,20 +271,68 @@ router.get('/conversation/:userId', auth, async (req, res) => {
       is_from_me: Boolean(msg.sender_id === req.user.id)
     }));
 
+    // Get conversation details and participants
+    const conversation = await db('conversations')
+      .where('id', conversationId)
+      .first();
+
+    const participants = await db('conversation_participants')
+      .join('users', 'conversation_participants.user_id', 'users.id')
+      .where('conversation_participants.conversation_id', conversationId)
+      .where('conversation_participants.is_active', true)
+      .select(
+        'users.id',
+        'users.first_name',
+        'users.last_name',
+        'users.email',
+        'users.avatar_url',
+        'users.user_type',
+        'users.role',
+        'users.is_active',
+        'users.created_at',
+        'users.updated_at'
+      );
+
+    // For direct chats, identify the other user
+    const otherUser = conversation.type === 'direct' 
+      ? participants.find(p => p.id !== req.user.id)
+      : null;
+
     res.json({
       messages: formattedMessages.reverse(), // Return in chronological order
-      other_user: {
+      conversation: {
+        id: conversation.id,
+        type: conversation.type,
+        name: conversation.name,
+        description: conversation.description,
+        avatar_url: conversation.avatar_url,
+        created_at: conversation.created_at,
+        updated_at: conversation.updated_at
+      },
+      participants: participants.map(p => ({
+        id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        email: p.email,
+        avatar_url: p.avatar_url,
+        user_type: p.user_type,
+        role: p.role,
+        is_active: Boolean(p.is_active),
+        created_at: p.created_at,
+        updated_at: p.updated_at
+      })),
+      other_user: otherUser ? {
         id: otherUser.id,
         first_name: otherUser.first_name,
         last_name: otherUser.last_name,
         email: otherUser.email,
         avatar_url: otherUser.avatar_url,
         user_type: otherUser.user_type,
-        role: otherUser.role || 'user',
-        is_active: otherUser.is_active,
-        created_at: otherUser.created_at || new Date().toISOString(),
-        updated_at: otherUser.updated_at || new Date().toISOString()
-      },
+        role: otherUser.role,
+        is_active: Boolean(otherUser.is_active),
+        created_at: otherUser.created_at,
+        updated_at: otherUser.updated_at
+      } : null,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -264,6 +354,7 @@ router.get('/conversation/:userId', auth, async (req, res) => {
 router.post('/send', auth, validate(messageSchema), async (req, res) => {
   try {
     const {
+      conversation_id,
       receiver_id,
       content,
       message_type = 'text',
@@ -271,29 +362,105 @@ router.post('/send', auth, validate(messageSchema), async (req, res) => {
       metadata
     } = req.body;
 
-    // Verify receiver exists and is active
-    const receiver = await db('users')
-      .where('id', receiver_id)
-      .where('is_active', true)
-      .first();
+    let conversationId = conversation_id;
+    let receiverId = receiver_id;
 
-    if (!receiver) {
-      return res.status(404).json({ error: 'Receiver not found' });
+    // If conversation_id is provided, verify user is a participant
+    if (conversationId) {
+      const participant = await db('conversation_participants')
+        .where('conversation_id', conversationId)
+        .where('user_id', req.user.id)
+        .where('is_active', true)
+        .first();
+
+      if (!participant) {
+        return res.status(403).json({ error: 'Not a participant in this conversation' });
+      }
+
+      // For direct conversations, get the receiver_id
+      const conversation = await db('conversations').where('id', conversationId).first();
+      if (conversation.type === 'direct') {
+        const otherParticipant = await db('conversation_participants')
+          .where('conversation_id', conversationId)
+          .where('user_id', '!=', req.user.id)
+          .where('is_active', true)
+          .first();
+        
+        if (otherParticipant) {
+          receiverId = otherParticipant.user_id;
+        }
+      } else {
+        // For group messages, receiver_id should be null
+        receiverId = null;
+      }
+    } 
+    // If only receiver_id is provided, find or create direct conversation
+    else if (receiverId) {
+      // Verify receiver exists and is active
+      const receiver = await db('users')
+        .where('id', receiverId)
+        .where('is_active', true)
+        .first();
+
+      if (!receiver) {
+        return res.status(404).json({ error: 'Receiver not found' });
+      }
+
+      // Find existing direct conversation between these users
+      const existingConversation = await db('conversations')
+        .select('conversations.id')
+        .join('conversation_participants as p1', 'conversations.id', 'p1.conversation_id')
+        .join('conversation_participants as p2', 'conversations.id', 'p2.conversation_id')
+        .where('conversations.type', 'direct')
+        .where('p1.user_id', req.user.id)
+        .where('p2.user_id', receiverId)
+        .where('p1.is_active', true)
+        .where('p2.is_active', true)
+        .first();
+
+      if (existingConversation) {
+        conversationId = existingConversation.id;
+      } else {
+        // Create new direct conversation
+        const [newConversation] = await db('conversations')
+          .insert({
+            type: 'direct',
+            created_by: req.user.id,
+            is_active: true,
+            created_at: new Date(),
+            updated_at: new Date()
+          })
+          .returning('id');
+
+        conversationId = newConversation.id;
+
+        // Add participants
+        await db('conversation_participants').insert([
+          {
+            conversation_id: conversationId,
+            user_id: req.user.id,
+            joined_at: new Date(),
+            is_active: true,
+            role: 'member'
+          },
+          {
+            conversation_id: conversationId,
+            user_id: receiverId,
+            joined_at: new Date(),
+            is_active: true,
+            role: 'member'
+          }
+        ]);
+      }
+    } else {
+      return res.status(400).json({ error: 'Either conversation_id or receiver_id is required' });
     }
 
     // Verify reply-to message exists if provided
     if (reply_to_id) {
       const replyMessage = await db('messages')
         .where('id', reply_to_id)
-        .where(function() {
-          this.where({
-            sender_id: req.user.id,
-            receiver_id: receiver_id
-          }).orWhere({
-            sender_id: receiver_id,
-            receiver_id: req.user.id
-          });
-        })
+        .where('conversation_id', conversationId)
         .first();
 
       if (!replyMessage) {
@@ -304,8 +471,9 @@ router.post('/send', auth, validate(messageSchema), async (req, res) => {
     // Create message
     const [message] = await db('messages')
       .insert({
+        conversation_id: conversationId,
         sender_id: req.user.id,
-        receiver_id,
+        receiver_id: receiverId, // null for group messages
         content: content || null,
         message_type,
         reply_to_id: reply_to_id || null,
@@ -353,8 +521,18 @@ router.post('/send', auth, validate(messageSchema), async (req, res) => {
       )
       .first();
 
+    // Update conversation's last message info
+    await db('conversations')
+      .where('id', conversationId)
+      .update({
+        last_message_id: message.id,
+        last_message_at: message.created_at,
+        updated_at: new Date()
+      });
+
     const formattedMessage = {
       id: completeMessage.id,
+      conversation_id: conversationId,
       sender_id: completeMessage.sender_id,
       receiver_id: completeMessage.receiver_id,
       content: completeMessage.content,
@@ -388,7 +566,8 @@ router.post('/send', auth, validate(messageSchema), async (req, res) => {
     };
 
     res.status(201).json({
-      message: formattedMessage
+      message: formattedMessage,
+      conversation_id: conversationId
     });
 
     // TODO: Emit socket event for real-time messaging
