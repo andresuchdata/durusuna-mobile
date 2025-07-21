@@ -8,13 +8,43 @@ const logger = require('../utils/logger');
 const router = express.Router();
 
 // Helper function to safely parse JSON
-const safeJsonParse = (jsonString, fallback = null) => {
+const safeJsonParse = (jsonData, fallback = null) => {
   try {
-    return jsonString && jsonString.trim() ? JSON.parse(jsonString) : fallback;
+    // If it's already an object/array, return it as-is
+    if (typeof jsonData === 'object' && jsonData !== null) {
+      return jsonData;
+    }
+    // If it's a string, try to parse it
+    if (typeof jsonData === 'string' && jsonData.trim()) {
+      return JSON.parse(jsonData);
+    }
+    return fallback;
   } catch (error) {
-    logger.warn('Failed to parse JSON:', { jsonString, error: error.message });
+    logger.warn('Failed to parse JSON:', { jsonData, error: error.message });
     return fallback;
   }
+};
+
+// Helper function to migrate old reaction format to new format
+const migrateReactions = (reactions) => {
+  if (!reactions || typeof reactions !== 'object') return {};
+  
+  const migratedReactions = {};
+  
+  for (const [emoji, value] of Object.entries(reactions)) {
+    if (typeof value === 'number') {
+      // Old format: { "👍": 5 } -> New format: { "👍": { count: 5, users: [] } }
+      migratedReactions[emoji] = {
+        count: value,
+        users: [] // We can't recover the user data from old format
+      };
+    } else if (value && typeof value === 'object' && typeof value.count === 'number') {
+      // Already new format
+      migratedReactions[emoji] = value;
+    }
+  }
+  
+  return migratedReactions;
 };
 
 /**
@@ -126,7 +156,7 @@ router.get('/:classId', auth, async (req, res) => {
       content: update.content,
       update_type: update.update_type,
               attachments: safeJsonParse(update.attachments, []),
-        reactions: safeJsonParse(update.reactions, {}),
+        reactions: migrateReactions(safeJsonParse(update.reactions, {})),
       is_pinned: update.is_pinned,
       is_edited: update.is_edited,
       edited_at: update.edited_at,
@@ -273,7 +303,7 @@ router.post('/create', auth, validate(classUpdateSchema), async (req, res) => {
       content: createdUpdate.content,
       update_type: createdUpdate.update_type,
       attachments: safeJsonParse(createdUpdate.attachments, []),
-      reactions: safeJsonParse(createdUpdate.reactions, {}),
+      reactions: migrateReactions(safeJsonParse(createdUpdate.reactions, {})),
       is_pinned: createdUpdate.is_pinned,
       is_edited: createdUpdate.is_edited,
       edited_at: createdUpdate.edited_at,
@@ -401,7 +431,7 @@ router.put('/:updateId', auth, async (req, res) => {
       content: updatedRecord.content,
       update_type: updatedRecord.update_type,
       attachments: safeJsonParse(updatedRecord.attachments, []),
-      reactions: safeJsonParse(updatedRecord.reactions, {}),
+      reactions: migrateReactions(safeJsonParse(updatedRecord.reactions, {})),
       is_pinned: updatedRecord.is_pinned,
       is_edited: updatedRecord.is_edited,
       edited_at: updatedRecord.edited_at,
@@ -554,7 +584,7 @@ router.get('/:updateId/comments', auth, async (req, res) => {
       author_id: comment.author_id,
       content: comment.content,
       reply_to_id: comment.reply_to_id,
-      reactions: safeJsonParse(comment.reactions, {}),
+      reactions: migrateReactions(safeJsonParse(comment.reactions, {})),
       is_edited: comment.is_edited,
       edited_at: comment.edited_at,
       is_deleted: comment.is_deleted || false,
@@ -687,7 +717,7 @@ router.post('/:updateId/comments', auth, validate(commentSchema), async (req, re
       author_id: createdComment.author_id,
       content: createdComment.content,
       reply_to_id: createdComment.reply_to_id,
-      reactions: safeJsonParse(createdComment.reactions, {}),
+      reactions: migrateReactions(safeJsonParse(createdComment.reactions, {})),
       is_edited: createdComment.is_edited,
       edited_at: createdComment.edited_at,
       is_deleted: createdComment.is_deleted || false,
@@ -787,7 +817,7 @@ router.put('/:updateId/pin', auth, async (req, res) => {
       content: updatedRecord.content,
       update_type: updatedRecord.update_type,
       attachments: safeJsonParse(updatedRecord.attachments, []),
-      reactions: safeJsonParse(updatedRecord.reactions, {}),
+      reactions: migrateReactions(safeJsonParse(updatedRecord.reactions, {})),
       is_pinned: updatedRecord.is_pinned,
       is_edited: updatedRecord.is_edited,
       edited_at: updatedRecord.edited_at,
@@ -815,7 +845,7 @@ router.put('/:updateId/pin', auth, async (req, res) => {
 
 /**
  * @route POST /api/class-updates/:updateId/reactions
- * @desc Add or update a reaction to a class update
+ * @desc Add or toggle a reaction to a class update
  * @access Private
  */
 router.post('/:updateId/reactions', auth, async (req, res) => {
@@ -864,98 +894,30 @@ router.post('/:updateId/reactions', auth, async (req, res) => {
       return res.status(403).json({ error: 'Access denied to this class' });
     }
 
-    // Parse existing reactions
-    const reactions = safeJsonParse(existingUpdate.reactions, {});
+    // Parse existing reactions with new structure: { "emoji": { "count": 0, "users": [] } }
+    const reactions = migrateReactions(safeJsonParse(existingUpdate.reactions, {}));
     
-    // Initialize emoji count if it doesn't exist
+    // Initialize emoji reaction if it doesn't exist
     if (!reactions[emoji]) {
-      reactions[emoji] = 0;
+      reactions[emoji] = { count: 0, users: [] };
     }
 
-    // Increment reaction count
-    reactions[emoji] += 1;
-
-    // Update the class update with new reactions
-    await db('class_updates')
-      .where('id', updateId)
-      .update({
-        reactions: JSON.stringify(reactions),
-        updated_at: new Date()
-      });
-
-    res.json({
-      message: 'Reaction added successfully',
-      reactions
-    });
-
-  } catch (error) {
-    logger.error('Error adding reaction:', error);
-    res.status(500).json({ error: 'Failed to add reaction' });
-  }
-});
-
-/**
- * @route DELETE /api/class-updates/:updateId/reactions
- * @desc Remove a reaction from a class update
- * @access Private
- */
-router.delete('/:updateId/reactions', auth, async (req, res) => {
-  try {
-    const { updateId } = req.params;
-    const { emoji } = req.body;
-
-    if (!emoji || typeof emoji !== 'string') {
-      return res.status(400).json({ error: 'Emoji is required' });
-    }
-
-    // Get the existing update
-    const existingUpdate = await db('class_updates')
-      .where('id', updateId)
-      .where('is_deleted', false)
-      .first();
-
-    if (!existingUpdate) {
-      return res.status(404).json({ error: 'Class update not found' });
-    }
-
-    // Check if user has access to the class
-    let hasAccess = false;
-
-    if (req.user.user_type === 'teacher' && req.user.role === 'admin') {
-      // Admin teachers can react to updates in any class in their school
-      const classInfo = await db('classes')
-        .where('id', existingUpdate.class_id)
-        .where('school_id', req.user.school_id)
-        .first();
-      
-      hasAccess = !!classInfo;
-    } else {
-      // Regular users need to be enrolled in the class
-      const userClass = await db('user_classes')
-        .where({
-          user_id: req.user.id,
-          class_id: existingUpdate.class_id
-        })
-        .first();
-      
-      hasAccess = !!userClass;
-    }
-
-    if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied to this class' });
-    }
-
-    // Parse existing reactions
-    const reactions = safeJsonParse(existingUpdate.reactions, {});
+    // Check if user has already reacted with this emoji
+    const userIndex = reactions[emoji].users.indexOf(req.user.id);
     
-    // Decrease reaction count if it exists
-    if (reactions[emoji] && reactions[emoji] > 0) {
-      reactions[emoji] -= 1;
+    if (userIndex > -1) {
+      // User has already reacted, remove the reaction
+      reactions[emoji].users.splice(userIndex, 1);
+      reactions[emoji].count = Math.max(0, reactions[emoji].count - 1);
       
-      // Remove emoji if count reaches 0
-      if (reactions[emoji] === 0) {
+      // Remove emoji entirely if no reactions left
+      if (reactions[emoji].count === 0) {
         delete reactions[emoji];
       }
+    } else {
+      // User hasn't reacted, add the reaction
+      reactions[emoji].users.push(req.user.id);
+      reactions[emoji].count += 1;
     }
 
     // Update the class update with new reactions
@@ -966,15 +928,80 @@ router.delete('/:updateId/reactions', auth, async (req, res) => {
         updated_at: new Date()
       });
 
+    // Get the updated record with author information to return full object
+    const updatedRecord = await db('class_updates')
+      .join('users', 'class_updates.author_id', 'users.id')
+      .where('class_updates.id', updateId)
+      .select(
+        'class_updates.*',
+        'users.id as author_user_id',
+        'users.first_name as author_first_name',
+        'users.last_name as author_last_name',
+        'users.email as author_email',
+        'users.phone as author_phone',
+        'users.avatar_url as author_avatar',
+        'users.user_type as author_user_type',
+        'users.role as author_role',
+        'users.school_id as author_school_id',
+        'users.is_active as author_is_active',
+        'users.last_login_at as author_last_active_at',
+        'users.created_at as author_created_at',
+        'users.updated_at as author_updated_at'
+      )
+      .first();
+
+    // Get comments count
+    const commentCount = await db('class_update_comments')
+      .where('class_update_id', updateId)
+      .where('is_deleted', false)
+      .count('* as count')
+      .first();
+
+    const formattedUpdate = {
+      id: updatedRecord.id,
+      class_id: updatedRecord.class_id,
+      author_id: updatedRecord.author_id,
+      title: updatedRecord.title,
+      content: updatedRecord.content,
+      update_type: updatedRecord.update_type,
+      attachments: safeJsonParse(updatedRecord.attachments, []),
+      reactions: migrateReactions(safeJsonParse(updatedRecord.reactions, {})),
+      is_pinned: updatedRecord.is_pinned,
+      is_edited: updatedRecord.is_edited,
+      edited_at: updatedRecord.edited_at,
+      is_deleted: updatedRecord.is_deleted,
+      deleted_at: updatedRecord.deleted_at,
+      created_at: updatedRecord.created_at,
+      updated_at: updatedRecord.updated_at,
+      author: {
+        id: updatedRecord.author_user_id,
+        first_name: updatedRecord.author_first_name,
+        last_name: updatedRecord.author_last_name,
+        email: updatedRecord.author_email,
+        phone: updatedRecord.author_phone,
+        avatar_url: updatedRecord.author_avatar || "",
+        user_type: updatedRecord.author_user_type,
+        role: updatedRecord.author_role,
+        school_id: updatedRecord.author_school_id,
+        is_active: updatedRecord.author_is_active,
+        last_active_at: updatedRecord.author_last_active_at,
+        created_at: updatedRecord.author_created_at,
+        updated_at: updatedRecord.author_updated_at
+      },
+      comments_count: parseInt(commentCount.count) || 0
+    };
+
     res.json({
-      message: 'Reaction removed successfully',
-      reactions
+      message: userIndex > -1 ? 'Reaction removed successfully' : 'Reaction added successfully',
+      update: formattedUpdate
     });
 
   } catch (error) {
-    logger.error('Error removing reaction:', error);
-    res.status(500).json({ error: 'Failed to remove reaction' });
+    logger.error('Error toggling reaction:', error);
+    res.status(500).json({ error: 'Failed to toggle reaction' });
   }
 });
+
+
 
 module.exports = router; 

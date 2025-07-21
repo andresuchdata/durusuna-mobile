@@ -6,6 +6,16 @@ part of 'class_update.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+Reaction _$ReactionFromJson(Map<String, dynamic> json) => Reaction(
+      count: (json['count'] as num).toInt(),
+      users: (json['users'] as List<dynamic>).map((e) => e as String).toList(),
+    );
+
+Map<String, dynamic> _$ReactionToJson(Reaction instance) => <String, dynamic>{
+      'count': instance.count,
+      'users': instance.users,
+    };
+
 ClassUpdate _$ClassUpdateFromJson(Map<String, dynamic> json) => ClassUpdate(
       id: json['id'] as String,
       classId: json['class_id'] as String,
@@ -17,7 +27,7 @@ ClassUpdate _$ClassUpdateFromJson(Map<String, dynamic> json) => ClassUpdate(
           ?.map((e) => e as Map<String, dynamic>)
           .toList(),
       reactions: (json['reactions'] as Map<String, dynamic>?)?.map(
-        (k, e) => MapEntry(k, (e as num).toInt()),
+        (k, e) => MapEntry(k, Reaction.fromJson(e as Map<String, dynamic>)),
       ),
       isPinned: json['is_pinned'] as bool,
       isEdited: json['is_edited'] as bool,

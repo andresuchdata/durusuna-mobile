@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_update.dart';
+import '../../../../shared/widgets/attachment_list.dart';
+import '../../../../shared/widgets/attachment_viewer_page.dart';
 
 class ClassUpdateCard extends StatelessWidget {
   final ClassUpdate update;
@@ -182,7 +184,7 @@ class ClassUpdateCard extends StatelessWidget {
           if (update.hasAttachments)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildAttachments(),
+              child: _buildAttachments(context),
             ),
 
           // Reactions
@@ -273,33 +275,28 @@ class ClassUpdateCard extends StatelessWidget {
     );
   }
 
-  Widget _buildAttachments() {
+  Widget _buildAttachments(BuildContext context) {
     return Container(
-      height: 200,
       margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: AppTheme.backgroundColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderColor),
+      child: AttachmentList(
+        attachments: update.attachments ?? [],
+        mode: AttachmentListMode.vertical,
+        maxItems: 3, // Show max 3 attachments, then "X more"
+        onMoreTap: () {
+          _showAllAttachments(context);
+        },
       ),
-      child: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.attachment,
-              size: 32,
-              color: AppTheme.textTertiary,
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Attachments',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+    );
+  }
+
+  void _showAllAttachments(BuildContext context) {
+    if (update.attachments == null || update.attachments!.isEmpty) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => AttachmentViewerPage(
+          attachments: update.attachments!,
+          title: update.displayTitle,
         ),
       ),
     );
@@ -322,7 +319,7 @@ class ClassUpdateCard extends StatelessWidget {
               Text(entry.key, style: const TextStyle(fontSize: 16)),
               const SizedBox(width: 4),
               Text(
-                '${entry.value}',
+                '${entry.value.count}',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,

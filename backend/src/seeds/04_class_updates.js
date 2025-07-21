@@ -61,9 +61,9 @@ exports.seed = async function(knex) {
         }
       ]),
       reactions: JSON.stringify({
-        '👍': 8,
-        '📚': 5,
-        '🎉': 3
+        '👍': { count: 8, users: [teacher1Id, teacher2Id, 'user3', 'user4', 'user5', 'user6', 'user7', 'user8'] },
+        '📚': { count: 5, users: [teacher1Id, 'user9', 'user10', 'user11', 'user12'] },
+        '🎉': { count: 3, users: [teacher2Id, 'user13', 'user14'] }
       }),
       is_pinned: true,
       is_edited: false,
@@ -87,8 +87,8 @@ exports.seed = async function(knex) {
         }
       ]),
       reactions: JSON.stringify({
-        '✅': 12,
-        '📝': 6
+        '✅': { count: 12, users: [teacher1Id, teacher2Id, 'user15', 'user16', 'user17', 'user18', 'user19', 'user20', 'user21', 'user22', 'user23', 'user24'] },
+        '📝': { count: 6, users: [teacher1Id, 'user25', 'user26', 'user27', 'user28', 'user29'] }
       }),
       is_pinned: false,
       is_edited: false,
@@ -112,9 +112,9 @@ exports.seed = async function(knex) {
         }
       ]),
       reactions: JSON.stringify({
-        '📖': 10,
-        '💪': 4,
-        '😅': 2
+        '📖': { count: 10, users: [teacher1Id, teacher2Id, 'user30', 'user31', 'user32', 'user33', 'user34', 'user35', 'user36', 'user37'] },
+        '💪': { count: 4, users: [teacher1Id, 'user38', 'user39', 'user40'] },
+        '😅': { count: 2, users: ['user41', 'user42'] }
       }),
       is_pinned: true,
       is_edited: false,
@@ -146,9 +146,9 @@ exports.seed = async function(knex) {
         }
       ]),
       reactions: JSON.stringify({
-        '🥽': 15,
-        '🔬': 8,
-        '👍': 12
+        '🥽': { count: 15, users: [teacher1Id, teacher2Id, 'user43', 'user44', 'user45', 'user46', 'user47', 'user48', 'user49', 'user50', 'user51', 'user52', 'user53', 'user54', 'user55'] },
+        '🔬': { count: 8, users: [teacher1Id, 'user56', 'user57', 'user58', 'user59', 'user60', 'user61', 'user62'] },
+        '👍': { count: 12, users: [teacher2Id, 'user63', 'user64', 'user65', 'user66', 'user67', 'user68', 'user69', 'user70', 'user71', 'user72', 'user73'] }
       }),
       is_pinned: true,
       is_edited: false,
@@ -178,9 +178,9 @@ exports.seed = async function(knex) {
         }
       ]),
       reactions: JSON.stringify({
-        '🌱': 18,
-        '📊': 7,
-        '🧪': 5
+        '🌱': { count: 18, users: [teacher1Id, teacher2Id, 'user74', 'user75', 'user76', 'user77', 'user78', 'user79', 'user80', 'user81', 'user82', 'user83', 'user84', 'user85', 'user86', 'user87', 'user88', 'user89'] },
+        '📊': { count: 7, users: [teacher1Id, 'user90', 'user91', 'user92', 'user93', 'user94', 'user95'] },
+        '🧪': { count: 5, users: [teacher2Id, 'user96', 'user97', 'user98', 'user99'] }
       }),
       is_pinned: false,
       is_edited: false,
@@ -197,9 +197,9 @@ exports.seed = async function(knex) {
       update_type: 'event',
       attachments: JSON.stringify([]),
       reactions: JSON.stringify({
-        '🏆': 9,
-        '💡': 6,
-        '🎯': 4
+        '🏆': { count: 9, users: [teacher1Id, teacher2Id, 'user100', 'user101', 'user102', 'user103', 'user104', 'user105', 'user106'] },
+        '💡': { count: 6, users: [teacher1Id, 'user107', 'user108', 'user109', 'user110', 'user111'] },
+        '🎯': { count: 4, users: [teacher2Id, 'user112', 'user113', 'user114'] }
       }),
       is_pinned: false,
       is_edited: false,
@@ -231,9 +231,9 @@ exports.seed = async function(knex) {
         }
       ]),
       reactions: JSON.stringify({
-        '📚': 14,
-        '✍️': 8,
-        '👍': 11
+        '📚': { count: 14, users: [teacher2Id, teacher1Id, 'user115', 'user116', 'user117', 'user118', 'user119', 'user120', 'user121', 'user122', 'user123', 'user124', 'user125', 'user126'] },
+        '✍️': { count: 8, users: [teacher2Id, 'user127', 'user128', 'user129', 'user130', 'user131', 'user132', 'user133'] },
+        '👍': { count: 11, users: [teacher1Id, 'user134', 'user135', 'user136', 'user137', 'user138', 'user139', 'user140', 'user141', 'user142', 'user143'] }
       }),
       is_pinned: true,
       is_edited: false,
@@ -263,9 +263,9 @@ exports.seed = async function(knex) {
         }
       ]),
       reactions: JSON.stringify({
-        '📖': 16,
-        '✏️': 9,
-        '🤔': 5
+        '📖': { count: 16, users: [teacher2Id, teacher1Id, 'user144', 'user145', 'user146', 'user147', 'user148', 'user149', 'user150', 'user151', 'user152', 'user153', 'user154', 'user155', 'user156', 'user157'] },
+        '✏️': { count: 9, users: [teacher2Id, 'user158', 'user159', 'user160', 'user161', 'user162', 'user163', 'user164', 'user165'] },
+        '🤔': { count: 5, users: [teacher1Id, 'user166', 'user167', 'user168', 'user169'] }
       }),
       is_pinned: false,
       is_edited: false,
@@ -289,9 +289,9 @@ exports.seed = async function(knex) {
         }
       ]),
       reactions: JSON.stringify({
-        '✍️': 13,
-        '💻': 8,
-        '📝': 10
+        '✍️': { count: 13, users: [teacher2Id, teacher1Id, 'user170', 'user171', 'user172', 'user173', 'user174', 'user175', 'user176', 'user177', 'user178', 'user179', 'user180'] },
+        '💻': { count: 8, users: [teacher2Id, 'user181', 'user182', 'user183', 'user184', 'user185', 'user186', 'user187'] },
+        '📝': { count: 10, users: [teacher1Id, 'user188', 'user189', 'user190', 'user191', 'user192', 'user193', 'user194', 'user195', 'user196'] }
       }),
       is_pinned: false,
       is_edited: false,
@@ -315,9 +315,9 @@ exports.seed = async function(knex) {
         }
       ]),
       reactions: JSON.stringify({
-        '🎭': 11,
-        '📜': 7,
-        '🎨': 9
+        '🎭': { count: 11, users: [teacher2Id, teacher1Id, 'user197', 'user198', 'user199', 'user200', 'user201', 'user202', 'user203', 'user204', 'user205'] },
+        '📜': { count: 7, users: [teacher2Id, 'user206', 'user207', 'user208', 'user209', 'user210', 'user211'] },
+        '🎨': { count: 9, users: [teacher1Id, 'user212', 'user213', 'user214', 'user215', 'user216', 'user217', 'user218', 'user219'] }
       }),
       is_pinned: false,
       is_edited: false,

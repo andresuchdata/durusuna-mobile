@@ -10,7 +10,8 @@ class ClassUpdatesService {
   ClassUpdatesService(this._apiService);
 
   /// Get class updates for a specific class
-  Future<List<ClassUpdate>> getClassUpdates(String classId, {
+  Future<List<ClassUpdate>> getClassUpdates(
+    String classId, {
     int page = 1,
     int limit = 20,
   }) async {
@@ -145,7 +146,8 @@ class ClassUpdatesService {
   }
 
   /// Get comments for a class update
-  Future<List<ClassUpdateComment>> getComments(String updateId, {
+  Future<List<ClassUpdateComment>> getComments(
+    String updateId, {
     int page = 1,
     int limit = 50,
   }) async {
@@ -265,8 +267,8 @@ class ClassUpdatesService {
     }
   }
 
-  /// Add reaction to a class update
-  Future<void> addReaction({
+  /// Toggle reaction on a class update
+  Future<ClassUpdate> toggleReaction({
     required String updateId,
     required String emoji,
   }) async {
@@ -276,42 +278,19 @@ class ClassUpdatesService {
         data: {'emoji': emoji},
       );
 
-      if (response.statusCode != 200) {
+      if (response.statusCode == 200) {
+        final updateData = response.data['update'] as Map<String, dynamic>;
+        return ClassUpdate.fromJson(updateData);
+      } else {
         throw ApiException(
-          message: 'Failed to add reaction',
+          message: 'Failed to toggle reaction',
           statusCode: response.statusCode ?? 0,
         );
       }
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(
-        message: 'Failed to add reaction: ${e.toString()}',
-        statusCode: 0,
-      );
-    }
-  }
-
-  /// Remove reaction from a class update
-  Future<void> removeReaction({
-    required String updateId,
-    required String emoji,
-  }) async {
-    try {
-      final response = await _apiService.delete(
-        '${ApiConstants.classUpdates}/$updateId/reactions',
-        data: {'emoji': emoji},
-      );
-
-      if (response.statusCode != 200) {
-        throw ApiException(
-          message: 'Failed to remove reaction',
-          statusCode: response.statusCode ?? 0,
-        );
-      }
-    } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException(
-        message: 'Failed to remove reaction: ${e.toString()}',
+        message: 'Failed to toggle reaction: ${e.toString()}',
         statusCode: 0,
       );
     }
@@ -351,7 +330,8 @@ final classUpdatesServiceProvider = Provider<ClassUpdatesService>((ref) {
 });
 
 // Class updates state provider
-final classUpdatesProvider = StateNotifierProvider.family<ClassUpdatesNotifier, ClassUpdatesState, String>(
+final classUpdatesProvider = StateNotifierProvider.family<ClassUpdatesNotifier,
+    ClassUpdatesState, String>(
   (ref, classId) {
     final service = ref.read(classUpdatesServiceProvider);
     return ClassUpdatesNotifier(service, classId);
@@ -394,7 +374,8 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
   final ClassUpdatesService _service;
   final String _classId;
 
-  ClassUpdatesNotifier(this._service, this._classId) : super(ClassUpdatesState()) {
+  ClassUpdatesNotifier(this._service, this._classId)
+      : super(ClassUpdatesState()) {
     loadUpdates();
   }
 
@@ -496,27 +477,19 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
 
   Future<void> toggleReaction(String updateId, String emoji) async {
     try {
-      // Optimistically update UI
+      // Call the API to toggle the reaction
+      final updatedClassUpdate =
+          await _service.toggleReaction(updateId: updateId, emoji: emoji);
+
+      // Update the state with the returned data from the server
       final index = state.updates.indexWhere((u) => u.id == updateId);
       if (index != -1) {
-        final update = state.updates[index];
-        final reactions = Map<String, int>.from(update.reactions ?? {});
-        
-        if (reactions.containsKey(emoji)) {
-          reactions[emoji] = (reactions[emoji]! - 1).clamp(0, double.infinity.toInt());
-          if (reactions[emoji] == 0) reactions.remove(emoji);
-          await _service.removeReaction(updateId: updateId, emoji: emoji);
-        } else {
-          reactions[emoji] = (reactions[emoji] ?? 0) + 1;
-          await _service.addReaction(updateId: updateId, emoji: emoji);
-        }
-
         final newUpdates = [...state.updates];
-        newUpdates[index] = update.copyWith(reactions: reactions);
+        newUpdates[index] = updatedClassUpdate;
         state = state.copyWith(updates: newUpdates);
       }
     } catch (e) {
-      // Revert on error - would need to reload to get accurate state
+      // On error, reload to get accurate state
       loadUpdates(refresh: true);
       state = state.copyWith(error: e.toString());
     }
@@ -525,4 +498,4 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
   void clearError() {
     state = state.copyWith(error: null);
   }
-} 
+}

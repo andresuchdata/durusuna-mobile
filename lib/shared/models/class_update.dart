@@ -16,6 +16,21 @@ enum UpdateType {
 }
 
 @JsonSerializable()
+class Reaction {
+  final int count;
+  final List<String> users;
+
+  Reaction({
+    required this.count,
+    required this.users,
+  });
+
+  factory Reaction.fromJson(Map<String, dynamic> json) =>
+      _$ReactionFromJson(json);
+  Map<String, dynamic> toJson() => _$ReactionToJson(this);
+}
+
+@JsonSerializable()
 class ClassUpdate {
   final String id;
   @JsonKey(name: 'class_id')
@@ -27,7 +42,7 @@ class ClassUpdate {
   @JsonKey(name: 'update_type')
   final UpdateType updateType;
   final List<Map<String, dynamic>>? attachments;
-  final Map<String, int>? reactions;
+  final Map<String, Reaction>? reactions;
   @JsonKey(name: 'is_pinned')
   final bool isPinned;
   @JsonKey(name: 'is_edited')
@@ -42,7 +57,7 @@ class ClassUpdate {
   final DateTime createdAt;
   @JsonKey(name: 'updated_at')
   final DateTime updatedAt;
-  
+
   // Related data
   final User? author;
   final List<ClassUpdateComment>? comments;
@@ -70,7 +85,7 @@ class ClassUpdate {
     this.commentsCount,
   });
 
-  factory ClassUpdate.fromJson(Map<String, dynamic> json) => 
+  factory ClassUpdate.fromJson(Map<String, dynamic> json) =>
       _$ClassUpdateFromJson(json);
   Map<String, dynamic> toJson() => _$ClassUpdateToJson(this);
 
@@ -80,7 +95,22 @@ class ClassUpdate {
 
   int get totalReactions {
     if (reactions == null) return 0;
-    return reactions!.values.fold(0, (sum, count) => sum + count);
+    return reactions!.values.fold(0, (sum, reaction) => sum + reaction.count);
+  }
+
+  // Helper method to get reaction count for a specific emoji
+  int getReactionCount(String emoji) {
+    return reactions?[emoji]?.count ?? 0;
+  }
+
+  // Helper method to check if a user has reacted with a specific emoji
+  bool hasUserReacted(String emoji, String userId) {
+    return reactions?[emoji]?.users.contains(userId) ?? false;
+  }
+
+  // Helper method to get all users who reacted with a specific emoji
+  List<String> getUsersWhoReacted(String emoji) {
+    return reactions?[emoji]?.users ?? [];
   }
 
   String get displayTitle {
@@ -118,7 +148,7 @@ class ClassUpdate {
     String? content,
     UpdateType? updateType,
     List<Map<String, dynamic>>? attachments,
-    Map<String, int>? reactions,
+    Map<String, Reaction>? reactions,
     bool? isPinned,
     bool? isEdited,
     DateTime? editedAt,
@@ -155,11 +185,14 @@ class ClassUpdate {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ClassUpdate && runtimeType == other.runtimeType && id == other.id;
+      other is ClassUpdate &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
 
   @override
   int get hashCode => id.hashCode;
 
   @override
-  String toString() => 'ClassUpdate(id: $id, title: $displayTitle, updateType: $updateType)';
-} 
+  String toString() =>
+      'ClassUpdate(id: $id, title: $displayTitle, updateType: $updateType)';
+}
