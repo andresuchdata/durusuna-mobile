@@ -31,6 +31,8 @@ Message _$MessageFromJson(Map<String, dynamic> json) => Message(
       readStatus:
           $enumDecodeNullable(_$ReadStatusEnumMap, json['read_status']) ??
               ReadStatus.sent,
+      reactions: json['reactions'] as Map<String, dynamic>? ?? const {},
+      isFromMe: json['is_from_me'] as bool,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       sender: json['sender'] == null
@@ -62,6 +64,8 @@ Map<String, dynamic> _$MessageToJson(Message instance) => <String, dynamic>{
       'delivered_at': instance.deliveredAt?.toIso8601String(),
       'read_at': instance.readAt?.toIso8601String(),
       'read_status': _$ReadStatusEnumMap[instance.readStatus]!,
+      'reactions': instance.reactions,
+      'is_from_me': instance.isFromMe,
       'created_at': instance.createdAt.toIso8601String(),
       'updated_at': instance.updatedAt.toIso8601String(),
       'sender': instance.sender,

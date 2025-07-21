@@ -37,7 +37,8 @@ class ChatService {
   }
 
   /// Get messages for a conversation
-  Future<List<Message>> getMessages(String conversationWithId, {
+  Future<List<Message>> getMessages(
+    String conversationWithId, {
     int page = 1,
     int limit = 50,
   }) async {
@@ -192,9 +193,8 @@ class ChatService {
 
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
-        final users = (data['users'] as List)
-            .map((json) => User.fromJson(json))
-            .toList();
+        final users =
+            (data['users'] as List).map((json) => User.fromJson(json)).toList();
         return users;
       } else {
         throw ApiException(
@@ -206,6 +206,74 @@ class ChatService {
       if (e is ApiException) rethrow;
       throw ApiException(
         message: 'Failed to search users: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
+  /// Get contacts list for messaging
+  Future<List<User>> getContacts({
+    int page = 1,
+    int limit = 50,
+    String? search,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+      };
+
+      if (search != null && search.isNotEmpty) {
+        queryParams['search'] = search;
+      }
+
+      final response = await _apiService.get(
+        '${ApiConstants.users}/contacts',
+        queryParameters: queryParams,
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data as Map<String, dynamic>;
+        final contacts = (data['contacts'] as List)
+            .map((json) => User.fromJson(json))
+            .toList();
+        return contacts;
+      } else {
+        throw ApiException(
+          message: 'Failed to get contacts',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to get contacts: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
+  /// Toggle reaction on a message
+  Future<Map<String, dynamic>> toggleMessageReaction(
+      String messageId, String emoji) async {
+    try {
+      final response = await _apiService.post(
+        '${ApiConstants.messages}/$messageId/reactions',
+        data: {'emoji': emoji},
+      );
+
+      if (response.statusCode == 200) {
+        return response.data['reactions'] as Map<String, dynamic>;
+      } else {
+        throw ApiException(
+          message: 'Failed to toggle reaction',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to toggle reaction: ${e.toString()}',
         statusCode: 0,
       );
     }
@@ -234,7 +302,7 @@ class Conversation {
     return Conversation(
       id: json['id'],
       otherUser: User.fromJson(json['other_user']),
-      lastMessage: json['last_message'] != null 
+      lastMessage: json['last_message'] != null
           ? Message.fromJson(json['last_message'])
           : null,
       unreadCount: json['unread_count'] ?? 0,
@@ -275,7 +343,9 @@ class Conversation {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is Conversation && runtimeType == other.runtimeType && id == other.id;
+      other is Conversation &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
 
   @override
   int get hashCode => id.hashCode;
@@ -288,7 +358,8 @@ final chatServiceProvider = Provider<ChatService>((ref) {
 });
 
 // Conversations provider
-final conversationsProvider = StateNotifierProvider<ConversationsNotifier, ConversationsState>((ref) {
+final conversationsProvider =
+    StateNotifierProvider<ConversationsNotifier, ConversationsState>((ref) {
   final chatService = ref.read(chatServiceProvider);
   return ConversationsNotifier(chatService);
 });
@@ -349,11 +420,11 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
         lastMessage: message,
         lastActivity: message.createdAt,
       );
-      
+
       // Move to top
       final conversation = updatedConversations.removeAt(index);
       updatedConversations.insert(0, conversation);
-      
+
       state = state.copyWith(conversations: updatedConversations);
     }
   }
@@ -370,7 +441,8 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
   }
 
   void updateUserStatus(String userId, bool isOnline) {
-    final index = state.conversations.indexWhere((c) => c.otherUser.id == userId);
+    final index =
+        state.conversations.indexWhere((c) => c.otherUser.id == userId);
     if (index != -1) {
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = updatedConversations[index].copyWith(
@@ -386,7 +458,8 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
 }
 
 // Chat messages provider for specific conversation
-final chatMessagesProvider = StateNotifierProvider.family<ChatMessagesNotifier, ChatMessagesState, String>(
+final chatMessagesProvider = StateNotifierProvider.family<ChatMessagesNotifier,
+    ChatMessagesState, String>(
   (ref, conversationWithId) {
     final chatService = ref.read(chatServiceProvider);
     return ChatMessagesNotifier(chatService, conversationWithId);
@@ -437,7 +510,8 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
   final ChatService _chatService;
   final String _conversationWithId;
 
-  ChatMessagesNotifier(this._chatService, this._conversationWithId) : super(ChatMessagesState()) {
+  ChatMessagesNotifier(this._chatService, this._conversationWithId)
+      : super(ChatMessagesState()) {
     loadMessages();
   }
 
@@ -445,11 +519,13 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     if (loadMore && state.isLoadingMore) return;
     if (!loadMore && state.isLoading) return;
 
-    state = state.copyWith(
-      isLoading: !loadMore,
-      isLoadingMore: loadMore,
-      error: null,
-    );
+    if (mounted) {
+      state = state.copyWith(
+        isLoading: !loadMore,
+        isLoadingMore: loadMore,
+        error: null,
+      );
+    }
 
     try {
       final messages = await _chatService.getMessages(
@@ -457,27 +533,31 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         page: loadMore ? state.currentPage + 1 : 1,
       );
 
-      if (loadMore) {
-        state = state.copyWith(
-          messages: [...state.messages, ...messages],
-          isLoadingMore: false,
-          hasMore: messages.length == 50,
-          currentPage: state.currentPage + 1,
-        );
-      } else {
-        state = state.copyWith(
-          messages: messages,
-          isLoading: false,
-          hasMore: messages.length == 50,
-          currentPage: 1,
-        );
+      if (mounted) {
+        if (loadMore) {
+          state = state.copyWith(
+            messages: [...state.messages, ...messages],
+            isLoadingMore: false,
+            hasMore: messages.length == 50,
+            currentPage: state.currentPage + 1,
+          );
+        } else {
+          state = state.copyWith(
+            messages: messages,
+            isLoading: false,
+            hasMore: messages.length == 50,
+            currentPage: 1,
+          );
+        }
       }
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        isLoadingMore: false,
-        error: e.toString(),
-      );
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          isLoadingMore: false,
+          error: e.toString(),
+        );
+      }
     }
   }
 
@@ -497,18 +577,22 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       );
 
       // Add message to the beginning of the list (newest first)
-      state = state.copyWith(
-        messages: [message, ...state.messages],
-      );
+      if (mounted) {
+        state = state.copyWith(
+          messages: [message, ...state.messages],
+        );
+      }
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      if (mounted) {
+        state = state.copyWith(error: e.toString());
+      }
       rethrow;
     }
   }
 
   void addMessage(Message message) {
     // Check if message already exists
-    if (!state.messages.any((m) => m.id == message.id)) {
+    if (mounted && !state.messages.any((m) => m.id == message.id)) {
       state = state.copyWith(
         messages: [message, ...state.messages],
       );
@@ -537,4 +621,117 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
   void clearError() {
     state = state.copyWith(error: null);
   }
-} 
+}
+
+// Contacts provider for contact selection
+final contactsProvider =
+    StateNotifierProvider<ContactsNotifier, ContactsState>((ref) {
+  final chatService = ref.read(chatServiceProvider);
+  return ContactsNotifier(chatService);
+});
+
+class ContactsState {
+  final List<User> contacts;
+  final bool isLoading;
+  final bool isLoadingMore;
+  final String? error;
+  final bool hasMore;
+  final int currentPage;
+
+  ContactsState({
+    this.contacts = const [],
+    this.isLoading = false,
+    this.isLoadingMore = false,
+    this.error,
+    this.hasMore = true,
+    this.currentPage = 1,
+  });
+
+  ContactsState copyWith({
+    List<User>? contacts,
+    bool? isLoading,
+    bool? isLoadingMore,
+    String? error,
+    bool? hasMore,
+    int? currentPage,
+  }) {
+    return ContactsState(
+      contacts: contacts ?? this.contacts,
+      isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      error: error,
+      hasMore: hasMore ?? this.hasMore,
+      currentPage: currentPage ?? this.currentPage,
+    );
+  }
+}
+
+class ContactsNotifier extends StateNotifier<ContactsState> {
+  final ChatService _chatService;
+
+  ContactsNotifier(this._chatService) : super(ContactsState());
+
+  Future<void> loadContacts({bool loadMore = false}) async {
+    if (loadMore && state.isLoadingMore) return;
+    if (!loadMore && state.isLoading) return;
+
+    state = state.copyWith(
+      isLoading: !loadMore,
+      isLoadingMore: loadMore,
+      error: null,
+    );
+
+    try {
+      final contacts = await _chatService.getContacts(
+        page: loadMore ? state.currentPage + 1 : 1,
+      );
+
+      if (loadMore) {
+        state = state.copyWith(
+          contacts: [...state.contacts, ...contacts],
+          isLoadingMore: false,
+          hasMore: contacts.length == 50,
+          currentPage: state.currentPage + 1,
+        );
+      } else {
+        state = state.copyWith(
+          contacts: contacts,
+          isLoading: false,
+          hasMore: contacts.length == 50,
+          currentPage: 1,
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        isLoadingMore: false,
+        error: e.toString(),
+      );
+    }
+  }
+
+  Future<void> searchContacts(String query) async {
+    if (state.isLoading) return;
+
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      final contacts = await _chatService.getContacts(search: query);
+      state = state.copyWith(
+        contacts: contacts,
+        isLoading: false,
+        hasMore: false, // Search results don't have pagination
+        currentPage: 1,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: e.toString(),
+      );
+    }
+  }
+
+  void clearError() {
+    state = state.copyWith(error: null);
+  }
+}

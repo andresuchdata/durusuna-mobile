@@ -144,4 +144,167 @@ router.get('/school/:schoolId', auth, async (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/users/contacts
+ * @desc Get contacts for messaging (users in same school)
+ * @access Private
+ */
+router.get('/contacts', auth, async (req, res) => {
+  try {
+    const { search, page = 1, limit = 50 } = req.query;
+    const offset = (page - 1) * limit;
+
+    // Get current user's school
+    const currentUser = await db('users')
+      .where('id', req.user.id)
+      .select('school_id', 'user_type')
+      .first();
+
+    if (!currentUser || !currentUser.school_id) {
+      return res.status(400).json({ error: 'User not associated with a school' });
+    }
+
+    // Build query for users in same school (excluding current user)
+    let query = db('users')
+      .where('school_id', currentUser.school_id)
+      .where('id', '!=', req.user.id)
+      .where('is_active', true)
+      .select(
+        'id',
+        'first_name',
+        'last_name',
+        'email',
+        'avatar_url',
+        'user_type',
+        'role',
+        'last_login_at'
+      );
+
+    // Add search filter if provided
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim()}%`;
+      query = query.where(function() {
+        this.where('first_name', 'ilike', searchTerm)
+            .orWhere('last_name', 'ilike', searchTerm)
+            .orWhere('email', 'ilike', searchTerm)
+            .orWhere(db.raw("CONCAT(first_name, ' ', last_name)"), 'ilike', searchTerm);
+      });
+    }
+
+    // Apply pagination and ordering
+    const users = await query
+      .orderBy('last_login_at', 'desc')
+      .orderBy('first_name', 'asc')
+      .limit(limit)
+      .offset(offset);
+
+    // Format response
+    const formattedUsers = users.map(user => ({
+      id: user.id,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      phone: user.phone,
+      avatar_url: user.avatar_url,
+      user_type: user.user_type,
+      role: user.role,
+      school_id: user.school_id,
+      is_active: true,
+      last_active_at: user.last_login_at,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
+
+    res.json({
+      contacts: formattedUsers,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        hasMore: users.length === parseInt(limit)
+      },
+      totalContacts: formattedUsers.length
+    });
+
+  } catch (error) {
+    logger.error('Error fetching contacts:', error);
+    res.status(500).json({ error: 'Failed to fetch contacts' });
+  }
+});
+
+/**
+ * @route GET /api/users/search
+ * @desc Search users for messaging
+ * @access Private
+ */
+router.get('/search', auth, async (req, res) => {
+  try {
+    const { q, limit = 20 } = req.query;
+
+    if (!q || q.trim().length < 2) {
+      return res.status(400).json({ 
+        error: 'Search query must be at least 2 characters long' 
+      });
+    }
+
+    // Get current user's school
+    const currentUser = await db('users')
+      .where('id', req.user.id)
+      .select('school_id')
+      .first();
+
+    if (!currentUser || !currentUser.school_id) {
+      return res.status(400).json({ error: 'User not associated with a school' });
+    }
+
+    const searchTerm = `%${q.trim()}%`;
+    
+    const users = await db('users')
+      .where('school_id', currentUser.school_id)
+      .where('id', '!=', req.user.id)
+      .where('is_active', true)
+      .where(function() {
+        this.where('first_name', 'ilike', searchTerm)
+            .orWhere('last_name', 'ilike', searchTerm)
+            .orWhere('email', 'ilike', searchTerm)
+            .orWhere(db.raw("CONCAT(first_name, ' ', last_name)"), 'ilike', searchTerm);
+      })
+      .select(
+        'id',
+        'first_name',
+        'last_name',
+        'email',
+        'avatar_url',
+        'user_type',
+        'role'
+      )
+      .orderBy('first_name', 'asc')
+      .limit(limit);
+
+    const formattedUsers = users.map(user => ({
+      id: user.id,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      phone: user.phone,
+      avatar_url: user.avatar_url,
+      user_type: user.user_type,
+      role: user.role,
+      school_id: user.school_id,
+      is_active: true,
+      last_active_at: user.last_login_at,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
+
+    res.json({
+      users: formattedUsers,
+      query: q.trim()
+    });
+
+  } catch (error) {
+    logger.error('Error searching users:', error);
+    res.status(500).json({ error: 'Failed to search users' });
+  }
+});
+
 module.exports = router; 

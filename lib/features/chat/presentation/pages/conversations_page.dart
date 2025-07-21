@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/chat_service.dart';
-import '../../../../shared/services/auth_service.dart';
 import 'chat_page.dart';
+import 'contacts_page.dart';
 
 class ConversationsPage extends ConsumerStatefulWidget {
   const ConversationsPage({super.key});
@@ -70,7 +70,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
-              _showNewChatDialog();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const ContactsPage(),
+                ),
+              );
             },
           ),
         ],
@@ -79,7 +83,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         onRefresh: () async {
           await ref.read(conversationsProvider.notifier).loadConversations();
         },
-        child: conversationsState.isLoading && conversationsState.conversations.isEmpty
+        child: conversationsState.isLoading &&
+                conversationsState.conversations.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : conversationsState.conversations.isEmpty
                 ? _buildEmptyState()
@@ -90,7 +95,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                       indent: 72,
                     ),
                     itemBuilder: (context, index) {
-                      final conversation = conversationsState.conversations[index];
+                      final conversation =
+                          conversationsState.conversations[index];
                       return ConversationTile(
                         conversation: conversation,
                         onTap: () {
@@ -123,8 +129,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           Text(
             'No conversations yet',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: AppTheme.textSecondary,
-            ),
+                  color: AppTheme.textSecondary,
+                ),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -136,35 +142,17 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
-            onPressed: _showNewChatDialog,
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const ContactsPage(),
+                ),
+              );
+            },
             icon: const Icon(Icons.add),
             label: const Text('Start Chat'),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showNewChatDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => NewChatDialog(
-        onUserSelected: (user) {
-          // Create conversation and navigate to chat
-          final conversation = Conversation(
-            id: '${user.id}_new',
-            otherUser: user,
-            unreadCount: 0,
-            lastActivity: DateTime.now(),
-            isOnline: false,
-          );
-
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ChatPage(conversation: conversation),
-            ),
-          );
-        },
       ),
     );
   }
@@ -287,153 +275,3 @@ class ConversationTile extends StatelessWidget {
     );
   }
 }
-
-class NewChatDialog extends ConsumerStatefulWidget {
-  final Function(dynamic user) onUserSelected;
-
-  const NewChatDialog({
-    super.key,
-    required this.onUserSelected,
-  });
-
-  @override
-  ConsumerState<NewChatDialog> createState() => _NewChatDialogState();
-}
-
-class _NewChatDialogState extends ConsumerState<NewChatDialog> {
-  final TextEditingController _searchController = TextEditingController();
-  List<dynamic> _searchResults = []; // Using dynamic since we'd need User model
-  bool _isSearching = false;
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _performSearch(String query) async {
-    if (query.trim().isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _isSearching = false;
-      });
-      return;
-    }
-
-    setState(() => _isSearching = true);
-
-    try {
-      final chatService = ref.read(chatServiceProvider);
-      final users = await chatService.searchUsers(query);
-      setState(() {
-        _searchResults = users;
-        _isSearching = false;
-      });
-    } catch (e) {
-      setState(() {
-        _searchResults = [];
-        _isSearching = false;
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Search failed: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Container(
-        width: double.maxFinite,
-        constraints: const BoxConstraints(maxHeight: 500),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Row(
-              children: [
-                const Text(
-                  'New Chat',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Search field
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search for teachers, students, or parents...',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: _performSearch,
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Search results
-            Expanded(
-              child: _isSearching
-                  ? const Center(child: CircularProgressIndicator())
-                  : _searchResults.isEmpty
-                      ? Center(
-                          child: Text(
-                            _searchController.text.isEmpty
-                                ? 'Type to search for users'
-                                : 'No users found',
-                            style: const TextStyle(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: _searchResults.length,
-                          itemBuilder: (context, index) {
-                            final user = _searchResults[index];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: AppTheme.primaryColor,
-                                child: const Text(
-                                  'U', // Would use actual user initials
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              title: const Text('User Name'), // Would use actual user name
-                              subtitle: const Text('Teacher'), // Would use actual user type
-                              onTap: () {
-                                Navigator.of(context).pop();
-                                widget.onUserSelected(user);
-                              },
-                            );
-                          },
-                        ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-} 
