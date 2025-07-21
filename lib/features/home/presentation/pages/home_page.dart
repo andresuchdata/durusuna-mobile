@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
+import '../../../../core/utils/global_auth_handler.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/models/user.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
@@ -464,7 +465,33 @@ class _HomePageState extends ConsumerState<HomePage> {
           TextButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              await ref.read(authStateProvider.notifier).logout();
+
+              try {
+                // Use GlobalAuthHandler for consistent logout behavior with navigation
+                if (GlobalAuthHandler.isInitialized) {
+                  await GlobalAuthHandler.logout(
+                    message: 'You have been logged out successfully.',
+                  );
+                } else {
+                  // Fallback: manual logout + navigation
+                  await ref.read(authStateProvider.notifier).logout();
+                  if (mounted) {
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      '/login',
+                      (route) => false,
+                    );
+                  }
+                }
+              } catch (e) {
+                // Fallback in case of any error
+                await ref.read(authStateProvider.notifier).logout();
+                if (mounted) {
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    '/login',
+                    (route) => false,
+                  );
+                }
+              }
             },
             style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
             child: const Text('Logout'),
@@ -473,4 +500,4 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
     );
   }
-} 
+}

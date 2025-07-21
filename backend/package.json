@@ -14,7 +14,10 @@
     "lint": "eslint src/",
     "db:migrate": "knex migrate:latest",
     "db:seed": "knex seed:run",
-    "db:rollback": "knex migrate:rollback"
+    "db:rollback": "knex migrate:rollback",
+    "db:rollback:all": "knex migrate:rollback --all",
+    "db:reset": "npm run db:rollback:all && npm run db:migrate && npm run db:seed",
+    "db:fresh": "npm run db:reset"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

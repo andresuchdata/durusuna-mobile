@@ -82,9 +82,11 @@ const profileUpdateSchema = Joi.object({
 
 // Message validation
 const messageSchema = Joi.object({
-  receiver_id: Joi.string().uuid().required().messages({
-    'string.guid': 'Receiver ID must be a valid UUID',
-    'any.required': 'Receiver ID is required'
+  conversation_id: Joi.string().uuid().optional().messages({
+    'string.guid': 'Conversation ID must be a valid UUID'
+  }),
+  receiver_id: Joi.string().uuid().optional().messages({
+    'string.guid': 'Receiver ID must be a valid UUID'
   }),
   content: Joi.string().max(5000).optional().messages({
     'string.max': 'Message content cannot exceed 5000 characters'
@@ -94,6 +96,8 @@ const messageSchema = Joi.object({
     'string.guid': 'Reply to ID must be a valid UUID'
   }),
   metadata: Joi.object().optional()
+}).or('conversation_id', 'receiver_id').messages({
+  'object.missing': 'Either conversation_id or receiver_id is required'
 });
 
 // Class update validation
