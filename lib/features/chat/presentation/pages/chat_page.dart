@@ -299,6 +299,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ref
                 .read(chatMessagesProvider(widget.conversation.id).notifier)
                 .setTyping(typing.isTyping);
+
+            // If someone is typing, they're definitely online - show green dot
+            final otherUserId = widget.conversation.otherUser?.id;
+            if (otherUserId != null &&
+                typing.userId == otherUserId &&
+                typing.isTyping) {
+              print(
+                  '👤 ChatPage: User is typing → Setting as ONLINE (green dot should appear)');
+              setState(() {
+                _isOtherUserOnline = true;
+              });
+            }
           } else {
             print(
                 '⌨️ ChatPage: Ignoring typing event (wrong conversation or own typing)');
@@ -331,6 +343,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           if (otherUserId != null && presence.userId == otherUserId) {
             print(
                 '👤 ChatPage: Updating presence for other user: ${presence.isOnline ? "Online" : "Offline"}');
+            print(
+                '👤 ChatPage: Green dot should ${presence.isOnline ? "APPEAR" : "DISAPPEAR"}');
             setState(() {
               _isOtherUserOnline = presence.isOnline;
             });
@@ -381,8 +395,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     bottom: 0,
                     right: 0,
                     child: Container(
-                      width: 12,
-                      height: 12,
+                      width: 14,
+                      height: 14,
                       decoration: BoxDecoration(
                         color: AppTheme.successColor,
                         shape: BoxShape.circle,
