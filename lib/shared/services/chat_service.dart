@@ -13,13 +13,27 @@ class ChatService {
   /// Get conversations list for current user
   Future<List<Conversation>> getConversations() async {
     try {
+      print('🔍 ChatService.getConversations() - Making API call...');
       final response = await _apiService.get(ApiConstants.getConversations);
+      print('🔍 Response status: ${response.statusCode}');
+      print('🔍 Response data: ${response.data}');
 
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
-        final conversations = (data['conversations'] as List)
-            .map((json) => Conversation.fromJson(json))
-            .toList();
+        final conversationsList = data['conversations'] as List;
+        print('🔍 Found ${conversationsList.length} conversations');
+
+        final conversations = conversationsList.map((json) {
+          try {
+            return Conversation.fromJson(json);
+          } catch (e) {
+            print('❌ Error parsing conversation: $e');
+            print('❌ Raw JSON: $json');
+            rethrow;
+          }
+        }).toList();
+
+        print('✅ Successfully parsed ${conversations.length} conversations');
         return conversations;
       } else {
         throw ApiException(
@@ -28,6 +42,7 @@ class ChatService {
         );
       }
     } catch (e) {
+      print('❌ ChatService.getConversations() error: $e');
       if (e is ApiException) rethrow;
       throw ApiException(
         message: 'Failed to get conversations: ${e.toString()}',
@@ -334,14 +349,62 @@ class Conversation {
       otherUser:
           json['other_user'] != null ? User.fromJson(json['other_user']) : null,
       lastMessage: json['last_message'] != null
-          ? Message.fromJson(json['last_message'])
+          ? _parseLastMessage(json['last_message'])
           : null,
       unreadCount: json['unread_count'] ?? 0,
-      lastActivity: DateTime.parse(json['last_activity']),
+      lastActivity: json['last_activity'] != null
+          ? DateTime.parse(json['last_activity'])
+          : DateTime.now(),
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
       isOnline: json['is_online'] ?? false,
     );
+  }
+
+  // Helper method to safely parse last message with minimal fields
+  static Message? _parseLastMessage(Map<String, dynamic> json) {
+    try {
+      return Message(
+        id: json['id'] ?? '',
+        content: json['content'],
+        messageType: _parseMessageType(json['message_type']),
+        isFromMe: json['is_from_me'] ?? false,
+        createdAt: json['created_at'] != null
+            ? DateTime.parse(json['created_at'])
+            : DateTime.now(),
+      );
+    } catch (e) {
+      print('⚠️ Error parsing last_message, using fallback: $e');
+      // Return a minimal message if parsing fails
+      return Message(
+        id: json['id'] ?? 'unknown',
+        content: json['content'] ?? 'Message',
+        messageType: MessageType.text,
+        createdAt: DateTime.now(),
+      );
+    }
+  }
+
+  // Helper method to safely parse message type
+  static MessageType _parseMessageType(dynamic messageType) {
+    if (messageType == null) return MessageType.text;
+
+    switch (messageType.toString().toLowerCase()) {
+      case 'text':
+        return MessageType.text;
+      case 'image':
+        return MessageType.image;
+      case 'video':
+        return MessageType.video;
+      case 'audio':
+        return MessageType.audio;
+      case 'file':
+        return MessageType.file;
+      case 'emoji':
+        return MessageType.emoji;
+      default:
+        return MessageType.text;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -446,19 +509,25 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
   final ChatService _chatService;
 
   ConversationsNotifier(this._chatService) : super(ConversationsState()) {
+    print('📱 ConversationsNotifier created - loading conversations...');
     loadConversations();
   }
 
   Future<void> loadConversations() async {
+    print('📱 ConversationsNotifier.loadConversations() - starting...');
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       final conversations = await _chatService.getConversations();
+      print(
+          '📱 ConversationsNotifier - received ${conversations.length} conversations');
       state = state.copyWith(
         conversations: conversations,
         isLoading: false,
       );
+      print('📱 ConversationsNotifier - state updated successfully');
     } catch (e) {
+      print('❌ ConversationsNotifier - error loading conversations: $e');
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
@@ -516,7 +585,7 @@ final chatMessagesProvider = StateNotifierProvider.family<ChatMessagesNotifier,
     ChatMessagesState, String>(
   (ref, conversationWithId) {
     final chatService = ref.read(chatServiceProvider);
-    return ChatMessagesNotifier(chatService, conversationWithId);
+    return ChatMessagesNotifier(chatService, conversationWithId, ref);
   },
 );
 
@@ -563,8 +632,9 @@ class ChatMessagesState {
 class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
   final ChatService _chatService;
   final String _conversationWithId;
+  final Ref _ref;
 
-  ChatMessagesNotifier(this._chatService, this._conversationWithId)
+  ChatMessagesNotifier(this._chatService, this._conversationWithId, this._ref)
       : super(ChatMessagesState()) {
     loadMessages();
   }
@@ -623,9 +693,10 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
   }) async {
     try {
       final Message message;
+      final bool isNewConversation = _conversationWithId.startsWith('new_');
 
       // Handle new conversations
-      if (_conversationWithId.startsWith('new_')) {
+      if (isNewConversation) {
         // Extract user ID from the conversation ID format: 'new_userId'
         final receiverId =
             _conversationWithId.substring(4); // Remove 'new_' prefix
@@ -637,6 +708,9 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
           replyToId: replyToId,
           metadata: metadata,
         );
+
+        // Refresh conversations list since a new conversation was created
+        _ref.read(conversationsProvider.notifier).loadConversations();
       } else {
         // Use existing conversation ID
         message = await _chatService.sendMessage(

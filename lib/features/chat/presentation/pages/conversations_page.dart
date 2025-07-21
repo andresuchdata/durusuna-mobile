@@ -18,6 +18,15 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   bool _isSearching = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Refresh conversations when page is loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(conversationsProvider.notifier).loadConversations();
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -86,31 +95,33 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         child: conversationsState.isLoading &&
                 conversationsState.conversations.isEmpty
             ? const Center(child: CircularProgressIndicator())
-            : conversationsState.conversations.isEmpty
-                ? _buildEmptyState()
-                : ListView.separated(
-                    itemCount: conversationsState.conversations.length,
-                    separatorBuilder: (context, index) => const Divider(
-                      height: 1,
-                      indent: 72,
-                    ),
-                    itemBuilder: (context, index) {
-                      final conversation =
-                          conversationsState.conversations[index];
-                      return ConversationTile(
-                        conversation: conversation,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => ChatPage(
-                                conversation: conversation,
-                              ),
-                            ),
+            : conversationsState.error != null
+                ? _buildErrorState(conversationsState.error!)
+                : conversationsState.conversations.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.separated(
+                        itemCount: conversationsState.conversations.length,
+                        separatorBuilder: (context, index) => const Divider(
+                          height: 1,
+                          indent: 72,
+                        ),
+                        itemBuilder: (context, index) {
+                          final conversation =
+                              conversationsState.conversations[index];
+                          return ConversationTile(
+                            conversation: conversation,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => ChatPage(
+                                    conversation: conversation,
+                                  ),
+                                ),
+                              );
+                            },
                           );
                         },
-                      );
-                    },
-                  ),
+                      ),
       ),
     );
   }
@@ -151,6 +162,45 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
             },
             icon: const Icon(Icons.add),
             label: const Text('Start Chat'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.red[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Error loading conversations',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppTheme.textTertiary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              ref.read(conversationsProvider.notifier).loadConversations();
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
           ),
         ],
       ),

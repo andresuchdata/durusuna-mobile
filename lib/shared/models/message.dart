@@ -32,9 +32,9 @@ enum ReadStatus {
 class Message {
   final String id;
   @JsonKey(name: 'sender_id')
-  final String senderId;
+  final String? senderId;
   @JsonKey(name: 'receiver_id')
-  final String receiverId;
+  final String? receiverId;
   final String? content;
   @JsonKey(name: 'message_type')
   final MessageType messageType;
@@ -72,28 +72,29 @@ class Message {
 
   Message({
     required this.id,
-    required this.senderId,
-    required this.receiverId,
+    this.senderId,
+    this.receiverId,
     this.content,
     required this.messageType,
     this.metadata,
     this.replyToId,
-    required this.isEdited,
+    this.isEdited = false,
     this.editedAt,
-    required this.isDeleted,
+    this.isDeleted = false,
     this.deletedAt,
     this.deliveredAt,
     this.readAt,
     this.readStatus = ReadStatus.sent,
     this.reactions = const {},
-    required this.isFromMe,
-    required this.createdAt,
-    required this.updatedAt,
+    this.isFromMe = false,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     this.sender,
     this.receiver,
     this.replyTo,
     this.attachments,
-  });
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
   factory Message.fromJson(Map<String, dynamic> json) =>
       _$MessageFromJson(json);
