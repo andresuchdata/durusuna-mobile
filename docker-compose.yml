@@ -99,7 +99,7 @@ services:
       MAX_FILE_SIZE: 10485760
       
       # Backend Configuration
-      BACKEND_PUBLIC_URL: http://localhost:3001
+      BACKEND_PUBLIC_URL: http://10.0.2.2:3001
       
       # MinIO/S3 Configuration
       S3_ENDPOINT: http://minio:9000
