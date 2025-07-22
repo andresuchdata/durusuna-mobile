@@ -111,37 +111,43 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                           return ConversationTile(
                             conversation: conversation,
                             onTap: () {
-                              Navigator.of(context).push(
+                              // Clear any currently viewed conversation before navigating
+                              ref
+                                  .read(currentConversationProvider.notifier)
+                                  .state = null;
+                              print(
+                                  '📱 ConversationsPage: Cleared current conversation before navigation');
+
+                              Navigator.of(context)
+                                  .push(
                                 MaterialPageRoute(
                                   builder: (context) => ChatPage(
                                     conversation: conversation,
                                   ),
                                 ),
-                              );
+                              )
+                                  .then((_) {
+                                // When returning from chat page, ensure current conversation is cleared
+                                // Add small delay to ensure dispose methods have completed
+                                Future.delayed(
+                                    const Duration(milliseconds: 100), () {
+                                  ref
+                                      .read(
+                                          currentConversationProvider.notifier)
+                                      .state = null;
+                                  print(
+                                      '📱 ConversationsPage: Cleared current conversation after returning from chat');
+
+                                  // Refresh conversations to get latest unread counts
+                                  ref
+                                      .read(conversationsProvider.notifier)
+                                      .loadConversations();
+                                });
+                              });
                             },
                           );
                         },
                       ),
-      ),
-      // Debug FAB to test green dot
-      floatingActionButton: FloatingActionButton(
-        mini: true,
-        onPressed: () {
-          // Test: Toggle online status for first conversation
-          final conversations = conversationsState.conversations;
-          if (conversations.isNotEmpty) {
-            final firstConversation = conversations.first;
-            if (firstConversation.otherUser != null) {
-              final currentStatus = firstConversation.isOnline;
-              print(
-                  '🧪 DEBUG TEST: Toggling ${firstConversation.otherUser!.displayName} from $currentStatus to ${!currentStatus}');
-              ref.read(conversationsProvider.notifier).updateUserStatus(
-                  firstConversation.otherUser!.id, !currentStatus);
-            }
-          }
-        },
-        child: const Icon(Icons.bug_report, size: 16),
-        tooltip: 'Test Green Dot',
       ),
     );
   }
@@ -151,7 +157,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.chat_bubble_outline,
             size: 64,
             color: AppTheme.textTertiary,
@@ -209,7 +215,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           Text(
             error,
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppTheme.textTertiary,
               fontSize: 12,
             ),

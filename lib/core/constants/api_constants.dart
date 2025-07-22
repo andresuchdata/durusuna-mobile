@@ -53,12 +53,13 @@ class ApiConstants {
   static const String getConversations = '$messages/conversations';
   static const String getConversationMessages = '$messages/conversation';
   static const String markAsRead = '$messages/mark-read';
+  static const String markConversationAsRead = '$messages/conversation';
   static const String deleteMessage = '$messages/delete';
 
   // Class update endpoints
   static const String classUpdates = '/class-updates';
   static const String createClassUpdate = '$classUpdates/create';
-  static const String getClassUpdates = '$classUpdates';
+  static const String getClassUpdates = classUpdates;
   static const String addComment = '$classUpdates/comment';
   static const String addReaction = '$classUpdates/reaction';
 

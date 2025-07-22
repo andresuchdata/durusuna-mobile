@@ -30,6 +30,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   // Track online status of the other user dynamically
   late bool _isOtherUserOnline;
 
+  // Track if we should auto-scroll to bottom on initial load
+  bool _shouldAutoScrollOnLoad = true;
+
   @override
   void initState() {
     super.initState();
@@ -56,11 +59,27 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Update last seen when entering conversation
       realtimeService.updateLastSeen(widget.conversation.id);
 
-      // Clear unread count for this conversation
-      ref
-          .read(conversationsProvider.notifier)
-          .markConversationAsRead(widget.conversation.id);
-      print('📱 ChatPage: Marked conversation as read (cleared unread count)');
+      // Note: We don't immediately mark as read here - only when user scrolls to view messages
+      // This ensures better UX where messages are only marked as read when actually viewed
+
+      // Use the more reliable scroll method with longer delays
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          print('📱 ChatPage: Triggering initial scroll from initState');
+          _ensureScrollToBottom();
+        }
+      });
+
+      // Additional backup with even longer delay
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted && _shouldAutoScrollOnLoad) {
+          print('📱 ChatPage: Final backup scroll from initState');
+          _ensureScrollToBottom();
+        }
+      });
+
+      // Note: Removed additional mark-as-read safety call
+      // We now only mark as read when user actually scrolls to view messages
     });
   }
 
@@ -70,21 +89,38 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _messageController.dispose();
     _focusNode.dispose();
 
-    // Leave conversation room - only if widget is still mounted
-    if (mounted) {
-      try {
-        final realtimeService = ref.read(realtimeServiceProvider);
-        realtimeService.leaveConversation(widget.conversation.id);
+    // Leave conversation room and clear current conversation tracking
+    // Do this synchronously to ensure it happens before dispose completes
+    try {
+      final realtimeService = ref.read(realtimeServiceProvider);
+      realtimeService.leaveConversation(widget.conversation.id);
 
-        // Clear current conversation ID so unread counts can increment again
-        ref.read(currentConversationProvider.notifier).state = null;
-        print('📱 ChatPage: Cleared current conversation ID');
-      } catch (e) {
-        print('⚠️ Error leaving conversation room during dispose: $e');
-      }
+      // Clear current conversation ID immediately to allow unread counts
+      ref.read(currentConversationProvider.notifier).state = null;
+      print('📱 ChatPage: Cleared current conversation ID in dispose');
+    } catch (e) {
+      print('⚠️ Error in dispose: $e');
     }
 
     super.dispose();
+  }
+
+  @override
+  void deactivate() {
+    // Additional cleanup when widget is deactivated (before dispose)
+    // This ensures cleanup happens even if dispose is delayed on iOS
+    try {
+      final realtimeService = ref.read(realtimeServiceProvider);
+      realtimeService.leaveConversation(widget.conversation.id);
+
+      // Clear current conversation tracking to allow unread counts
+      ref.read(currentConversationProvider.notifier).state = null;
+      print('📱 ChatPage: Cleared current conversation ID in deactivate');
+    } catch (e) {
+      print('⚠️ Error in deactivate: $e');
+    }
+
+    super.deactivate();
   }
 
   String _getDisplayName() {
@@ -128,6 +164,34 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             .loadMessages(loadMore: true);
       }
     }
+
+    // Mark conversation as read when user scrolls to bottom (indicating they've seen latest messages)
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 100) {
+      // User is at or near the bottom - mark as read
+      _markAsReadWhenAtBottom();
+    }
+  }
+
+  // Track if we've already marked as read when at bottom to avoid multiple calls
+  bool _hasMarkedAsReadAtBottom = false;
+
+  void _markAsReadWhenAtBottom() {
+    if (_hasMarkedAsReadAtBottom) return;
+
+    _hasMarkedAsReadAtBottom = true;
+
+    // Mark conversation as read since user has scrolled to see latest messages
+    ref
+        .read(conversationsProvider.notifier)
+        .markConversationAsRead(widget.conversation.id);
+    print(
+        '📱 ChatPage: Marked conversation as read - user viewed bottom messages');
+
+    // Reset flag after a delay to allow for future mark-as-read calls
+    Future.delayed(const Duration(seconds: 2), () {
+      _hasMarkedAsReadAtBottom = false;
+    });
   }
 
   Future<void> _sendMessage({String? content, MessageType? messageType}) async {
@@ -143,6 +207,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       _messageController.clear();
       _scrollToBottom(animated: true);
+
+      // Ensure conversation is marked as read when user sends a message
+      // This handles any edge cases where unread count might be wrong
+      await ref
+          .read(conversationsProvider.notifier)
+          .markConversationAsRead(widget.conversation.id);
+      print('📱 ChatPage: Marked conversation as read after sending message');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -158,52 +229,149 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _scrollToBottom({bool animated = true}) {
     print('📱 _scrollToBottom() called - Animated: $animated');
 
-    // Use a more aggressive approach for both platforms
-    void attemptScroll(int attempt) {
+    if (!mounted || !_scrollController.hasClients) {
+      print('❌ _scrollToBottom() - Not mounted or no clients');
+      return;
+    }
+
+    final position = _scrollController.position;
+    final targetPosition = position.maxScrollExtent;
+
+    print(
+        '📱 _scrollToBottom() - Target: $targetPosition, Current: ${position.pixels}');
+
+    if (targetPosition <= 0) {
+      print('📱 _scrollToBottom() - No content to scroll to');
+      return;
+    }
+
+    try {
+      if (animated) {
+        _scrollController
+            .animateTo(
+          targetPosition,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        )
+            .then((_) {
+          // Verify we actually reached the bottom
+          if (mounted && _scrollController.hasClients) {
+            final currentPos = _scrollController.position.pixels;
+            final maxPos = _scrollController.position.maxScrollExtent;
+            final diff = (maxPos - currentPos).abs();
+            print(
+                '📱 After animation - Current: $currentPos, Target: $maxPos, Diff: $diff');
+            if (diff > 10) {
+              print('📱 Animation didn\'t reach bottom, using jumpTo');
+              _scrollController.jumpTo(maxPos);
+            }
+          }
+        });
+      } else {
+        _scrollController.jumpTo(targetPosition);
+        print('✅ _scrollToBottom() - Jumped to $targetPosition');
+      }
+    } catch (e) {
+      print('⚠️ _scrollToBottom() failed: $e');
+    }
+  }
+
+  // More aggressive scroll method that waits for everything to be ready
+  void _ensureScrollToBottom() {
+    if (!mounted) return;
+
+    print('📱 _ensureScrollToBottom() called');
+
+    // Wait for the next frame cycle to ensure ListView is fully built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-      print('📱 _scrollToBottom() attempt $attempt');
+      // Try multiple times with increasing delays
+      _attemptScrollWithRetry(1, maxAttempts: 8);
+    });
+  }
 
-      if (_scrollController.hasClients) {
-        final targetPosition = _scrollController.position.maxScrollExtent;
-        print('📱 _scrollToBottom() - Target position: $targetPosition');
+  void _attemptScrollWithRetry(int attempt, {int maxAttempts = 8}) {
+    if (!mounted || attempt > maxAttempts) {
+      print('❌ _attemptScrollWithRetry - Stopped at attempt $attempt');
+      return;
+    }
 
-        if (targetPosition > 0) {
-          if (animated && attempt == 1) {
-            // First attempt with animation
-            _scrollController.animateTo(
-              targetPosition,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-            );
+    print('📱 _attemptScrollWithRetry - Attempt $attempt');
+
+    if (_scrollController.hasClients &&
+        _scrollController.position.maxScrollExtent > 0) {
+      print('📱 ScrollController ready on attempt $attempt - executing scroll');
+
+      // Use immediate jumpTo for better reliability on mobile
+      final targetPosition = _scrollController.position.maxScrollExtent;
+      _scrollController.jumpTo(targetPosition);
+
+      // Verify we reached the bottom
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && _scrollController.hasClients) {
+          final currentPos = _scrollController.position.pixels;
+          final maxPos = _scrollController.position.maxScrollExtent;
+          final diff = (maxPos - currentPos).abs();
+          print(
+              '📱 Verify scroll - Current: $currentPos, Target: $maxPos, Diff: $diff');
+
+          if (diff > 5) {
+            print('📱 Not at bottom, trying again');
+            _scrollController.jumpTo(maxPos);
           } else {
-            // Fallback with jump (more reliable)
-            _scrollController.jumpTo(targetPosition);
+            print('✅ Successfully scrolled to bottom');
+            // User has been scrolled to bottom, mark conversation as read
+            _markAsReadWhenAtBottom();
           }
-          return; // Success, exit
         }
-      }
+      });
+    } else {
+      // Wait longer between attempts for later retries
+      final delay = Duration(milliseconds: 100 + (attempt * 50));
+      print(
+          '📱 ScrollController not ready, retrying in ${delay.inMilliseconds}ms');
+      Future.delayed(delay, () {
+        _attemptScrollWithRetry(attempt + 1, maxAttempts: maxAttempts);
+      });
+    }
+  }
 
-      // Retry if failed or controller not ready
-      if (attempt < 4) {
-        // Max 4 attempts
-        final delay =
-            Duration(milliseconds: 100 * attempt); // Progressive delay
-        print(
-            '⚠️ _scrollToBottom() - Attempt $attempt failed, retrying in ${delay.inMilliseconds}ms');
-        Future.delayed(delay, () => attemptScroll(attempt + 1));
+  // Force scroll to bottom when ListView is definitely ready
+  void _forceScrollToBottomWhenReady() {
+    if (!mounted) return;
+
+    print('📱 _forceScrollToBottomWhenReady() called');
+
+    // Keep trying until scroll controller has clients and maxScrollExtent > 0
+    void waitForScrollController(int attempt) {
+      if (!mounted) return;
+
+      if (_scrollController.hasClients &&
+          _scrollController.position.maxScrollExtent > 0) {
+        print('📱 ScrollController ready, forcing scroll to bottom');
+        _scrollToBottom(animated: false);
+
+        // Additional attempts
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted) _scrollToBottom(animated: false);
+        });
+
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) _scrollToBottom(animated: true);
+        });
+      } else if (attempt < 20) {
+        // Try for up to 2 seconds
+        print('📱 ScrollController not ready, attempt $attempt');
+        Future.delayed(const Duration(milliseconds: 100), () {
+          waitForScrollController(attempt + 1);
+        });
       } else {
-        print('❌ _scrollToBottom() - All attempts failed');
+        print('❌ ScrollController never became ready');
       }
     }
 
-    // Start with post-frame callback
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Small delay to ensure ListView is fully rendered
-      Future.delayed(const Duration(milliseconds: 50), () {
-        attemptScroll(1);
-      });
-    });
+    waitForScrollController(1);
   }
 
   Future<void> _refreshMessages() async {
@@ -216,16 +384,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ref.read(conversationsProvider.notifier).loadConversations(),
       ]);
 
-      // Show success feedback
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Messages refreshed'),
-            duration: Duration(seconds: 1),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
-      }
+      // No more success feedback notification - removed as requested
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -270,22 +429,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       });
     }
 
+    // Final fallback: If messages are already loaded but we haven't scrolled yet
+    if (!messagesState.isLoading &&
+        messagesState.messages.isNotEmpty &&
+        _shouldAutoScrollOnLoad) {
+      print('📱 Build: Messages already loaded, forcing scroll to bottom');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _shouldAutoScrollOnLoad = false;
+          _ensureScrollToBottom();
+        }
+      });
+    }
+
     // Auto-scroll to bottom when messages finish loading initially
     ref.listen(chatMessagesProvider(widget.conversation.id), (previous, next) {
-      if (previous?.isLoading == true &&
+      // Only auto-scroll on initial load, not on subsequent updates
+      if (_shouldAutoScrollOnLoad &&
+          previous?.isLoading == true &&
           next.isLoading == false &&
           next.messages.isNotEmpty) {
-        print('📱 ChatPage: Auto-scrolling to bottom after messages loaded');
-        // Use non-animated scroll for initial load (faster and more reliable on iOS)
-        _scrollToBottom(animated: false);
+        print(
+            '📱 ChatPage: Auto-scrolling to bottom after initial messages loaded');
+        _shouldAutoScrollOnLoad = false; // Prevent future auto-scrolls
 
-        // Add a backup animated scroll for iOS after a longer delay
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            print('📱 ChatPage: Backup animated scroll for iOS');
-            _scrollToBottom(animated: true);
-          }
-        });
+        // Use the new more reliable scroll method
+        _ensureScrollToBottom();
       }
     });
 
@@ -606,80 +775,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           child: _buildEmptyState(),
                         ),
                       )
-                    : RefreshIndicator(
-                        onRefresh: _refreshMessages,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          reverse: false,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.all(16),
-                          itemCount: messagesState.messages.length +
-                              (messagesState.isLoadingMore ? 1 : 0) +
-                              1, // +1 for bottom spacing
-                          itemBuilder: (context, index) {
-                            // Show loading indicator at the top when loading older messages
-                            if (messagesState.isLoadingMore && index == 0) {
-                              return const Padding(
-                                padding: EdgeInsets.all(16.0),
-                                child:
-                                    Center(child: CircularProgressIndicator()),
-                              );
-                            }
-
-                            // Adjust index if loading indicator is shown
-                            final messageIndex =
-                                messagesState.isLoadingMore ? index - 1 : index;
-
-                            // Bottom spacing item (for better swipe refresh UX)
-                            if (messageIndex >= messagesState.messages.length) {
-                              return const SizedBox(height: 60);
-                            }
-
-                            // Return empty container if index is out of bounds
-                            if (messageIndex < 0) {
-                              return const SizedBox.shrink();
-                            }
-
-                            final message =
-                                messagesState.messages[messageIndex];
-                            final isMe = message.senderId == authState.user?.id;
-                            final showTimestamp = _shouldShowTimestamp(
-                              message,
-                              messageIndex > 0
-                                  ? messagesState.messages[messageIndex - 1]
-                                  : null,
-                            );
-
-                            return Column(
-                              children: [
-                                if (showTimestamp)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 16),
-                                    child: Text(
-                                      _formatTimestamp(message.createdAt),
-                                      style: const TextStyle(
-                                        color: AppTheme.textTertiary,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                MessageBubble(
-                                  message: message,
-                                  isMe: isMe,
-                                  onReply: (msg) => _replyToMessage(msg),
-                                  onEdit:
-                                      isMe ? (msg) => _editMessage(msg) : null,
-                                  onDelete: isMe
-                                      ? (msg) => _deleteMessage(msg)
-                                      : null,
-                                ),
-                                const SizedBox(height: 4),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
+                    : _buildMessagesList(messagesState, authState),
           ),
 
           // Typing indicator
@@ -780,6 +876,122 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMessagesList(dynamic messagesState, dynamic authState) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: (scrollNotification) {
+        // Handle pull-up-to-refresh at bottom
+        if (scrollNotification is ScrollEndNotification &&
+            scrollNotification.metrics.extentAfter == 0) {
+          // User is at the bottom of the list
+          if (scrollNotification.metrics.pixels >
+              scrollNotification.metrics.maxScrollExtent + 50) {
+            // User pulled up beyond bottom - trigger refresh
+            _refreshMessages();
+          }
+        }
+        return false;
+      },
+      child: ListView.builder(
+        controller: _scrollController,
+        reverse: false,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        itemCount: messagesState.messages.length +
+            (messagesState.isLoadingMore ? 1 : 0) +
+            1, // +1 for bottom spacing/refresh area
+        itemBuilder: (context, index) {
+          // Show loading indicator at the top when loading older messages
+          if (messagesState.isLoadingMore && index == 0) {
+            return const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          // Adjust index if loading indicator is shown
+          final messageIndex = messagesState.isLoadingMore ? index - 1 : index;
+
+          // Bottom refresh area (for better swipe refresh UX)
+          if (messageIndex >= messagesState.messages.length) {
+            return GestureDetector(
+              onPanUpdate: (details) {
+                // Handle pull-up gesture
+                if (details.delta.dy < -10) {
+                  // User is pulling up, show refresh hint
+                }
+              },
+              onPanEnd: (details) {
+                // Handle pull-up release
+                if (details.velocity.pixelsPerSecond.dy < -500) {
+                  // Strong upward swipe - trigger refresh
+                  _refreshMessages();
+                }
+              },
+              child: Container(
+                height: 80,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.keyboard_arrow_up,
+                      color: AppTheme.textTertiary,
+                      size: 24,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Pull up to refresh',
+                      style: TextStyle(
+                        color: AppTheme.textTertiary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // Return empty container if index is out of bounds
+          if (messageIndex < 0) {
+            return const SizedBox.shrink();
+          }
+
+          final message = messagesState.messages[messageIndex];
+          final isMe = message.senderId == authState.user?.id;
+          final showTimestamp = _shouldShowTimestamp(
+            message,
+            messageIndex > 0 ? messagesState.messages[messageIndex - 1] : null,
+          );
+
+          return Column(
+            children: [
+              if (showTimestamp)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    _formatTimestamp(message.createdAt),
+                    style: const TextStyle(
+                      color: AppTheme.textTertiary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              MessageBubble(
+                message: message,
+                isMe: isMe,
+                onReply: (msg) => _replyToMessage(msg),
+                onEdit: isMe ? (msg) => _editMessage(msg) : null,
+                onDelete: isMe ? (msg) => _deleteMessage(msg) : null,
+              ),
+              const SizedBox(height: 4),
+            ],
+          );
+        },
       ),
     );
   }

@@ -93,6 +93,20 @@ class DurusunaMobileApp extends ConsumerWidget {
           print(
               '📱 App: Global message update - Conversation: ${realtimeMessage.conversationId}');
           print('📱 App: Message content: ${realtimeMessage.message.content}');
+          print('📱 App: Message sender: ${realtimeMessage.message.senderId}');
+
+          // Debug: Check current conversation provider state
+          final currentConversationId = ref.read(currentConversationProvider);
+          print(
+              '📱 App: Current conversation provider: $currentConversationId');
+          print(
+              '📱 App: Is viewing this conversation: ${currentConversationId == realtimeMessage.conversationId}');
+
+          // Get current user ID for comparison
+          final currentUserId = StorageService.getUser()?['id'];
+          print('📱 App: Current user ID: $currentUserId');
+          print(
+              '📱 App: Is own message: ${realtimeMessage.message.senderId == currentUserId}');
 
           // Update conversation's last message and unread count
           ref

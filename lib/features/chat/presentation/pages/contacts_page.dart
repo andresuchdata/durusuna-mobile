@@ -73,6 +73,11 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
 
   void _startChat(User user) async {
     try {
+      // Clear any currently viewed conversation before starting chat
+      ref.read(currentConversationProvider.notifier).state = null;
+      print(
+          '📱 ContactsPage: Cleared current conversation before starting chat');
+
       // First check if conversation already exists
       await ref.read(conversationsProvider.notifier).loadConversations();
       final conversations = ref.read(conversationsProvider).conversations;

@@ -655,6 +655,62 @@ router.put('/:messageId/mark-read', auth, async (req, res) => {
 });
 
 /**
+ * @route PUT /api/messages/conversation/:conversationId/mark-read
+ * @desc Mark all messages in a conversation as read (reset unread count)
+ * @access Private
+ */
+router.put('/conversation/:conversationId/mark-read', auth, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+
+    // Verify conversation exists and user is a participant
+    const participant = await db('conversation_participants')
+      .join('conversations', 'conversation_participants.conversation_id', 'conversations.id')
+      .where('conversation_participants.conversation_id', conversationId)
+      .where('conversation_participants.user_id', req.user.id)
+      .where('conversation_participants.is_active', true)
+      .where('conversations.is_active', true)
+      .select('conversation_participants.*')
+      .first();
+
+    if (!participant) {
+      return res.status(404).json({ error: 'Conversation not found or access denied' });
+    }
+
+    // Reset unread count for this user in this conversation
+    await db('conversation_participants')
+      .where('conversation_id', conversationId)
+      .where('user_id', req.user.id)
+      .update({
+        unread_count: 0,
+        updated_at: new Date()
+      });
+
+    // Also mark individual messages as read (optional, for consistency)
+    await db('messages')
+      .where('conversation_id', conversationId)
+      .where('receiver_id', req.user.id)
+      .where('is_read', false)
+      .where('is_deleted', false)
+      .update({
+        is_read: true,
+        read_at: new Date(),
+        read_status: 'read',
+        updated_at: new Date()
+      });
+
+    res.json({
+      message: 'Conversation marked as read',
+      conversation_id: conversationId
+    });
+
+  } catch (error) {
+    logger.error('Error marking conversation as read:', error);
+    res.status(500).json({ error: 'Failed to mark conversation as read' });
+  }
+});
+
+/**
  * @route PUT /api/messages/:messageId
  * @desc Edit a message
  * @access Private

@@ -309,6 +309,28 @@ class ChatService {
       );
     }
   }
+
+  /// Mark a conversation as read
+  Future<void> markConversationAsRead(String conversationId) async {
+    try {
+      final response = await _apiService.put(
+        '${ApiConstants.markConversationAsRead}/$conversationId/mark-read',
+      );
+
+      if (response.statusCode != 200) {
+        throw ApiException(
+          message: 'Failed to mark conversation as read',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to mark conversation as read: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
 }
 
 // Conversation model for chat list
@@ -558,9 +580,15 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
       final conversation = state.conversations[index];
       print('🔄 Found conversation: ${conversation.otherUser?.displayName}');
 
-      // Check if message is from another user (should increment unread count)
+      // Get current user ID from storage for more reliable comparison
       final currentUserId = StorageService.getUser()?['id'];
-      final isFromOtherUser = message.senderId != currentUserId;
+      print('🔄 Current user ID from storage: $currentUserId');
+      print('🔄 Message sender ID: ${message.senderId}');
+
+      // Determine if message is from another user
+      final isFromOtherUser = message.senderId != currentUserId &&
+          message.senderId?.isNotEmpty == true &&
+          currentUserId?.isNotEmpty == true;
 
       // Check if user is currently viewing this conversation
       final currentlyViewedConversationId =
@@ -568,30 +596,39 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
       final isViewingThisConversation =
           currentlyViewedConversationId == conversationId;
 
-      print(
-          '🔄 Current user: $currentUserId, Message sender: ${message.senderId}');
       print('🔄 Is from other user: $isFromOtherUser');
       print('🔄 Currently viewed conversation: $currentlyViewedConversationId');
       print('🔄 Is viewing this conversation: $isViewingThisConversation');
 
-      // Only increment unread count if:
-      // 1. Message is from another user
-      // 2. User is NOT currently viewing this conversation
-      final shouldIncrementUnread =
-          isFromOtherUser && !isViewingThisConversation;
+      // Determine new unread count
+      int newUnreadCount;
+
+      if (isViewingThisConversation) {
+        // If user is viewing this conversation, always set unread count to 0
+        // regardless of who sent the message
+        newUnreadCount = 0;
+        print('🔄 User is viewing conversation - setting unread count to 0');
+      } else if (isFromOtherUser && message.senderId?.isNotEmpty == true) {
+        // Only increment if message is from another user and user is not viewing
+        newUnreadCount = conversation.unreadCount + 1;
+        print(
+            '🔄 Message from other user while not viewing - incrementing unread count');
+      } else {
+        // Keep existing unread count for own messages when not viewing
+        newUnreadCount = conversation.unreadCount;
+        print(
+            '🔄 Own message or other condition - keeping existing unread count');
+      }
+
+      print(
+          '🔄 Updated unread count: ${conversation.unreadCount} → $newUnreadCount');
 
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = conversation.copyWith(
         lastMessage: message,
         lastActivity: message.createdAt,
-        unreadCount: shouldIncrementUnread
-            ? conversation.unreadCount + 1
-            : conversation.unreadCount,
+        unreadCount: newUnreadCount,
       );
-
-      print('🔄 Should increment unread: $shouldIncrementUnread');
-      print(
-          '🔄 Updated unread count: ${conversation.unreadCount} → ${updatedConversations[index].unreadCount}');
 
       // Move to top
       final updatedConversation = updatedConversations.removeAt(index);
@@ -604,14 +641,40 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
     }
   }
 
-  void markConversationAsRead(String conversationId) {
+  Future<void> markConversationAsRead(String conversationId) async {
+    print(
+        '🔄 ConversationsNotifier.markConversationAsRead() - Conversation: $conversationId');
     final index = state.conversations.indexWhere((c) => c.id == conversationId);
     if (index != -1) {
+      final conversation = state.conversations[index];
+      print(
+          '🔄 Found conversation: ${conversation.otherUser?.displayName ?? conversation.name}');
+      print('🔄 Current unread count: ${conversation.unreadCount}');
+
+      // Update local state immediately
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = updatedConversations[index].copyWith(
         unreadCount: 0,
       );
       state = state.copyWith(conversations: updatedConversations);
+      print('🔄 Updated local unread count: ${conversation.unreadCount} → 0');
+
+      // Call server API to mark conversation as read
+      try {
+        await _chatService.markConversationAsRead(conversationId);
+        print('✅ Successfully marked conversation as read on server');
+      } catch (e) {
+        print('⚠️ Failed to mark conversation as read on server: $e');
+        // Revert local state if server call fails
+        final revertedConversations = [...state.conversations];
+        revertedConversations[index] = revertedConversations[index].copyWith(
+          unreadCount: conversation.unreadCount, // Restore original count
+        );
+        state = state.copyWith(conversations: revertedConversations);
+        print('🔄 Reverted local state due to server error');
+      }
+    } else {
+      print('⚠️ Conversation not found in local state: $conversationId');
     }
   }
 
