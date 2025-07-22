@@ -775,17 +775,41 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     loadMessages();
   }
 
-  Future<void> loadMessages({bool loadMore = false}) async {
+  Future<void> loadMessages(
+      {bool loadMore = false, bool forceRefresh = false}) async {
     if (loadMore && state.isLoadingMore) return;
-    if (!loadMore && state.isLoading) return;
+    if (!loadMore && state.isLoading && !forceRefresh) return;
 
     print(
-        '📋 ChatMessagesNotifier.loadMessages() - conversationId: $_conversationWithId, loadMore: $loadMore');
+        '📋 ChatMessagesNotifier.loadMessages() - conversationId: $_conversationWithId, loadMore: $loadMore, forceRefresh: $forceRefresh');
+
+    // Check if we should force refresh based on conversation's lastActivity
+    if (!loadMore && !forceRefresh) {
+      final conversationsState = _ref.read(conversationsProvider);
+      final conversation =
+          conversationsState.conversations.cast<Conversation?>().firstWhere(
+                (c) => c?.id == _conversationWithId,
+                orElse: () => null,
+              );
+
+      if (conversation != null) {
+        final timeSinceLastActivity =
+            DateTime.now().difference(conversation.lastActivity);
+        final shouldForceRefresh =
+            timeSinceLastActivity.inSeconds < 10; // Less than 10 seconds
+
+        if (shouldForceRefresh) {
+          print(
+              '📋 🔄 FORCE REFRESH: Conversation was recently active (${timeSinceLastActivity.inSeconds}s ago)');
+          forceRefresh = true;
+        }
+      }
+    }
 
     if (mounted) {
       state = state.copyWith(
-        isLoading: !loadMore,
-        isLoadingMore: loadMore,
+        isLoading: !loadMore || forceRefresh,
+        isLoadingMore: loadMore && !forceRefresh,
         error: null,
       );
     }
@@ -809,9 +833,11 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         }
       }
 
-      // Ensure conversation's last message is included
-      if (!loadMore && messages.isNotEmpty) {
+      // CRITICAL: Always ensure conversation's last message is included on initial load
+      if (!loadMore) {
         await _ensureLastMessageIncluded(messages);
+        print(
+            '📋 After ensuring last message - final count: ${messages.length}');
       }
 
       if (mounted) {
@@ -860,20 +886,73 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         final lastMessage = conversation!.lastMessage!;
         print(
             '📋 Conversation last message: ${lastMessage.content} (${lastMessage.createdAt})');
+        print('📋 Last message ID: ${lastMessage.id}');
 
         // Check if the last message is already in the loaded messages
         final isIncluded = loadedMessages.any((m) => m.id == lastMessage.id);
         print('📋 Last message included in loaded messages: $isIncluded');
 
-        if (!isIncluded) {
-          print('📋 Adding missing last message to the list');
+        // Also check by content and recent time as fallback (in case ID format differs)
+        final recentThreshold =
+            DateTime.now().subtract(const Duration(minutes: 5));
+        final isRecentlyIncluded = loadedMessages.any((m) =>
+            m.content == lastMessage.content &&
+            m.createdAt.isAfter(recentThreshold));
+        print('📋 Last message included by content+time: $isRecentlyIncluded');
+
+        if (!isIncluded && !isRecentlyIncluded) {
+          print('📋 ⚠️ CRITICAL: Last message missing from API response!');
+          print('📋 Adding missing last message to ensure it appears in chat');
+
+          // Create a properly formatted message from the conversation's lastMessage
+          final missingMessage = Message(
+            id: lastMessage.id.isNotEmpty
+                ? lastMessage.id
+                : 'missing_${DateTime.now().millisecondsSinceEpoch}',
+            senderId: lastMessage.senderId ?? '',
+            receiverId: lastMessage.receiverId,
+            content: lastMessage.content,
+            messageType: lastMessage.messageType,
+            replyToId: lastMessage.replyToId,
+            metadata: lastMessage.metadata,
+            reactions: lastMessage.reactions ?? const {},
+            attachments: lastMessage.attachments,
+            isEdited: lastMessage.isEdited ?? false,
+            editedAt: lastMessage.editedAt,
+            deliveredAt: lastMessage.deliveredAt,
+            readAt: lastMessage.readAt,
+            createdAt: lastMessage.createdAt,
+            updatedAt: lastMessage.updatedAt ?? lastMessage.createdAt,
+            isFromMe: lastMessage.isFromMe ?? false,
+          );
+
           // Add the last message at the end (chronological order)
-          loadedMessages.add(lastMessage);
+          loadedMessages.add(missingMessage);
+
+          // Sort messages by createdAt to maintain proper order
+          loadedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+          print(
+              '📋 ✅ Added and sorted messages. New count: ${loadedMessages.length}');
+          print(
+              '📋 ✅ Added message: ${missingMessage.content} (${missingMessage.id})');
+        } else {
+          print('📋 ✅ Last message is already included in API response');
         }
+      } else {
+        print('📋 ℹ️ No last message in conversation to check');
       }
     } catch (e) {
       print('⚠️ Error ensuring last message included: $e');
+      print('⚠️ Stack trace: ${StackTrace.current}');
     }
+  }
+
+  /// Force refresh messages to ensure sync with conversation list
+  Future<void> refreshMessages() async {
+    print(
+        '📋 🔄 ChatMessagesNotifier.refreshMessages() - Force refreshing to sync with conversations list');
+    await loadMessages(forceRefresh: true);
   }
 
   Future<void> sendMessage({

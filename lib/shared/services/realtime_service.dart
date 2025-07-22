@@ -99,6 +99,14 @@ class RealtimeService {
     _connectionController.add(false);
   }
 
+  /// Force reconnection with fresh token (useful after login)
+  Future<void> reconnect() async {
+    print('🔄 RealtimeService: Force reconnecting...');
+    disconnect();
+    await Future.delayed(const Duration(milliseconds: 500)); // Brief delay
+    await connect();
+  }
+
   void _setupEventListeners() {
     _socket!.onConnect((_) {
       print('✅ RealtimeService: Connected successfully');

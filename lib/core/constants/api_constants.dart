@@ -1,15 +1,52 @@
 import 'dart:io';
 
 class ApiConstants {
+  /// 🌐 BACKEND CONNECTION CONFIGURATION
+  ///
+  /// Update these settings based on where you're testing:
+  ///
+  /// 1. 📱 Physical Device: Set _usePhysicalDevice = true
+  /// 2. 📱 Android Emulator: Set _usePhysicalDevice = false
+  /// 3. 📱 iOS Simulator: Set _usePhysicalDevice = false
+  /// 4. 🌐 Flutter Web: Set _usePhysicalDevice = false
+  ///
+  /// To find your IP: Run `ifconfig | grep inet` in terminal
+
+  // Development machine IP (update this with your machine's IP)
+  static const String _developmentIP = '192.168.1.8';
+
+  // Set this to true when testing on physical device
+  static const bool _usePhysicalDevice = false;
+
   // Base URL - platform-aware configuration
-  static final String baseUrl = Platform.isAndroid
-      ? 'http://10.0.2.2:3001/api' // Android emulator
-      : 'http://localhost:3001/api'; // iOS simulator and others
+  static final String baseUrl = _getBaseUrl();
 
   // Socket URL (without /api suffix)
-  static final String socketUrl = Platform.isAndroid
-      ? 'http://10.0.2.2:3001' // Android emulator
-      : 'http://localhost:3001'; // iOS simulator and others
+  static final String socketUrl = _getSocketUrl();
+
+  static String _getBaseUrl() {
+    if (_usePhysicalDevice) {
+      return 'http://$_developmentIP:3001/api'; // Physical device
+    }
+
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:3001/api'; // Android emulator
+    } else {
+      return 'http://localhost:3001/api'; // iOS simulator and others
+    }
+  }
+
+  static String _getSocketUrl() {
+    if (_usePhysicalDevice) {
+      return 'http://$_developmentIP:3001'; // Physical device
+    }
+
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:3001'; // Android emulator
+    } else {
+      return 'http://localhost:3001'; // iOS simulator and others
+    }
+  }
 
   // Development/Production configuration
   static const bool enableLogging = true; // Set to false in production

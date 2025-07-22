@@ -59,6 +59,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Update last seen when entering conversation
       realtimeService.updateLastSeen(widget.conversation.id);
 
+      // CRITICAL: Force refresh messages if conversation was recently active
+      // This ensures chat messages are synced with conversation list
+      final timeSinceLastActivity =
+          DateTime.now().difference(widget.conversation.lastActivity);
+      final shouldForceRefresh =
+          timeSinceLastActivity.inSeconds < 30; // Last 30 seconds
+
+      if (shouldForceRefresh) {
+        print(
+            '📱 🔄 ChatPage: FORCE REFRESHING - Conversation was recently active (${timeSinceLastActivity.inSeconds}s ago)');
+        ref
+            .read(chatMessagesProvider(widget.conversation.id).notifier)
+            .refreshMessages();
+      }
+
       // Note: We don't immediately mark as read here - only when user scrolls to view messages
       // This ensures better UX where messages are only marked as read when actually viewed
 
@@ -286,29 +301,29 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-      // Try multiple times with increasing delays
-      _attemptScrollWithRetry(1, maxAttempts: 8);
+      // Try multiple times with increasing delays (more attempts for Android)
+      _attemptScrollWithRetry(1, maxAttempts: 12);
     });
   }
 
-  void _attemptScrollWithRetry(int attempt, {int maxAttempts = 8}) {
+  void _attemptScrollWithRetry(int attempt, {int maxAttempts = 12}) {
     if (!mounted || attempt > maxAttempts) {
       print('❌ _attemptScrollWithRetry - Stopped at attempt $attempt');
       return;
     }
 
-    print('📱 _attemptScrollWithRetry - Attempt $attempt');
+    print('📱 _attemptScrollWithRetry - Attempt $attempt (Android optimized)');
 
     if (_scrollController.hasClients &&
         _scrollController.position.maxScrollExtent > 0) {
       print('📱 ScrollController ready on attempt $attempt - executing scroll');
 
-      // Use immediate jumpTo for better reliability on mobile
+      // Use immediate jumpTo for better reliability on Android
       final targetPosition = _scrollController.position.maxScrollExtent;
       _scrollController.jumpTo(targetPosition);
 
-      // Verify we reached the bottom
-      Future.delayed(const Duration(milliseconds: 100), () {
+      // Verify we reached the bottom with longer delay for Android
+      Future.delayed(const Duration(milliseconds: 200), () {
         if (mounted && _scrollController.hasClients) {
           final currentPos = _scrollController.position.pixels;
           final maxPos = _scrollController.position.maxScrollExtent;
@@ -317,8 +332,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               '📱 Verify scroll - Current: $currentPos, Target: $maxPos, Diff: $diff');
 
           if (diff > 5) {
-            print('📱 Not at bottom, trying again');
+            print('📱 Not at bottom, trying again immediately');
             _scrollController.jumpTo(maxPos);
+
+            // Double-check after another delay
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted && _scrollController.hasClients) {
+                final finalPos = _scrollController.position.pixels;
+                final finalMax = _scrollController.position.maxScrollExtent;
+                print('📱 Final position check: $finalPos vs $finalMax');
+                if ((finalMax - finalPos).abs() > 5) {
+                  _scrollController.jumpTo(finalMax);
+                }
+              }
+            });
           } else {
             print('✅ Successfully scrolled to bottom');
             // User has been scrolled to bottom, mark conversation as read
@@ -327,8 +354,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         }
       });
     } else {
-      // Wait longer between attempts for later retries
-      final delay = Duration(milliseconds: 100 + (attempt * 50));
+      // Wait longer between attempts for later retries (Android needs more time)
+      final delay = Duration(milliseconds: 150 + (attempt * 75));
       print(
           '📱 ScrollController not ready, retrying in ${delay.inMilliseconds}ms');
       Future.delayed(delay, () {
@@ -372,29 +399,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     waitForScrollController(1);
-  }
-
-  Future<void> _refreshMessages() async {
-    try {
-      // Refresh messages and conversations
-      await Future.wait([
-        ref
-            .read(chatMessagesProvider(widget.conversation.id).notifier)
-            .loadMessages(),
-        ref.read(conversationsProvider.notifier).loadConversations(),
-      ]);
-
-      // No more success feedback notification - removed as requested
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to refresh: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
   }
 
   void _handleTyping(bool isTyping) {
@@ -451,10 +455,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           next.messages.isNotEmpty) {
         print(
             '📱 ChatPage: Auto-scrolling to bottom after initial messages loaded');
+        print('📱 ChatPage: Message count: ${next.messages.length}');
         _shouldAutoScrollOnLoad = false; // Prevent future auto-scrolls
 
-        // Use the new more reliable scroll method
+        // Use multiple scroll attempts for Android reliability
         _ensureScrollToBottom();
+
+        // Additional scroll attempts with longer delays for Android
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (mounted) {
+            print('📱 ChatPage: Secondary scroll attempt (800ms delay)');
+            _ensureScrollToBottom();
+          }
+        });
+
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) {
+            print('📱 ChatPage: Final scroll attempt (1500ms delay)');
+            _scrollToBottom(animated: false); // Force immediate scroll
+          }
+        });
       }
     });
 
@@ -881,118 +901,61 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Widget _buildMessagesList(dynamic messagesState, dynamic authState) {
-    return NotificationListener<ScrollNotification>(
-      onNotification: (scrollNotification) {
-        // Handle pull-up-to-refresh at bottom
-        if (scrollNotification is ScrollEndNotification &&
-            scrollNotification.metrics.extentAfter == 0) {
-          // User is at the bottom of the list
-          if (scrollNotification.metrics.pixels >
-              scrollNotification.metrics.maxScrollExtent + 50) {
-            // User pulled up beyond bottom - trigger refresh
-            _refreshMessages();
-          }
-        }
-        return false;
-      },
-      child: ListView.builder(
-        controller: _scrollController,
-        reverse: false,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        itemCount: messagesState.messages.length +
-            (messagesState.isLoadingMore ? 1 : 0) +
-            1, // +1 for bottom spacing/refresh area
-        itemBuilder: (context, index) {
-          // Show loading indicator at the top when loading older messages
-          if (messagesState.isLoadingMore && index == 0) {
-            return const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-
-          // Adjust index if loading indicator is shown
-          final messageIndex = messagesState.isLoadingMore ? index - 1 : index;
-
-          // Bottom refresh area (for better swipe refresh UX)
-          if (messageIndex >= messagesState.messages.length) {
-            return GestureDetector(
-              onPanUpdate: (details) {
-                // Handle pull-up gesture
-                if (details.delta.dy < -10) {
-                  // User is pulling up, show refresh hint
-                }
-              },
-              onPanEnd: (details) {
-                // Handle pull-up release
-                if (details.velocity.pixelsPerSecond.dy < -500) {
-                  // Strong upward swipe - trigger refresh
-                  _refreshMessages();
-                }
-              },
-              child: Container(
-                height: 80,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.keyboard_arrow_up,
-                      color: AppTheme.textTertiary,
-                      size: 24,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Pull up to refresh',
-                      style: TextStyle(
-                        color: AppTheme.textTertiary,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          // Return empty container if index is out of bounds
-          if (messageIndex < 0) {
-            return const SizedBox.shrink();
-          }
-
-          final message = messagesState.messages[messageIndex];
-          final isMe = message.senderId == authState.user?.id;
-          final showTimestamp = _shouldShowTimestamp(
-            message,
-            messageIndex > 0 ? messagesState.messages[messageIndex - 1] : null,
+    return ListView.builder(
+      controller: _scrollController,
+      reverse: false,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      itemCount:
+          messagesState.messages.length + (messagesState.isLoadingMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        // Show loading indicator at the top when loading older messages
+        if (messagesState.isLoadingMore && index == 0) {
+          return const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Center(child: CircularProgressIndicator()),
           );
+        }
 
-          return Column(
-            children: [
-              if (showTimestamp)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text(
-                    _formatTimestamp(message.createdAt),
-                    style: const TextStyle(
-                      color: AppTheme.textTertiary,
-                      fontSize: 12,
-                    ),
+        // Adjust index if loading indicator is shown
+        final messageIndex = messagesState.isLoadingMore ? index - 1 : index;
+
+        // Return empty container if index is out of bounds
+        if (messageIndex < 0 || messageIndex >= messagesState.messages.length) {
+          return const SizedBox.shrink();
+        }
+
+        final message = messagesState.messages[messageIndex];
+        final isMe = message.senderId == authState.user?.id;
+        final showTimestamp = _shouldShowTimestamp(
+          message,
+          messageIndex > 0 ? messagesState.messages[messageIndex - 1] : null,
+        );
+
+        return Column(
+          children: [
+            if (showTimestamp)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  _formatTimestamp(message.createdAt),
+                  style: const TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 12,
                   ),
                 ),
-              MessageBubble(
-                message: message,
-                isMe: isMe,
-                onReply: (msg) => _replyToMessage(msg),
-                onEdit: isMe ? (msg) => _editMessage(msg) : null,
-                onDelete: isMe ? (msg) => _deleteMessage(msg) : null,
               ),
-              const SizedBox(height: 4),
-            ],
-          );
-        },
-      ),
+            MessageBubble(
+              message: message,
+              isMe: isMe,
+              onReply: (msg) => _replyToMessage(msg),
+              onEdit: isMe ? (msg) => _editMessage(msg) : null,
+              onDelete: isMe ? (msg) => _deleteMessage(msg) : null,
+            ),
+            const SizedBox(height: 4),
+          ],
+        );
+      },
     );
   }
 
