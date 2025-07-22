@@ -47,6 +47,7 @@ dependencies:
   timeago: ^3.5.0
   url_launcher: ^6.1.12
   package_info_plus: ^4.0.2
+  emoji_picker_flutter: ^2.0.0
   
   # Authentication
   jwt_decoder: ^2.0.1

@@ -69,25 +69,14 @@ class AttachmentPreviewWidget extends StatelessWidget {
   }
 
   Widget _buildFullView(BuildContext context) {
-    // Group attachments by type for better presentation
-    final imageAttachments = attachments.where((a) => a.isImage).toList();
-    final otherAttachments = attachments.where((a) => !a.isImage).toList();
-
+    // Show all attachments in a simple list view
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Image gallery
-        if (imageAttachments.isNotEmpty)
-          _buildImageGallery(context, imageAttachments),
-
-        // Other attachments list
-        if (otherAttachments.isNotEmpty) ...[
-          if (imageAttachments.isNotEmpty) const SizedBox(height: 12),
-          ...otherAttachments.map((attachment) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _buildFullAttachmentItem(context, attachment),
-              )),
-        ],
+        ...attachments.map((attachment) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _buildFullAttachmentItem(context, attachment),
+            )),
       ],
     );
   }
@@ -153,46 +142,82 @@ class AttachmentPreviewWidget extends StatelessWidget {
   }
 
   Widget _buildMultipleImages(BuildContext context, List<Attachment> images) {
-    final displayImages = images.take(4).toList();
-    final hasMore = images.length > 4;
+    if (isCompact) {
+      // Compact mode: show only first 4 images with "+X more" overlay
+      final displayImages = images.take(4).toList();
+      final hasMore = images.length > 4;
 
-    return SizedBox(
-      height: 150,
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildImageThumbnail(context, displayImages[0]),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Column(
-              children: [
-                Expanded(
-                  child: _buildImageThumbnail(context, displayImages[1]),
-                ),
-                if (displayImages.length > 2) ...[
-                  const SizedBox(height: 4),
+      return SizedBox(
+        height: 150,
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildImageThumbnail(context, displayImages[0]),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Column(
+                children: [
                   Expanded(
-                    child: displayImages.length > 3 || hasMore
-                        ? _buildImageWithOverlay(
-                            context,
-                            displayImages.length > 3
-                                ? displayImages[2]
-                                : displayImages[2],
-                            hasMore
-                                ? images.length - 3
-                                : displayImages.length > 3
-                                    ? 1
-                                    : 0,
-                          )
-                        : _buildImageThumbnail(context, displayImages[2]),
+                    child: _buildImageThumbnail(context, displayImages[1]),
                   ),
+                  if (displayImages.length > 2) ...[
+                    const SizedBox(height: 4),
+                    Expanded(
+                      child: displayImages.length > 3 || hasMore
+                          ? _buildImageWithOverlay(
+                              context,
+                              displayImages.length > 3
+                                  ? displayImages[2]
+                                  : displayImages[2],
+                              hasMore
+                                  ? images.length - 3
+                                  : displayImages.length > 3
+                                      ? 1
+                                      : 0,
+                            )
+                          : _buildImageThumbnail(context, displayImages[2]),
+                    ),
+                  ],
                 ],
-              ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Full mode: show all images in a grid
+      return _buildImageGrid(context, images);
+    }
+  }
+
+  Widget _buildImageGrid(BuildContext context, List<Attachment> images) {
+    // For full view, display all images in a responsive grid
+    return Column(
+      children: [
+        for (int i = 0; i < images.length; i += 2)
+          Padding(
+            padding: EdgeInsets.only(bottom: i + 2 < images.length ? 4.0 : 0),
+            child: SizedBox(
+              height: 150,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildImageThumbnail(context, images[i]),
+                  ),
+                  if (i + 1 < images.length) ...[
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: _buildImageThumbnail(context, images[i + 1]),
+                    ),
+                  ] else
+                    const Expanded(
+                        child: SizedBox()), // Empty space if odd number
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -268,7 +293,7 @@ class AttachmentPreviewWidget extends StatelessWidget {
             ),
             if (remainingCount > 0)
               Container(
-                color: Colors.black.withOpacity(0.6),
+                color: Colors.black.withValues(alpha: 0.6),
                 child: Center(
                   child: Text(
                     '+$remainingCount',
@@ -327,7 +352,7 @@ class AttachmentPreviewWidget extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppTheme.backgroundColor.withOpacity(0.5),
+          color: AppTheme.backgroundColor.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppTheme.borderColor),
         ),
@@ -337,7 +362,8 @@ class AttachmentPreviewWidget extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: _getFileTypeColor(attachment.fileType).withOpacity(0.1),
+                color: _getFileTypeColor(attachment.fileType)
+                    .withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
@@ -389,23 +415,24 @@ class AttachmentPreviewWidget extends StatelessWidget {
         width: 60,
         height: 60,
         decoration: BoxDecoration(
-          color: AppTheme.primaryColor.withOpacity(0.1),
+          color: AppTheme.primaryColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3)),
+          border:
+              Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               '+$remainingCount',
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppTheme.primaryColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 2),
-            Text(
+            const Text(
               'more',
               style: TextStyle(
                 color: AppTheme.primaryColor,

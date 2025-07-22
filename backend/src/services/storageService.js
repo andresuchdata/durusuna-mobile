@@ -300,9 +300,9 @@ class StorageService {
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'text/plain',
       ],
-      maxSize = 50 * 1024 * 1024, // 50MB default
-      maxImageSize = 10 * 1024 * 1024, // 10MB for images
-      maxVideoSize = 100 * 1024 * 1024, // 100MB for videos
+      maxSize = 5 * 1024 * 1024, // 5MB default
+      maxImageSize = 5 * 1024 * 1024, // 5MB for images
+      maxVideoSize = 10 * 1024 * 1024, // 50MB for videos
     } = options;
 
     const errors = [];

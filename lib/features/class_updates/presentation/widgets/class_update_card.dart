@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_update.dart';
 import '../../../../shared/models/attachment.dart';
@@ -7,6 +8,7 @@ import 'attachment_preview_widget.dart';
 
 class ClassUpdateCard extends StatelessWidget {
   final ClassUpdate update;
+  final String? currentUserId;
   final Function(String emoji) onReaction;
   final VoidCallback onComment;
   final VoidCallback? onEdit;
@@ -15,6 +17,7 @@ class ClassUpdateCard extends StatelessWidget {
   const ClassUpdateCard({
     super.key,
     required this.update,
+    this.currentUserId,
     required this.onReaction,
     required this.onComment,
     this.onEdit,
@@ -30,7 +33,7 @@ class ClassUpdateCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -41,7 +44,7 @@ class ClassUpdateCard extends StatelessWidget {
         children: [
           // Header
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
             child: Row(
               children: [
                 // Author avatar
@@ -362,27 +365,63 @@ class ClassUpdateCard extends StatelessWidget {
     return Wrap(
       spacing: 8,
       children: update.reactions!.entries.map((entry) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppTheme.backgroundColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.borderColor),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(entry.key, style: const TextStyle(fontSize: 16)),
-              const SizedBox(width: 4),
-              Text(
-                '${entry.value.count}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textSecondary,
-                ),
+        final emoji = entry.key;
+        final reaction = entry.value;
+        final hasUserReacted = currentUserId != null &&
+            update.hasUserReacted(emoji, currentUserId!);
+
+        return GestureDetector(
+          onTap: () {
+            // Directly add reaction for this emoji type
+            onReaction(emoji);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: hasUserReacted
+                  ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                  : AppTheme.backgroundColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: hasUserReacted
+                    ? AppTheme.primaryColor.withValues(alpha: 0.3)
+                    : AppTheme.borderColor,
+                width: hasUserReacted ? 1.5 : 1,
               ),
-            ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  emoji,
+                  style: TextStyle(
+                    fontSize: 16,
+                    // Add a subtle glow effect for user's own reactions
+                    shadows: hasUserReacted
+                        ? [
+                            Shadow(
+                              color:
+                                  AppTheme.primaryColor.withValues(alpha: 0.3),
+                              blurRadius: 2,
+                            ),
+                          ]
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${reaction.count}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight:
+                        hasUserReacted ? FontWeight.w600 : FontWeight.w500,
+                    color: hasUserReacted
+                        ? AppTheme.primaryColor
+                        : AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -395,42 +434,41 @@ class ClassUpdateCard extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
+      isScrollControlled: true,
       builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.6,
         padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Choose a reaction',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Choose a reaction',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: EmojiPicker(
+                onEmojiSelected: (category, emoji) {
+                  Navigator.of(context).pop();
+                  onReaction(emoji.emoji);
+                },
+                config: const Config(
+                  height: 256,
+                  checkPlatformCompatibility: true,
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: ['👍', '❤️', '😊', '😮', '😢', '😡'].map((emoji) {
-                return GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onReaction(emoji);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppTheme.backgroundColor,
-                    ),
-                    child: Text(
-                      emoji,
-                      style: const TextStyle(fontSize: 24),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
           ],
         ),
       ),
@@ -440,13 +478,13 @@ class ClassUpdateCard extends StatelessWidget {
   Color _getUpdateTypeColor(UpdateType type) {
     switch (type) {
       case UpdateType.announcement:
-        return AppTheme.primaryColor.withOpacity(0.1);
+        return AppTheme.primaryColor.withValues(alpha: 0.1);
       case UpdateType.homework:
-        return AppTheme.warningColor.withOpacity(0.1);
+        return AppTheme.warningColor.withValues(alpha: 0.1);
       case UpdateType.reminder:
-        return AppTheme.infoColor.withOpacity(0.1);
+        return AppTheme.infoColor.withValues(alpha: 0.1);
       case UpdateType.event:
-        return AppTheme.successColor.withOpacity(0.1);
+        return AppTheme.successColor.withValues(alpha: 0.1);
     }
   }
 }

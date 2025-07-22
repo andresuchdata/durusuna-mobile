@@ -130,7 +130,7 @@ class _MediaUploadWidgetState extends State<MediaUploadWidget> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'You can attach up to 5 files (images, videos, documents) with a maximum size of 50MB each.',
+                      'You can attach up to 5 files (images, videos, documents) with a maximum size of 5MB each.',
                       style: TextStyle(
                         fontSize: 13,
                         color: AppTheme.primaryColor,
@@ -321,7 +321,7 @@ class _MediaUploadWidgetState extends State<MediaUploadWidget> {
     final remainingSlots = 5 - widget.currentAttachments.length;
     final files = await _mediaService.pickFiles(
       allowMultiple: remainingSlots > 1,
-      fileSizeLimit: 50 * 1024 * 1024, // 50MB
+      fileSizeLimit: 5 * 1024 * 1024, // 5MB
     );
     if (files.isNotEmpty) {
       await _uploadFiles(files.take(remainingSlots).toList());

@@ -180,6 +180,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
                             final update = updatesState.updates[index];
                             return ClassUpdateCard(
                               update: update,
+                              currentUserId: authState.user?.id,
                               onReaction: (emoji) {
                                 ref
                                     .read(classUpdatesProvider(widget.classId)

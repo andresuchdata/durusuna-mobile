@@ -90,8 +90,8 @@ router.post('/upload-attachments', auth, upload.array('attachments', 5), async (
     const validationErrors = [];
     req.files.forEach((file, index) => {
       const validation = storageService.validateFile(file.mimetype, file.size, {
-        maxSize: 50 * 1024 * 1024, // 50MB for class updates
-        maxImageSize: 10 * 1024 * 1024, // 10MB for images
+        maxSize: 5 * 1024 * 1024, // 5MB for class updates
+        maxImageSize: 5 * 1024 * 1024, // 5MB for images
         maxVideoSize: 50 * 1024 * 1024, // 50MB for videos
       });
       if (!validation.isValid) {
