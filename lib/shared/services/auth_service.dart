@@ -4,6 +4,7 @@ import '../models/user.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/constants/api_constants.dart';
 import 'api_service.dart';
+import 'realtime_service.dart';
 
 class AuthService {
   final ApiService _apiService;
@@ -14,7 +15,7 @@ class AuthService {
   Future<AuthResponse> login(String email, String password) async {
     try {
       final loginRequest = LoginRequest(email: email, password: password);
-      
+
       final response = await _apiService.post(
         ApiConstants.login,
         data: loginRequest.toJson(),
@@ -22,11 +23,22 @@ class AuthService {
 
       if (response.statusCode == 200) {
         final authResponse = AuthResponse.fromJson(response.data);
-        
+
         // Store user data and token
         await StorageService.saveUser(authResponse.user.toJson());
         await StorageService.saveToken(authResponse.accessToken);
-        
+
+        // Force reconnect realtime service with fresh token
+        print(
+            '🔄 AuthService: Login successful, reconnecting realtime service...');
+        try {
+          await RealtimeService.instance.reconnect();
+          print('✅ AuthService: Realtime service reconnected successfully');
+        } catch (e) {
+          print('⚠️ AuthService: Realtime reconnection failed: $e');
+          // Don't fail login if realtime fails
+        }
+
         return authResponse;
       } else {
         throw ApiException(
@@ -77,11 +89,11 @@ class AuthService {
 
       if (response.statusCode == 201) {
         final authResponse = AuthResponse.fromJson(response.data);
-        
+
         // Store user data and token
         await StorageService.saveUser(authResponse.user.toJson());
         await StorageService.saveToken(authResponse.accessToken);
-        
+
         return authResponse;
       } else {
         throw ApiException(
@@ -106,10 +118,10 @@ class AuthService {
       if (response.statusCode == 200) {
         final userData = response.data['user'] as Map<String, dynamic>;
         final user = User.fromJson(userData);
-        
+
         // Update stored user data
         await StorageService.saveUser(user.toJson());
-        
+
         return user;
       } else {
         throw ApiException(
@@ -139,7 +151,8 @@ class AuthService {
       if (firstName != null) updateData['first_name'] = firstName;
       if (lastName != null) updateData['last_name'] = lastName;
       if (phone != null) updateData['phone'] = phone;
-      if (dateOfBirth != null) updateData['date_of_birth'] = dateOfBirth.toIso8601String();
+      if (dateOfBirth != null)
+        updateData['date_of_birth'] = dateOfBirth.toIso8601String();
       if (preferences != null) updateData['preferences'] = preferences;
 
       final response = await _apiService.put(
@@ -150,10 +163,10 @@ class AuthService {
       if (response.statusCode == 200) {
         final userData = response.data['user'] as Map<String, dynamic>;
         final user = User.fromJson(userData);
-        
+
         // Update stored user data
         await StorageService.saveUser(user.toJson());
-        
+
         return user;
       } else {
         throw ApiException(
@@ -202,7 +215,8 @@ class AuthService {
   /// Refresh authentication token
   Future<String?> refreshToken() async {
     try {
-      final refreshToken = StorageService.getToken(); // In production, use separate refresh token
+      final refreshToken = StorageService
+          .getToken(); // In production, use separate refresh token
       if (refreshToken == null) return null;
 
       final response = await _apiService.post(
@@ -230,8 +244,13 @@ class AuthService {
       // Continue with local logout even if server call fails
       print('Logout API call failed: $e');
     } finally {
+      // Disconnect realtime service
+      print('🔌 AuthService: Logout - disconnecting realtime service...');
+      RealtimeService.instance.disconnect();
+
       // Clear local storage
       await StorageService.clearUser();
+      print('✅ AuthService: Logout completed');
     }
   }
 
@@ -253,22 +272,25 @@ class AuthService {
 
   /// Validate email format
   static bool isValidEmail(String email) {
-    return RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(email);
+    return RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+        .hasMatch(email);
   }
 
   /// Validate password strength
   static bool isValidPassword(String password) {
     // At least 8 characters, one uppercase, one lowercase, one digit, one special character
-    return RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$').hasMatch(password);
+    return RegExp(
+            r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$')
+        .hasMatch(password);
   }
 
   /// Get password strength description
   static String getPasswordStrengthMessage() {
     return 'Password must be at least 8 characters long and contain:\n'
-           '• At least one uppercase letter\n'
-           '• At least one lowercase letter\n'
-           '• At least one number\n'
-           '• At least one special character (@\$!%*?&)';
+        '• At least one uppercase letter\n'
+        '• At least one lowercase letter\n'
+        '• At least one number\n'
+        '• At least one special character (@\$!%*?&)';
   }
 }
 
@@ -279,7 +301,8 @@ final authServiceProvider = Provider<AuthService>((ref) {
 });
 
 // Auth state provider
-final authStateProvider = StateNotifierProvider<AuthStateNotifier, AuthState>((ref) {
+final authStateProvider =
+    StateNotifierProvider<AuthStateNotifier, AuthState>((ref) {
   final authService = ref.read(authServiceProvider);
   return AuthStateNotifier(authService);
 });
@@ -322,7 +345,7 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
   void _checkAuthStatus() {
     final user = _authService.getCurrentUserFromStorage();
     final isAuthenticated = _authService.isLoggedIn();
-    
+
     state = state.copyWith(
       user: user,
       isAuthenticated: isAuthenticated,
@@ -331,7 +354,7 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
 
   Future<void> login(String email, String password) async {
     state = state.copyWith(isLoading: true, error: null);
-    
+
     try {
       final authResponse = await _authService.login(email, password);
       state = state.copyWith(
@@ -362,7 +385,7 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
     String? employeeId,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
-    
+
     try {
       final authResponse = await _authService.register(
         email: email,
@@ -376,7 +399,7 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
         studentId: studentId,
         employeeId: employeeId,
       );
-      
+
       state = state.copyWith(
         user: authResponse.user,
         isAuthenticated: true,
@@ -394,7 +417,7 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     state = state.copyWith(isLoading: true);
-    
+
     try {
       await _authService.logout();
       state = AuthState(); // Reset to initial state
@@ -406,7 +429,7 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
 
   Future<void> refreshUser() async {
     if (!state.isAuthenticated) return;
-    
+
     try {
       final user = await _authService.getCurrentUser();
       state = state.copyWith(user: user);
@@ -421,4 +444,4 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
   void clearError() {
     state = state.copyWith(error: null);
   }
-} 
+}
