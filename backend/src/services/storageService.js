@@ -254,14 +254,18 @@ class StorageService {
       'text/plain',
     ].includes(file.mimeType);
 
+    // Ensure size is a valid number
+    const fileSize = typeof file.size === 'number' ? file.size : parseInt(file.size) || 0;
+
     return {
       ...file,
+      size: fileSize, // Ensure size is always a number
       fileType: isImage ? 'image' : isVideo ? 'video' : isAudio ? 'audio' : isDocument ? 'document' : 'other',
       isImage,
       isVideo,
       isAudio,
       isDocument,
-      sizeFormatted: this.formatFileSize(file.size),
+      sizeFormatted: this.formatFileSize(fileSize),
     };
   }
 

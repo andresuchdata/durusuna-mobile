@@ -140,6 +140,7 @@ router.post('/upload-attachments', auth, upload.array('attachments', 5), async (
     // Format attachments for class updates
     const formattedAttachments = uploadedFiles.map(file => {
       const metadata = storageService.getFileMetadata(file);
+      
       return {
         id: uuidv4(),
         fileName: file.fileName,
@@ -336,39 +337,43 @@ router.get('/:classId', auth, async (req, res) => {
     });
 
     // Format response with comment counts
-    const formattedUpdates = updates.map(update => ({
-      id: update.id,
-      class_id: update.class_id,
-      author_id: update.author_id,
-      title: update.title,
-      content: update.content,
-      update_type: update.update_type,
-              attachments: safeJsonParse(update.attachments, []),
+    const formattedUpdates = updates.map(update => {
+      const attachments = safeJsonParse(update.attachments, []);
+      
+      return {
+        id: update.id,
+        class_id: update.class_id,
+        author_id: update.author_id,
+        title: update.title,
+        content: update.content,
+        update_type: update.update_type,
+        attachments: attachments,
         reactions: migrateReactions(safeJsonParse(update.reactions, {})),
-      is_pinned: update.is_pinned,
-      is_edited: update.is_edited,
-      edited_at: update.edited_at,
-      is_deleted: update.is_deleted,
-      deleted_at: update.deleted_at,
-      created_at: update.created_at,
-      updated_at: update.updated_at,
-      author: {
-        id: update.author_user_id,
-        first_name: update.author_first_name,
-        last_name: update.author_last_name,
-        email: update.author_email,
-        phone: update.author_phone,
-        avatar_url: update.author_avatar || "",
-        user_type: update.author_user_type,
-        role: update.author_role,
-        school_id: update.author_school_id,
-        is_active: update.author_is_active,
-        last_active_at: update.author_last_active_at,
-        created_at: update.author_created_at,
-        updated_at: update.author_updated_at
-      },
-      comments_count: commentCountMap[update.id] || 0
-    }));
+        is_pinned: update.is_pinned,
+        is_edited: update.is_edited,
+        edited_at: update.edited_at,
+        is_deleted: update.is_deleted,
+        deleted_at: update.deleted_at,
+        created_at: update.created_at,
+        updated_at: update.updated_at,
+        author: {
+          id: update.author_user_id,
+          first_name: update.author_first_name,
+          last_name: update.author_last_name,
+          email: update.author_email,
+          phone: update.author_phone,
+          avatar_url: update.author_avatar || "",
+          user_type: update.author_user_type,
+          role: update.author_role,
+          school_id: update.author_school_id,
+          is_active: update.author_is_active,
+          last_active_at: update.author_last_active_at,
+          created_at: update.author_created_at,
+          updated_at: update.author_updated_at
+        },
+        comments_count: commentCountMap[update.id] || 0
+      };
+    });
 
     res.json({
       updates: formattedUpdates,

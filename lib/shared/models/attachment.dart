@@ -52,7 +52,7 @@ class Attachment {
             json['original_name']?.toString() ??
             '',
         mimeType: json['mimeType']?.toString() ??
-            json['mime_type']?.toString() ??
+            json['mime_type']?.toStrings() ??
             'application/octet-stream',
         size: json['size'] is int
             ? json['size']
@@ -122,6 +122,30 @@ class Attachment {
   String get fileExtension {
     final parts = originalName.split('.');
     return parts.length > 1 ? parts.last.toLowerCase() : '';
+  }
+
+  /// Get properly formatted file size with fallback calculation
+  String get sizeFormattedWithFallback {
+    // If we have a valid sizeFormatted field and it's not "0 B", use it
+    if (sizeFormatted.isNotEmpty &&
+        sizeFormatted != '0 B' &&
+        !sizeFormatted.startsWith('0.0')) {
+      return sizeFormatted;
+    }
+
+    // Otherwise, calculate it from the size field
+    if (size <= 0) return '0 B';
+
+    const List<String> suffixes = ['B', 'KB', 'MB', 'GB'];
+    int suffixIndex = 0;
+    double fileSize = size.toDouble();
+
+    while (fileSize >= 1024 && suffixIndex < suffixes.length - 1) {
+      fileSize /= 1024;
+      suffixIndex++;
+    }
+
+    return '${fileSize.toStringAsFixed(fileSize < 10 ? 1 : 0)} ${suffixes[suffixIndex]}';
   }
 
   /// Check if this is a media file (image or video)

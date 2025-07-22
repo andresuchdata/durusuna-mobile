@@ -5,3 +5,4 @@ export 'attachment_preview.dart';
 export 'attachment_viewer_page.dart';
 export 'profile_card.dart';
 export 'group_profile_card.dart';
+export 'robust_image_widget.dart';

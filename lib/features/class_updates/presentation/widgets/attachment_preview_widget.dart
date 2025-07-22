@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/attachment.dart';
 import '../../../../shared/widgets/attachment_viewer_page.dart';
+import '../../../../shared/widgets/robust_image_widget.dart';
 
 class AttachmentPreviewWidget extends StatelessWidget {
   final List<Attachment> attachments;
@@ -112,16 +113,16 @@ class AttachmentPreviewWidget extends StatelessWidget {
           color: AppTheme.backgroundColor,
         ),
         clipBehavior: Clip.hardEdge,
-        child: CachedNetworkImage(
+        child: RobustImageWidget(
           imageUrl: image.url,
           fit: BoxFit.cover,
-          placeholder: (context, url) => Container(
+          placeholder: Container(
             color: AppTheme.backgroundColor,
             child: const Center(
               child: CircularProgressIndicator(),
             ),
           ),
-          errorWidget: (context, url, error) => Container(
+          errorWidget: Container(
             color: AppTheme.backgroundColor,
             child: const Icon(
               Icons.broken_image,
@@ -204,10 +205,10 @@ class AttachmentPreviewWidget extends StatelessWidget {
           color: AppTheme.backgroundColor,
         ),
         clipBehavior: Clip.hardEdge,
-        child: CachedNetworkImage(
+        child: RobustImageWidget(
           imageUrl: image.thumbnailUrl ?? image.url,
           fit: BoxFit.cover,
-          placeholder: (context, url) => Container(
+          placeholder: Container(
             color: AppTheme.backgroundColor,
             child: const Center(
               child: SizedBox(
@@ -217,7 +218,7 @@ class AttachmentPreviewWidget extends StatelessWidget {
               ),
             ),
           ),
-          errorWidget: (context, url, error) => Container(
+          errorWidget: Container(
             color: AppTheme.backgroundColor,
             child: const Icon(
               Icons.broken_image,
@@ -243,10 +244,10 @@ class AttachmentPreviewWidget extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            CachedNetworkImage(
+            RobustImageWidget(
               imageUrl: image.thumbnailUrl ?? image.url,
               fit: BoxFit.cover,
-              placeholder: (context, url) => Container(
+              placeholder: Container(
                 color: AppTheme.backgroundColor,
                 child: const Center(
                   child: SizedBox(
@@ -256,7 +257,7 @@ class AttachmentPreviewWidget extends StatelessWidget {
                   ),
                 ),
               ),
-              errorWidget: (context, url, error) => Container(
+              errorWidget: Container(
                 color: AppTheme.backgroundColor,
                 child: const Icon(
                   Icons.broken_image,
@@ -293,24 +294,22 @@ class AttachmentPreviewWidget extends StatelessWidget {
         width: 60,
         height: 60,
         decoration: BoxDecoration(
-          color: _getFileTypeColor(attachment.fileType).withOpacity(0.1),
+          color: _getFileTypeColor(attachment.fileType).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppTheme.borderColor),
         ),
         child: attachment.isImage
-            ? ClipRRect(
+            ? RobustImageWidget(
+                imageUrl: attachment.thumbnailUrl ?? attachment.url,
                 borderRadius: BorderRadius.circular(7),
-                child: CachedNetworkImage(
-                  imageUrl: attachment.thumbnailUrl ?? attachment.url,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => const Icon(
-                    Icons.image,
-                    color: AppTheme.textSecondary,
-                  ),
-                  errorWidget: (context, url, error) => const Icon(
-                    Icons.broken_image,
-                    color: AppTheme.textTertiary,
-                  ),
+                fit: BoxFit.cover,
+                placeholder: const Icon(
+                  Icons.image,
+                  color: AppTheme.textSecondary,
+                ),
+                errorWidget: const Icon(
+                  Icons.broken_image,
+                  color: AppTheme.textTertiary,
                 ),
               )
             : Icon(
@@ -363,7 +362,7 @@ class AttachmentPreviewWidget extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${attachment.fileTypeDescription} • ${attachment.sizeFormatted}',
+                    '${attachment.fileTypeDescription} • ${attachment.sizeFormattedWithFallback}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppTheme.textTertiary,

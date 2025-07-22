@@ -199,7 +199,7 @@ class _MediaUploadWidgetState extends State<MediaUploadWidget> {
                     const Text(' • ',
                         style: TextStyle(color: AppTheme.textTertiary)),
                     Text(
-                      attachment.sizeFormatted,
+                      attachment.sizeFormattedWithFallback,
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textTertiary,

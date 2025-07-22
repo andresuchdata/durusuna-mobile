@@ -169,10 +169,13 @@ class AttachmentList extends StatelessWidget {
   Widget _buildAttachmentPreview(
       Map<String, dynamic> attachment, AttachmentPreviewMode previewMode) {
     return AttachmentPreview(
-      fileName: attachment['fileName'] ?? 'Unknown File',
-      fileType: attachment['fileType'] ?? 'application/octet-stream',
-      fileSize: attachment['fileSize'] ?? 0,
-      fileUrl: attachment['fileUrl'],
+      fileName:
+          attachment['fileName'] ?? attachment['filename'] ?? 'Unknown File',
+      fileType: attachment['mimeType'] ??
+          attachment['fileType'] ??
+          'application/octet-stream',
+      fileSize: attachment['size'] ?? attachment['fileSize'] ?? 0,
+      fileUrl: attachment['url'] ?? attachment['fileUrl'],
       mode: previewMode,
       onTap: () => _handleAttachmentTap(attachment),
     );
@@ -254,29 +257,42 @@ class AttachmentList extends StatelessWidget {
   }
 
   Future<void> _handleAttachmentTap(Map<String, dynamic> attachment) async {
-    final fileUrl = attachment['fileUrl'] as String?;
-    final fileName = attachment['fileName'] as String;
-    final fileType = attachment['fileType'] as String;
+    final fileUrl = (attachment['url'] ?? attachment['fileUrl']) as String?;
+    final fileName = (attachment['fileName'] ??
+        attachment['filename'] ??
+        'Unknown File') as String;
+    final mimeType = (attachment['mimeType'] ??
+        attachment['fileType'] ??
+        'application/octet-stream') as String;
 
-    if (fileUrl == null) return;
+    if (fileUrl == null || fileUrl.isEmpty) {
+      debugPrint('File URL not available for: $fileName');
+      return;
+    }
 
     try {
-      // For now, just try to open the URL
-      // In a real app, you'd want to:
-      // 1. Download the file for viewing
-      // 2. Use a file viewer for different types
-      // 3. Handle authentication if needed
+      // Handle different URL formats
+      String downloadUrl = fileUrl;
 
-      final uri = Uri.parse(fileUrl);
+      // If it's a relative URL, make it absolute
+      if (fileUrl.startsWith('/')) {
+        downloadUrl = 'http://localhost:3001$fileUrl';
+      } else if (!fileUrl.startsWith('http')) {
+        downloadUrl = 'http://localhost:3001/api/uploads/serve/$fileUrl';
+      }
+
+      debugPrint('Attempting to open: $downloadUrl');
+
+      // Try to open the file
+      final uri = Uri.parse(downloadUrl);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+        debugPrint('Successfully opened: $fileName');
       } else {
-        // Show error - could not open file
-        debugPrint('Could not launch $fileUrl');
+        debugPrint('Unable to open file: $fileName at $downloadUrl');
       }
     } catch (e) {
-      // Handle error
-      debugPrint('Error opening attachment: $e');
+      debugPrint('Error opening attachment $fileName: $e');
     }
   }
 }
