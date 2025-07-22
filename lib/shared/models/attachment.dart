@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'attachment.g.dart';
@@ -40,8 +41,65 @@ class Attachment {
     this.metadata,
   });
 
-  factory Attachment.fromJson(Map<String, dynamic> json) =>
-      _$AttachmentFromJson(json);
+  factory Attachment.fromJson(Map<String, dynamic> json) {
+    try {
+      // Safely parse JSON with null checks and defaults
+      return Attachment(
+        id: json['id']?.toString() ?? '',
+        fileName:
+            json['fileName']?.toString() ?? json['filename']?.toString() ?? '',
+        originalName: json['originalName']?.toString() ??
+            json['original_name']?.toString() ??
+            '',
+        mimeType: json['mimeType']?.toString() ??
+            json['mime_type']?.toString() ??
+            'application/octet-stream',
+        size: json['size'] is int
+            ? json['size']
+            : int.tryParse(json['size']?.toString() ?? '0') ?? 0,
+        url: json['url']?.toString() ?? '',
+        key: json['key']?.toString() ?? '',
+        fileType: json['fileType']?.toString() ??
+            json['file_type']?.toString() ??
+            'other',
+        isImage: json['isImage'] == true || json['is_image'] == true,
+        isVideo: json['isVideo'] == true || json['is_video'] == true,
+        isAudio: json['isAudio'] == true || json['is_audio'] == true,
+        isDocument: json['isDocument'] == true || json['is_document'] == true,
+        sizeFormatted: json['sizeFormatted']?.toString() ??
+            json['size_formatted']?.toString() ??
+            '0 B',
+        uploadedBy: json['uploadedBy']?.toString() ??
+            json['uploaded_by']?.toString() ??
+            '',
+        uploadedAt: json['uploadedAt'] != null
+            ? DateTime.tryParse(json['uploadedAt'].toString()) ?? DateTime.now()
+            : json['uploaded_at'] != null
+                ? DateTime.tryParse(json['uploaded_at'].toString()) ??
+                    DateTime.now()
+                : DateTime.now(),
+        metadata:
+            json['metadata'] is Map<String, dynamic> ? json['metadata'] : null,
+      );
+    } catch (e) {
+      debugPrint('Error parsing attachment JSON: $e');
+      // Return a minimal valid attachment object
+      return Attachment(
+        id: json['id']?.toString() ?? 'unknown',
+        fileName: json['fileName']?.toString() ?? 'unknown',
+        originalName: json['originalName']?.toString() ?? 'unknown',
+        mimeType: 'application/octet-stream',
+        size: 0,
+        url: '',
+        key: '',
+        fileType: 'other',
+        sizeFormatted: '0 B',
+        uploadedBy: '',
+        uploadedAt: DateTime.now(),
+      );
+    }
+  }
+
   Map<String, dynamic> toJson() => _$AttachmentToJson(this);
 
   /// Get a human-readable description of the file type

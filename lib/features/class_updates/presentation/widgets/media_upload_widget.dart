@@ -357,27 +357,44 @@ class _MediaUploadWidgetState extends State<MediaUploadWidget> {
       final updatedAttachments = [...widget.currentAttachments, ...attachments];
       widget.onAttachmentsChanged(updatedAttachments);
 
+      // Use post-frame callback to avoid widget lifecycle issues
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('${attachments.length} file(s) uploaded successfully'),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && context.mounted) {
+            try {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      '${attachments.length} file(s) uploaded successfully'),
+                  backgroundColor: AppTheme.successColor,
+                ),
+              );
+            } catch (e) {
+              debugPrint('Error showing success snackbar: $e');
+            }
+          }
+        });
       }
     } catch (e) {
-      setState(() {
-        _isUploading = false;
-      });
-
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Upload failed: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
+        setState(() {
+          _isUploading = false;
+        });
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && context.mounted) {
+            try {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Upload failed: $e'),
+                  backgroundColor: AppTheme.errorColor,
+                ),
+              );
+            } catch (e) {
+              debugPrint('Error showing error snackbar: $e');
+            }
+          }
+        });
       }
     }
   }

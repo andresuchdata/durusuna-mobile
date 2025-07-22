@@ -76,7 +76,10 @@ class MediaService {
         imageQuality: imageQuality,
       );
 
-      if (image == null) return null;
+      if (image == null) {
+        debugPrint('Image picker cancelled by user');
+        return null;
+      }
 
       final bytes = await image.readAsBytes();
       final mimeType = lookupMimeType(image.path) ?? 'image/jpeg';
@@ -90,8 +93,12 @@ class MediaService {
         type: MediaType.image,
       );
     } catch (e) {
-      if (kDebugMode) {
-        print('Error picking image: $e');
+      debugPrint('Error picking image: $e');
+      // Check for permission-specific errors
+      if (e.toString().contains('Permission') ||
+          e.toString().contains('denied') ||
+          e.toString().contains('authorization')) {
+        debugPrint('Camera/Photo permission denied');
       }
       return null;
     }
