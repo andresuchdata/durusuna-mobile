@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_theme.dart';
+import '../../core/utils/url_utils.dart';
 import 'attachment_preview.dart';
 
 class AttachmentList extends StatelessWidget {
@@ -280,6 +281,9 @@ class AttachmentList extends StatelessWidget {
       } else if (!fileUrl.startsWith('http')) {
         downloadUrl = 'http://localhost:3001/api/uploads/serve/$fileUrl';
       }
+
+      // Rewrite URL for platform compatibility (Android emulator needs 10.0.2.2)
+      downloadUrl = UrlUtils.rewriteUrl(downloadUrl);
 
       debugPrint('Attempting to open: $downloadUrl');
 

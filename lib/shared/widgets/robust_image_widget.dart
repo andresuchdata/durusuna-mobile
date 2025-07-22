@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_theme.dart';
 import '../../core/storage/storage_service.dart';
+import '../../core/utils/url_utils.dart';
 
 class RobustImageWidget extends StatefulWidget {
   final String imageUrl;
@@ -60,8 +61,10 @@ class _RobustImageWidgetState extends State<RobustImageWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final rewrittenUrl = UrlUtils.rewriteAttachmentUrl(widget.imageUrl);
+
     final content = CachedNetworkImage(
-      imageUrl: widget.imageUrl,
+      imageUrl: rewrittenUrl,
       width: widget.width,
       height: widget.height,
       fit: widget.fit,
@@ -77,7 +80,7 @@ class _RobustImageWidgetState extends State<RobustImageWidget> {
         // Try fallback without auth headers if initial request failed
         if (_authToken != null) {
           return CachedNetworkImage(
-            imageUrl: widget.imageUrl,
+            imageUrl: rewrittenUrl,
             width: widget.width,
             height: widget.height,
             fit: widget.fit,
