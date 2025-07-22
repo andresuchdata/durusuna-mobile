@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_update.dart';
-import '../../../../shared/widgets/attachment_list.dart';
-import '../../../../shared/widgets/attachment_viewer_page.dart';
+import '../../../../shared/models/attachment.dart';
+import 'attachment_preview_widget.dart';
 
 class ClassUpdateCard extends StatelessWidget {
   final ClassUpdate update;
@@ -276,15 +276,35 @@ class ClassUpdateCard extends StatelessWidget {
   }
 
   Widget _buildAttachments(BuildContext context) {
+    // Safely convert attachment JSON to Attachment objects
+    final attachments = <Attachment>[];
+
+    try {
+      if (update.attachments != null && update.attachments is List) {
+        final attachmentList = update.attachments as List;
+        for (final item in attachmentList) {
+          try {
+            if (item != null && item is Map<String, dynamic>) {
+              final attachment = Attachment.fromJson(item);
+              attachments.add(attachment);
+            }
+          } catch (e) {
+            // Skip invalid attachment data
+            debugPrint('Error parsing attachment: $e');
+          }
+        }
+      }
+    } catch (e) {
+      // Skip all attachments if there's a parsing error
+      debugPrint('Error parsing attachments: $e');
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      child: AttachmentList(
-        attachments: update.attachments ?? [],
-        mode: AttachmentListMode.vertical,
-        maxItems: 3, // Show max 3 attachments, then "X more"
-        onMoreTap: () {
-          _showAllAttachments(context);
-        },
+      child: AttachmentPreviewWidget(
+        attachments: attachments,
+        isCompact: true,
+        onTap: () => _showAllAttachments(context),
       ),
     );
   }
@@ -292,11 +312,47 @@ class ClassUpdateCard extends StatelessWidget {
   void _showAllAttachments(BuildContext context) {
     if (update.attachments == null || update.attachments!.isEmpty) return;
 
+    // Safely convert attachments to Attachment objects for full view
+    final attachments = <Attachment>[];
+
+    try {
+      if (update.attachments is List) {
+        final attachmentList = update.attachments as List;
+        for (final item in attachmentList) {
+          try {
+            if (item != null && item is Map<String, dynamic>) {
+              final attachment = Attachment.fromJson(item);
+              attachments.add(attachment);
+            }
+          } catch (e) {
+            debugPrint('Error parsing attachment: $e');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error parsing attachments: $e');
+      return; // Exit early if there's an error
+    }
+
+    if (attachments.isEmpty) return;
+
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => AttachmentViewerPage(
-          attachments: update.attachments!,
-          title: update.displayTitle,
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: Text(update.displayTitle),
+            backgroundColor: Colors.white,
+            foregroundColor: AppTheme.textPrimary,
+            elevation: 0,
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: AttachmentPreviewWidget(
+              attachments: attachments,
+              isCompact: false,
+              showTitle: false,
+            ),
+          ),
         ),
       ),
     );

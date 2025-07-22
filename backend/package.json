@@ -20,6 +20,8 @@
     "db:fresh": "npm run db:reset"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.450.0",
+    "@aws-sdk/s3-request-presigner": "^3.450.0",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.40.0",
     "compression": "^1.7.4",
@@ -32,9 +34,11 @@
     "joi": "^17.9.2",
     "jsonwebtoken": "^9.0.2",
     "knex": "^2.5.1",
+    "mime-types": "^2.1.35",
     "moment": "^2.29.4",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+    "multer-s3": "^3.0.1",
     "nodemailer": "^6.9.4",
     "pg": "^8.11.1",
     "sharp": "^0.32.4",
