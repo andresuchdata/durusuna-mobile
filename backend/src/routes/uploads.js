@@ -250,4 +250,40 @@ router.get('/serve/:filename', async (req, res) => {
   }
 });
 
+// Serve files through backend API (eliminates need for direct S3 access)
+router.get('/serve/:folder/:year/:month/:filename', async (req, res) => {
+  try {
+    const { folder, year, month, filename } = req.params;
+    const key = `${folder}/${year}/${month}/${filename}`;
+
+    // Get file stream directly from S3
+    const { GetObjectCommand } = require('@aws-sdk/client-s3');
+    const command = new GetObjectCommand({
+      Bucket: process.env.S3_BUCKET_NAME || 'durusuna-uploads',
+      Key: key,
+    });
+
+    const s3Client = storageService.s3Client;
+    const s3Response = await s3Client.send(command);
+
+    // Set appropriate headers
+    res.set({
+      'Content-Type': s3Response.ContentType || 'application/octet-stream',
+      'Content-Length': s3Response.ContentLength,
+      'Cache-Control': 'public, max-age=86400', // 24 hours cache
+      'ETag': s3Response.ETag,
+      'Last-Modified': s3Response.LastModified,
+    });
+
+    // Stream the file data
+    s3Response.Body.pipe(res);
+  } catch (error) {
+    logger.error('Error serving file:', error);
+    if (error.name === 'NoSuchKey') {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    res.status(500).json({ error: 'Failed to serve file' });
+  }
+});
+
 module.exports = router; 

@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
 
 class StorageService {
   constructor() {
-    this.s3Client = new S3Client({
+    this._s3Client = new S3Client({
       endpoint: process.env.S3_ENDPOINT,
       region: process.env.S3_REGION || 'us-east-1',
       credentials: {
@@ -17,6 +17,15 @@ class StorageService {
       forcePathStyle: true, // Required for MinIO
     });
     this.bucketName = process.env.S3_BUCKET_NAME || 'durusuna-uploads';
+  }
+
+  // Getter for S3 client (for direct access when needed)
+  get s3Client() {
+    return this._s3Client;
+  }
+
+  set s3Client(client) {
+    this._s3Client = client;
   }
 
   /**
@@ -61,10 +70,12 @@ class StorageService {
         },
       });
 
-      await this.s3Client.send(command);
+      await this._s3Client.send(command);
 
-      // Generate public URL
-      const url = `${process.env.S3_ENDPOINT}/${this.bucketName}/${key}`;
+      // Generate URL through backend API (eliminates storage endpoint exposure)
+      const backendUrl = process.env.BACKEND_PUBLIC_URL || 'http://localhost:3001';
+      const pathParts = key.split('/');
+      const url = `${backendUrl}/api/uploads/serve/${pathParts.join('/')}`;
 
       return {
         key,
@@ -177,7 +188,7 @@ class StorageService {
         Key: key,
       });
 
-      await this.s3Client.send(command);
+      await this._s3Client.send(command);
       return true;
     } catch (error) {
       logger.error('Error deleting file from S3:', error);
@@ -200,7 +211,7 @@ class StorageService {
         ContentType: contentType,
       });
 
-      return await getSignedUrl(this.s3Client, command, { expiresIn });
+      return await getSignedUrl(this._s3Client, command, { expiresIn });
     } catch (error) {
       logger.error('Error generating presigned URL:', error);
       throw new Error(`Presigned URL generation failed: ${error.message}`);
@@ -220,7 +231,7 @@ class StorageService {
         Key: key,
       });
 
-      return await getSignedUrl(this.s3Client, command, { expiresIn });
+      return await getSignedUrl(this._s3Client, command, { expiresIn });
     } catch (error) {
       logger.error('Error generating presigned download URL:', error);
       throw new Error(`Presigned download URL generation failed: ${error.message}`);
