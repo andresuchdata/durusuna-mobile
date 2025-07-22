@@ -7,7 +7,9 @@ import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/message.dart';
+import '../../../../shared/models/user.dart';
 import '../../../../shared/widgets/widgets.dart';
+import '../../../../shared/widgets/group_profile_card.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
 
@@ -267,44 +269,45 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
   }
 
-  /// Show profile card for the other user in conversation
+  /// Show profile card for the conversation (user profile for direct, group profile for group)
   void _showProfileCard() {
-    // Only show profile for direct conversations
-    if (widget.conversation.type != 'direct' ||
-        widget.conversation.otherUser == null) {
-      return;
+    if (widget.conversation.type == 'group') {
+      // Show group profile card - using showModalBottomSheet directly for now
+      _showGroupProfileBottomSheet();
+    } else if (widget.conversation.type == 'direct' &&
+        widget.conversation.otherUser != null) {
+      // Show individual user profile for direct conversations
+      final otherUser = widget.conversation.otherUser!;
+
+      ProfileCard.show(
+        context,
+        user: otherUser,
+        isOnline: _isOtherUserOnline,
+        lastSeen: widget.conversation.lastActivity,
+        onStartChat: () {
+          // Already in chat, just close the modal
+          Navigator.of(context).pop();
+        },
+        onCall: () {
+          Navigator.of(context).pop();
+          // TODO: Implement voice call
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Voice call coming soon')),
+          );
+        },
+        onVideoCall: () {
+          Navigator.of(context).pop();
+          // TODO: Implement video call
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Video call coming soon')),
+          );
+        },
+        onBlock: () {
+          Navigator.of(context).pop();
+          _showBlockUserDialog();
+        },
+      );
     }
-
-    final otherUser = widget.conversation.otherUser!;
-
-    ProfileCard.show(
-      context,
-      user: otherUser,
-      isOnline: _isOtherUserOnline,
-      lastSeen: widget.conversation.lastActivity,
-      onStartChat: () {
-        // Already in chat, just close the modal
-        Navigator.of(context).pop();
-      },
-      onCall: () {
-        Navigator.of(context).pop();
-        // TODO: Implement voice call
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Voice call coming soon')),
-        );
-      },
-      onVideoCall: () {
-        Navigator.of(context).pop();
-        // TODO: Implement video call
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Video call coming soon')),
-        );
-      },
-      onBlock: () {
-        Navigator.of(context).pop();
-        _showBlockUserDialog();
-      },
-    );
   }
 
   Future<void> _sendMessage({String? content, MessageType? messageType}) async {
@@ -1358,6 +1361,433 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ],
       ),
     );
+  }
+
+  void _showLeaveGroupDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Leave Group'),
+        content: Text(
+            'Are you sure you want to leave "${_getDisplayName()}"? You won\'t be able to see new messages.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // TODO: Implement leave group functionality
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('Leave group functionality coming soon')),
+              );
+            },
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showGroupProfileBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 8, bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header Section
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Column(
+                children: [
+                  // Group Avatar
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundColor: AppTheme.primaryColor,
+                    backgroundImage:
+                        widget.conversation.avatarUrl?.isNotEmpty == true
+                            ? NetworkImage(widget.conversation.avatarUrl!)
+                            : null,
+                    child: widget.conversation.avatarUrl?.isEmpty != false
+                        ? const Icon(
+                            Icons.group,
+                            size: 50,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Group Name
+                  Text(
+                    widget.conversation.name ?? 'Group Chat',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Group Description
+                  if (widget.conversation.description?.isNotEmpty == true)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        widget.conversation.description!,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.textSecondary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+
+                  // Group Info
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Column(
+                          children: [
+                            const Icon(Icons.people,
+                                size: 20, color: AppTheme.primaryColor),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${widget.conversation.participants.length}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const Text(
+                              'Members',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          width: 1,
+                          height: 40,
+                          color: AppTheme.borderColor,
+                        ),
+                        Column(
+                          children: [
+                            const Icon(Icons.calendar_today,
+                                size: 20, color: AppTheme.primaryColor),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatGroupDate(widget.conversation.createdAt),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const Text(
+                              'Created',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Members Section
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Members Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Members',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${widget.conversation.participants.length}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Members List
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      itemCount: widget.conversation.participants.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 4),
+                      itemBuilder: (context, index) {
+                        final member = widget.conversation.participants[index];
+                        return _buildGroupMemberTile(member);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Bottom Actions
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppTheme.backgroundColor,
+                border: Border(
+                  top: BorderSide(color: AppTheme.borderColor, width: 1),
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Media & Files Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Media & Files coming soon')),
+                        );
+                      },
+                      icon: const Icon(Icons.photo_library, size: 18),
+                      label: const Text('Media & Files'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.textPrimary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Leave Group Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _showLeaveGroupDialog();
+                      },
+                      icon: const Icon(Icons.exit_to_app, size: 18),
+                      label: const Text('Leave Group'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.errorColor,
+                        side: BorderSide(color: AppTheme.errorColor),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupMemberTile(User member) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      leading: CircleAvatar(
+        radius: 22,
+        backgroundColor: AppTheme.primaryColor,
+        backgroundImage: member.avatarUrl?.isNotEmpty == true
+            ? NetworkImage(member.avatarUrl!)
+            : null,
+        child: member.avatarUrl?.isEmpty != false
+            ? Text(
+                '${member.firstName[0]}${member.lastName[0]}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              )
+            : null,
+      ),
+      title: Text(
+        member.displayName,
+        style: const TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 16,
+        ),
+      ),
+      subtitle: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: _getGroupMemberTypeColor(member.userType).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              _getGroupMemberTypeLabel(member.userType),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: _getGroupMemberTypeColor(member.userType),
+              ),
+            ),
+          ),
+          if (member.email.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                member.email,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textTertiary,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      ),
+      trailing: IconButton(
+        onPressed: () {
+          Navigator.of(context).pop();
+          // Show individual member profile
+          ProfileCard.show(
+            context,
+            user: member,
+            isOnline: false, // TODO: Get real-time status for group members
+            onStartChat: () {
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                    content: Text('Starting chat with ${member.displayName}')),
+              );
+            },
+          );
+        },
+        icon: const Icon(Icons.more_vert, color: AppTheme.textSecondary),
+      ),
+      onTap: () {
+        Navigator.of(context).pop();
+        // Show individual member profile
+        ProfileCard.show(
+          context,
+          user: member,
+          isOnline: false, // TODO: Get real-time status for group members
+          onStartChat: () {
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                  content: Text('Starting chat with ${member.displayName}')),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _formatGroupDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 30) {
+      return '${date.day}/${date.month}/${date.year}';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else {
+      return 'Today';
+    }
+  }
+
+  String _getGroupMemberTypeLabel(UserType userType) {
+    switch (userType) {
+      case UserType.teacher:
+        return 'Teacher';
+      case UserType.student:
+        return 'Student';
+      case UserType.parent:
+        return 'Parent';
+    }
+  }
+
+  Color _getGroupMemberTypeColor(UserType userType) {
+    switch (userType) {
+      case UserType.teacher:
+        return AppTheme.primaryColor;
+      case UserType.student:
+        return AppTheme.successColor;
+      case UserType.parent:
+        return AppTheme.warningColor;
+    }
   }
 }
 
