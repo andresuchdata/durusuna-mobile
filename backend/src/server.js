@@ -26,10 +26,12 @@ const server = http.createServer(app);
 // Initialize Socket.io with CORS configuration
 const io = socketIo(server, {
   cors: {
-    origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
+    origin: "*", // Allow all origins for development
     methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  allowEIO3: true, // Support older socket.io clients
+  transports: ['websocket', 'polling'] // Allow both transport methods
 });
 
 // Rate limiting
@@ -43,7 +45,7 @@ const limiter = rateLimit({
 app.use(helmet());
 app.use(compression());
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
+  origin: "*", // Allow all origins for development
   credentials: true
 }));
 app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
@@ -69,6 +71,9 @@ app.use('/api/lessons', lessonRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/class-updates', classUpdatesRoutes);
+
+// Attach socket.io instance to app for use in routes
+app.set('io', io);
 
 // Socket.io connection handling
 socketHandler(io);

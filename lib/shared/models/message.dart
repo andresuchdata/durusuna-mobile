@@ -32,9 +32,9 @@ enum ReadStatus {
 class Message {
   final String id;
   @JsonKey(name: 'sender_id')
-  final String senderId;
+  final String? senderId;
   @JsonKey(name: 'receiver_id')
-  final String receiverId;
+  final String? receiverId;
   final String? content;
   @JsonKey(name: 'message_type')
   final MessageType messageType;
@@ -55,11 +55,14 @@ class Message {
   final DateTime? readAt;
   @JsonKey(name: 'read_status')
   final ReadStatus readStatus;
+  final Map<String, dynamic> reactions;
+  @JsonKey(name: 'is_from_me')
+  final bool isFromMe;
   @JsonKey(name: 'created_at')
   final DateTime createdAt;
   @JsonKey(name: 'updated_at')
   final DateTime updatedAt;
-  
+
   // Related data
   final User? sender;
   final User? receiver;
@@ -69,38 +72,42 @@ class Message {
 
   Message({
     required this.id,
-    required this.senderId,
-    required this.receiverId,
+    this.senderId,
+    this.receiverId,
     this.content,
     required this.messageType,
     this.metadata,
     this.replyToId,
-    required this.isEdited,
+    this.isEdited = false,
     this.editedAt,
-    required this.isDeleted,
+    this.isDeleted = false,
     this.deletedAt,
     this.deliveredAt,
     this.readAt,
     this.readStatus = ReadStatus.sent,
-    required this.createdAt,
-    required this.updatedAt,
+    this.reactions = const {},
+    this.isFromMe = false,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     this.sender,
     this.receiver,
     this.replyTo,
     this.attachments,
-  });
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
-  factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);
+  factory Message.fromJson(Map<String, dynamic> json) =>
+      _$MessageFromJson(json);
   Map<String, dynamic> toJson() => _$MessageToJson(this);
 
   bool get isRead => readAt != null;
   bool get hasAttachments => attachments != null && attachments!.isNotEmpty;
   bool get isReply => replyToId != null;
-  
+
   String get displayContent {
     if (isDeleted) return 'This message was deleted';
     if (content != null && content!.isNotEmpty) return content!;
-    
+
     switch (messageType) {
       case MessageType.image:
         return '📷 Image';
@@ -129,7 +136,11 @@ class Message {
     DateTime? editedAt,
     bool? isDeleted,
     DateTime? deletedAt,
+    DateTime? deliveredAt,
     DateTime? readAt,
+    ReadStatus? readStatus,
+    Map<String, dynamic>? reactions,
+    bool? isFromMe,
     DateTime? createdAt,
     DateTime? updatedAt,
     User? sender,
@@ -149,7 +160,11 @@ class Message {
       editedAt: editedAt ?? this.editedAt,
       isDeleted: isDeleted ?? this.isDeleted,
       deletedAt: deletedAt ?? this.deletedAt,
+      deliveredAt: deliveredAt ?? this.deliveredAt,
       readAt: readAt ?? this.readAt,
+      readStatus: readStatus ?? this.readStatus,
+      reactions: reactions ?? this.reactions,
+      isFromMe: isFromMe ?? this.isFromMe,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       sender: sender ?? this.sender,
@@ -168,5 +183,6 @@ class Message {
   int get hashCode => id.hashCode;
 
   @override
-  String toString() => 'Message(id: $id, senderId: $senderId, content: $displayContent)';
-} 
+  String toString() =>
+      'Message(id: $id, senderId: $senderId, content: $displayContent)';
+}

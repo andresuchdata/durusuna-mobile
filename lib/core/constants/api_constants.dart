@@ -6,6 +6,11 @@ class ApiConstants {
       ? 'http://10.0.2.2:3001/api' // Android emulator
       : 'http://localhost:3001/api'; // iOS simulator and others
 
+  // Socket URL (without /api suffix)
+  static final String socketUrl = Platform.isAndroid
+      ? 'http://10.0.2.2:3001' // Android emulator
+      : 'http://localhost:3001'; // iOS simulator and others
+
   // Development/Production configuration
   static const bool enableLogging = true; // Set to false in production
 
@@ -48,12 +53,13 @@ class ApiConstants {
   static const String getConversations = '$messages/conversations';
   static const String getConversationMessages = '$messages/conversation';
   static const String markAsRead = '$messages/mark-read';
+  static const String markConversationAsRead = '$messages/conversation';
   static const String deleteMessage = '$messages/delete';
 
   // Class update endpoints
   static const String classUpdates = '/class-updates';
   static const String createClassUpdate = '$classUpdates/create';
-  static const String getClassUpdates = '$classUpdates';
+  static const String getClassUpdates = classUpdates;
   static const String addComment = '$classUpdates/comment';
   static const String addReaction = '$classUpdates/reaction';
 

@@ -8,17 +8,17 @@ part of 'message.dart';
 
 Message _$MessageFromJson(Map<String, dynamic> json) => Message(
       id: json['id'] as String,
-      senderId: json['sender_id'] as String,
-      receiverId: json['receiver_id'] as String,
+      senderId: json['sender_id'] as String?,
+      receiverId: json['receiver_id'] as String?,
       content: json['content'] as String?,
       messageType: $enumDecode(_$MessageTypeEnumMap, json['message_type']),
       metadata: json['metadata'] as Map<String, dynamic>?,
       replyToId: json['reply_to_id'] as String?,
-      isEdited: json['is_edited'] as bool,
+      isEdited: json['is_edited'] as bool? ?? false,
       editedAt: json['edited_at'] == null
           ? null
           : DateTime.parse(json['edited_at'] as String),
-      isDeleted: json['is_deleted'] as bool,
+      isDeleted: json['is_deleted'] as bool? ?? false,
       deletedAt: json['deleted_at'] == null
           ? null
           : DateTime.parse(json['deleted_at'] as String),
@@ -31,8 +31,14 @@ Message _$MessageFromJson(Map<String, dynamic> json) => Message(
       readStatus:
           $enumDecodeNullable(_$ReadStatusEnumMap, json['read_status']) ??
               ReadStatus.sent,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      reactions: json['reactions'] as Map<String, dynamic>? ?? const {},
+      isFromMe: json['is_from_me'] as bool? ?? false,
+      createdAt: json['created_at'] == null
+          ? null
+          : DateTime.parse(json['created_at'] as String),
+      updatedAt: json['updated_at'] == null
+          ? null
+          : DateTime.parse(json['updated_at'] as String),
       sender: json['sender'] == null
           ? null
           : User.fromJson(json['sender'] as Map<String, dynamic>),
@@ -62,6 +68,8 @@ Map<String, dynamic> _$MessageToJson(Message instance) => <String, dynamic>{
       'delivered_at': instance.deliveredAt?.toIso8601String(),
       'read_at': instance.readAt?.toIso8601String(),
       'read_status': _$ReadStatusEnumMap[instance.readStatus]!,
+      'reactions': instance.reactions,
+      'is_from_me': instance.isFromMe,
       'created_at': instance.createdAt.toIso8601String(),
       'updated_at': instance.updatedAt.toIso8601String(),
       'sender': instance.sender,

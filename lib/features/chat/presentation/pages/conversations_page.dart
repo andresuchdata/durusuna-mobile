@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/chat_service.dart';
-import '../../../../shared/services/auth_service.dart';
 import 'chat_page.dart';
+import 'contacts_page.dart';
 
 class ConversationsPage extends ConsumerStatefulWidget {
   const ConversationsPage({super.key});
@@ -16,6 +16,15 @@ class ConversationsPage extends ConsumerStatefulWidget {
 class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh conversations when page is loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(conversationsProvider.notifier).loadConversations();
+    });
+  }
 
   @override
   void dispose() {
@@ -70,7 +79,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
-              _showNewChatDialog();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const ContactsPage(),
+                ),
+              );
             },
           ),
         ],
@@ -79,32 +92,62 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         onRefresh: () async {
           await ref.read(conversationsProvider.notifier).loadConversations();
         },
-        child: conversationsState.isLoading && conversationsState.conversations.isEmpty
+        child: conversationsState.isLoading &&
+                conversationsState.conversations.isEmpty
             ? const Center(child: CircularProgressIndicator())
-            : conversationsState.conversations.isEmpty
-                ? _buildEmptyState()
-                : ListView.separated(
-                    itemCount: conversationsState.conversations.length,
-                    separatorBuilder: (context, index) => const Divider(
-                      height: 1,
-                      indent: 72,
-                    ),
-                    itemBuilder: (context, index) {
-                      final conversation = conversationsState.conversations[index];
-                      return ConversationTile(
-                        conversation: conversation,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => ChatPage(
-                                conversation: conversation,
-                              ),
-                            ),
+            : conversationsState.error != null
+                ? _buildErrorState(conversationsState.error!)
+                : conversationsState.conversations.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.separated(
+                        itemCount: conversationsState.conversations.length,
+                        separatorBuilder: (context, index) => const Divider(
+                          height: 1,
+                          indent: 72,
+                        ),
+                        itemBuilder: (context, index) {
+                          final conversation =
+                              conversationsState.conversations[index];
+                          return ConversationTile(
+                            conversation: conversation,
+                            onTap: () {
+                              // Clear any currently viewed conversation before navigating
+                              ref
+                                  .read(currentConversationProvider.notifier)
+                                  .state = null;
+                              print(
+                                  '📱 ConversationsPage: Cleared current conversation before navigation');
+
+                              Navigator.of(context)
+                                  .push(
+                                MaterialPageRoute(
+                                  builder: (context) => ChatPage(
+                                    conversation: conversation,
+                                  ),
+                                ),
+                              )
+                                  .then((_) {
+                                // When returning from chat page, ensure current conversation is cleared
+                                // Add small delay to ensure dispose methods have completed
+                                Future.delayed(
+                                    const Duration(milliseconds: 100), () {
+                                  ref
+                                      .read(
+                                          currentConversationProvider.notifier)
+                                      .state = null;
+                                  print(
+                                      '📱 ConversationsPage: Cleared current conversation after returning from chat');
+
+                                  // Refresh conversations to get latest unread counts
+                                  ref
+                                      .read(conversationsProvider.notifier)
+                                      .loadConversations();
+                                });
+                              });
+                            },
                           );
                         },
-                      );
-                    },
-                  ),
+                      ),
       ),
     );
   }
@@ -114,7 +157,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.chat_bubble_outline,
             size: 64,
             color: AppTheme.textTertiary,
@@ -123,8 +166,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           Text(
             'No conversations yet',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: AppTheme.textSecondary,
-            ),
+                  color: AppTheme.textSecondary,
+                ),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -136,7 +179,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
-            onPressed: _showNewChatDialog,
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const ContactsPage(),
+                ),
+              );
+            },
             icon: const Icon(Icons.add),
             label: const Text('Start Chat'),
           ),
@@ -145,26 +194,41 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     );
   }
 
-  void _showNewChatDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => NewChatDialog(
-        onUserSelected: (user) {
-          // Create conversation and navigate to chat
-          final conversation = Conversation(
-            id: '${user.id}_new',
-            otherUser: user,
-            unreadCount: 0,
-            lastActivity: DateTime.now(),
-            isOnline: false,
-          );
-
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ChatPage(conversation: conversation),
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.red[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Error loading conversations',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppTheme.textTertiary,
+              fontSize: 12,
             ),
-          );
-        },
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              ref.read(conversationsProvider.notifier).loadConversations();
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        ],
       ),
     );
   }
@@ -180,8 +244,46 @@ class ConversationTile extends StatelessWidget {
     required this.onTap,
   });
 
+  String get displayName {
+    if (conversation.type == 'group') {
+      return conversation.name ?? 'Group Chat';
+    }
+    final otherUser = conversation.otherUser;
+    if (otherUser != null) {
+      return otherUser.displayName;
+    }
+    return 'Unknown User';
+  }
+
+  String get avatarUrl {
+    if (conversation.type == 'group') {
+      return conversation.avatarUrl ?? '';
+    }
+    return conversation.otherUser?.avatarUrl ?? '';
+  }
+
+  String get initials {
+    if (conversation.type == 'group') {
+      final name = conversation.name ?? 'Group';
+      final words = name.split(' ');
+      if (words.length >= 2) {
+        return '${words[0][0]}${words[1][0]}';
+      }
+      return name.isNotEmpty ? name[0].toUpperCase() : 'G';
+    }
+    final otherUser = conversation.otherUser;
+    if (otherUser != null) {
+      return '${otherUser.firstName[0]}${otherUser.lastName[0]}';
+    }
+    return 'U';
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Debug: Print conversation status every time it builds
+    print(
+        '🏗️ Building ConversationTile for ${displayName} - type: ${conversation.type}, isOnline: ${conversation.isOnline}');
+
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Stack(
@@ -189,12 +291,11 @@ class ConversationTile extends StatelessWidget {
           CircleAvatar(
             radius: 28,
             backgroundColor: AppTheme.primaryColor,
-            backgroundImage: conversation.otherUser.avatarUrl != null
-                ? NetworkImage(conversation.otherUser.avatarUrl!)
-                : null,
-            child: conversation.otherUser.avatarUrl == null
+            backgroundImage:
+                avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+            child: avatarUrl.isEmpty
                 ? Text(
-                    '${conversation.otherUser.firstName[0]}${conversation.otherUser.lastName[0]}',
+                    initials,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
@@ -203,7 +304,37 @@ class ConversationTile extends StatelessWidget {
                   )
                 : null,
           ),
-          if (conversation.isOnline)
+          if (conversation.type == 'direct' && conversation.isOnline) ...[
+            // Debug log when green dot should show in conversations list
+            Builder(
+              builder: (context) {
+                print(
+                    '🟢 CONVERSATIONS: Green dot should show for ${conversation.otherUser?.displayName} - isOnline: ${conversation.isOnline}');
+                return const SizedBox.shrink();
+              },
+            ),
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: Colors.green, // Force bright green like chat page
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          if (conversation.type == 'group')
             Positioned(
               bottom: 0,
               right: 0,
@@ -211,9 +342,14 @@ class ConversationTile extends StatelessWidget {
                 width: 16,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: AppTheme.successColor,
+                  color: AppTheme.primaryColor.withOpacity(0.8),
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: const Icon(
+                  Icons.group,
+                  size: 10,
+                  color: Colors.white,
                 ),
               ),
             ),
@@ -223,7 +359,7 @@ class ConversationTile extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              conversation.otherUser.displayName,
+              displayName,
               style: TextStyle(
                 fontWeight: conversation.unreadCount > 0
                     ? FontWeight.w600
@@ -287,153 +423,3 @@ class ConversationTile extends StatelessWidget {
     );
   }
 }
-
-class NewChatDialog extends ConsumerStatefulWidget {
-  final Function(dynamic user) onUserSelected;
-
-  const NewChatDialog({
-    super.key,
-    required this.onUserSelected,
-  });
-
-  @override
-  ConsumerState<NewChatDialog> createState() => _NewChatDialogState();
-}
-
-class _NewChatDialogState extends ConsumerState<NewChatDialog> {
-  final TextEditingController _searchController = TextEditingController();
-  List<dynamic> _searchResults = []; // Using dynamic since we'd need User model
-  bool _isSearching = false;
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _performSearch(String query) async {
-    if (query.trim().isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _isSearching = false;
-      });
-      return;
-    }
-
-    setState(() => _isSearching = true);
-
-    try {
-      final chatService = ref.read(chatServiceProvider);
-      final users = await chatService.searchUsers(query);
-      setState(() {
-        _searchResults = users;
-        _isSearching = false;
-      });
-    } catch (e) {
-      setState(() {
-        _searchResults = [];
-        _isSearching = false;
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Search failed: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Container(
-        width: double.maxFinite,
-        constraints: const BoxConstraints(maxHeight: 500),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Row(
-              children: [
-                const Text(
-                  'New Chat',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Search field
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search for teachers, students, or parents...',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: _performSearch,
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Search results
-            Expanded(
-              child: _isSearching
-                  ? const Center(child: CircularProgressIndicator())
-                  : _searchResults.isEmpty
-                      ? Center(
-                          child: Text(
-                            _searchController.text.isEmpty
-                                ? 'Type to search for users'
-                                : 'No users found',
-                            style: const TextStyle(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: _searchResults.length,
-                          itemBuilder: (context, index) {
-                            final user = _searchResults[index];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: AppTheme.primaryColor,
-                                child: const Text(
-                                  'U', // Would use actual user initials
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              title: const Text('User Name'), // Would use actual user name
-                              subtitle: const Text('Teacher'), // Would use actual user type
-                              onTap: () {
-                                Navigator.of(context).pop();
-                                widget.onUserSelected(user);
-                              },
-                            );
-                          },
-                        ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-} 
