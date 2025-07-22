@@ -7,6 +7,7 @@ import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/message.dart';
+import '../../../../shared/widgets/widgets.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
 
@@ -92,6 +93,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           _ensureScrollToBottom();
         }
       });
+
+      // REAL-TIME READ STATUS: Mark messages as read when opening chat page
+      _markAllUnreadMessagesAsReadOnOpen();
 
       // Note: Removed additional mark-as-read safety call
       // We now only mark as read when user actually scrolls to view messages
@@ -203,10 +207,104 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     print(
         '📱 ChatPage: Marked conversation as read - user viewed bottom messages');
 
+    // REAL-TIME READ STATUS: Mark individual messages as read via realtime service
+    _markIndividualMessagesAsRead();
+
     // Reset flag after a delay to allow for future mark-as-read calls
     Future.delayed(const Duration(seconds: 2), () {
       _hasMarkedAsReadAtBottom = false;
     });
+  }
+
+  /// Mark individual unread messages as read and emit to realtime service
+  void _markIndividualMessagesAsRead() {
+    final messagesState =
+        ref.read(chatMessagesProvider(widget.conversation.id));
+    final currentUserId = ref.read(authStateProvider).user?.id;
+
+    if (currentUserId == null) return;
+
+    // Find unread messages from other users
+    final unreadMessages = messagesState.messages
+        .where((message) =>
+            message.senderId != currentUserId &&
+            message.readStatus != ReadStatus.read &&
+            message.readAt == null)
+        .toList();
+
+    if (unreadMessages.isNotEmpty) {
+      final messageIds = unreadMessages.map((m) => m.id).toList();
+      print(
+          '📱 ChatPage: Marking ${messageIds.length} messages as read via realtime service');
+
+      // Emit to realtime service for immediate updates
+      final realtimeService = ref.read(realtimeServiceProvider);
+      realtimeService.markAsRead(messageIds, widget.conversation.id);
+
+      // Also call API for persistence
+      _markMessagesAsReadViaAPI(messageIds);
+    }
+  }
+
+  /// Mark messages as read via API for persistence
+  Future<void> _markMessagesAsReadViaAPI(List<String> messageIds) async {
+    try {
+      final chatService = ref.read(chatServiceProvider);
+      await chatService.markAsRead(messageIds);
+      print('📱 ChatPage: Successfully marked messages as read via API');
+    } catch (e) {
+      print('⚠️ ChatPage: Failed to mark messages as read via API: $e');
+    }
+  }
+
+  /// Mark all unread messages as read when opening chat page
+  void _markAllUnreadMessagesAsReadOnOpen() {
+    // Wait a bit for messages to load
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      if (mounted) {
+        _markIndividualMessagesAsRead();
+      }
+    });
+  }
+
+  /// Show profile card for the other user in conversation
+  void _showProfileCard() {
+    // Only show profile for direct conversations
+    if (widget.conversation.type != 'direct' ||
+        widget.conversation.otherUser == null) {
+      return;
+    }
+
+    final otherUser = widget.conversation.otherUser!;
+
+    ProfileCard.show(
+      context,
+      user: otherUser,
+      isOnline: _isOtherUserOnline,
+      lastSeen: widget.conversation.lastActivity,
+      onStartChat: () {
+        // Already in chat, just close the modal
+        Navigator.of(context).pop();
+      },
+      onCall: () {
+        Navigator.of(context).pop();
+        // TODO: Implement voice call
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Voice call coming soon')),
+        );
+      },
+      onVideoCall: () {
+        Navigator.of(context).pop();
+        // TODO: Implement video call
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Video call coming soon')),
+        );
+      },
+      onBlock: () {
+        Navigator.of(context).pop();
+        _showBlockUserDialog();
+      },
+    );
   }
 
   Future<void> _sendMessage({String? content, MessageType? messageType}) async {
@@ -536,7 +634,37 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             // Auto-scroll to bottom for any new message (own or from others)
             if (realtimeMessage.action == 'created') {
               print('📱 ChatPage: Scrolling to bottom for new message');
-              _scrollToBottom(animated: true);
+
+              // Check if user is near the bottom before auto-scrolling
+              // Only auto-scroll if user is within 200 pixels of bottom
+              final shouldAutoScroll = !_scrollController.hasClients ||
+                  _scrollController.position.pixels >=
+                      _scrollController.position.maxScrollExtent - 200;
+
+              if (shouldAutoScroll) {
+                print('📱 ChatPage: User is near bottom, auto-scrolling');
+
+                // Add a small delay to ensure the message is fully rendered
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    _scrollToBottom(animated: true);
+
+                    // Additional scroll attempt with delay for reliability
+                    Future.delayed(const Duration(milliseconds: 200), () {
+                      if (mounted) {
+                        print('📱 ChatPage: Secondary scroll for new message');
+                        _scrollToBottom(animated: true);
+                      }
+                    });
+                  }
+                });
+              } else {
+                print(
+                    '📱 ChatPage: User is reading older messages, not auto-scrolling');
+
+                // Show a subtle indicator that there's a new message
+                // (Optional: Could add a "New message" floating button here)
+              }
             }
           } else {
             print(
@@ -644,6 +772,47 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       );
     });
 
+    // REAL-TIME READ STATUS: Listen for message status updates
+    ref.listen(realtimeMessageStatusProvider, (previous, next) {
+      print('📋 ChatPage: realtimeMessageStatusProvider state change');
+      next?.when(
+        data: (statusEvent) {
+          print(
+              '📋 ChatPage: Received message status event - Status: ${statusEvent.status}');
+          print('📋 ChatPage: Message IDs: ${statusEvent.messageIds}');
+          print('📋 ChatPage: Conversation ID: ${statusEvent.conversationId}');
+
+          // Only process if it's for this conversation
+          if (statusEvent.conversationId == widget.conversation.id) {
+            print(
+                '📋 ChatPage: Updating message status for ${statusEvent.messageIds.length} messages');
+
+            // Update message status in the local state
+            final messagesNotifier =
+                ref.read(chatMessagesProvider(widget.conversation.id).notifier);
+            for (final messageId in statusEvent.messageIds) {
+              messagesNotifier.updateMessageStatus(
+                  messageId, statusEvent.status, statusEvent.timestamp);
+            }
+
+            print(
+                '✅ ChatPage: Updated read status for messages - double ticks should update');
+          } else {
+            print(
+                '📋 ChatPage: Ignoring status event (different conversation)');
+          }
+        },
+        loading: () {
+          print('📋 ChatPage: Realtime message status loading...');
+        },
+        error: (error, stack) {
+          print(
+              '❌ ChatPage: Error listening to message status updates: $error');
+          print('❌ Stack: $stack');
+        },
+      );
+    });
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -652,75 +821,82 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         titleSpacing: 0,
         title: Row(
           children: [
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppTheme.primaryColor,
-                  backgroundImage: _getAvatarUrl().isNotEmpty
-                      ? NetworkImage(_getAvatarUrl())
-                      : null,
-                  child: _getAvatarUrl().isEmpty
-                      ? Text(
-                          _getInitials(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      : null,
-                ),
-                // Online indicator for direct conversations
-                if (widget.conversation.type == 'direct' && _isOtherUserOnline)
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: Colors.green, // Force bright green
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 2,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
+            GestureDetector(
+              onTap: () => _showProfileCard(),
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppTheme.primaryColor,
+                    backgroundImage: _getAvatarUrl().isNotEmpty
+                        ? NetworkImage(_getAvatarUrl())
+                        : null,
+                    child: _getAvatarUrl().isEmpty
+                        ? Text(
+                            _getInitials(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
+                        : null,
+                  ),
+                  // Online indicator for direct conversations
+                  if (widget.conversation.type == 'direct' &&
+                      _isOtherUserOnline)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: Colors.green, // Force bright green
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 2,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _getDisplayName(),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
+              child: GestureDetector(
+                onTap: () => _showProfileCard(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _getDisplayName(),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
                     ),
-                  ),
-                  Text(
-                    _isOtherUserOnline
-                        ? 'Online'
-                        : messagesState.isTyping
-                            ? 'Typing...'
-                            : 'Last seen ${timeago.format(widget.conversation.lastActivity)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _isOtherUserOnline || messagesState.isTyping
-                          ? AppTheme.successColor
-                          : AppTheme.textSecondary,
+                    Text(
+                      _isOtherUserOnline
+                          ? 'Online'
+                          : messagesState.isTyping
+                              ? 'Typing...'
+                              : 'Last seen ${timeago.format(widget.conversation.lastActivity)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _isOtherUserOnline || messagesState.isTyping
+                            ? AppTheme.successColor
+                            : AppTheme.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],

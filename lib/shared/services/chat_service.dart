@@ -1115,6 +1115,32 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
   void clearError() {
     state = state.copyWith(error: null);
   }
+
+  /// Update message status for real-time read receipts
+  void updateMessageStatus(
+      String messageId, String status, DateTime timestamp) {
+    final messageIndex = state.messages.indexWhere((m) => m.id == messageId);
+    if (messageIndex != -1) {
+      final message = state.messages[messageIndex];
+      final updatedMessage = message.copyWith(
+        readStatus: status == 'read'
+            ? ReadStatus.read
+            : status == 'delivered'
+                ? ReadStatus.delivered
+                : message.readStatus,
+        readAt: status == 'read' ? timestamp : message.readAt,
+        deliveredAt: status == 'delivered' ? timestamp : message.deliveredAt,
+      );
+
+      final updatedMessages = [...state.messages];
+      updatedMessages[messageIndex] = updatedMessage;
+
+      state = state.copyWith(messages: updatedMessages);
+      print('✅ Updated message $messageId status to $status');
+    } else {
+      print('⚠️ Message $messageId not found for status update');
+    }
+  }
 }
 
 // Contacts provider for contact selection
