@@ -1,11 +1,21 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
 const db = require('../config/database');
 const { authenticate: auth } = require('../middleware/auth');
 const { validate, classUpdateSchema, commentSchema } = require('../utils/validation');
 const logger = require('../utils/logger');
+const storageService = require('../services/storageService');
 
 const router = express.Router();
+
+// Configure multer for memory storage for class update attachments
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit for class updates
+  },
+});
 
 // Helper function to safely parse JSON
 const safeJsonParse = (jsonData, fallback = null) => {
@@ -24,6 +34,185 @@ const safeJsonParse = (jsonData, fallback = null) => {
     return fallback;
   }
 };
+
+/**
+ * @route POST /api/class-updates/upload-attachments
+ * @desc Upload attachments for class updates
+ * @access Private (Teachers only)
+ */
+router.post('/upload-attachments', auth, upload.array('attachments', 5), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    const { class_id } = req.body;
+
+    if (!class_id) {
+      return res.status(400).json({ error: 'Class ID is required' });
+    }
+
+    // Verify user has permission to upload to this class
+    const currentUser = await db('users')
+      .where('id', req.user.id)
+      .select('user_type', 'role', 'school_id')
+      .first();
+
+    if (!currentUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check access permissions (same logic as create class update)
+    let hasAccess = false;
+    if (currentUser.role === 'admin' && currentUser.user_type === 'teacher') {
+      const targetClass = await db('classes')
+        .where('id', class_id)
+        .where('school_id', currentUser.school_id)
+        .first();
+      hasAccess = !!targetClass;
+    } else {
+      const userClass = await db('user_classes')
+        .join('users', 'user_classes.user_id', 'users.id')
+        .where({
+          'user_classes.user_id': req.user.id,
+          'user_classes.class_id': class_id
+        })
+        .select('users.user_type', 'user_classes.role_in_class')
+        .first();
+      hasAccess = userClass && (userClass.user_type === 'teacher' || userClass.role_in_class === 'teacher');
+    }
+
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Access denied to this class' });
+    }
+
+    // Validate all files first
+    const validationErrors = [];
+    req.files.forEach((file, index) => {
+      const validation = storageService.validateFile(file.mimetype, file.size, {
+        maxSize: 5 * 1024 * 1024, // 5MB for class updates
+        maxImageSize: 5 * 1024 * 1024, // 5MB for images
+        maxVideoSize: 50 * 1024 * 1024, // 50MB for videos
+      });
+      if (!validation.isValid) {
+        validationErrors.push({
+          file: file.originalname,
+          index,
+          errors: validation.errors,
+        });
+      }
+    });
+
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        error: 'Some files are invalid',
+        details: validationErrors,
+      });
+    }
+
+    // Prepare files for batch upload
+    const filesToUpload = req.files.map(file => ({
+      buffer: file.buffer,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+    }));
+
+    // Upload all files to class-updates folder
+    const uploadedFiles = await storageService.uploadMultipleFiles(
+      filesToUpload,
+      'class-updates',
+      {
+        processImage: true,
+        imageOptions: {
+          maxWidth: 1920,
+          maxHeight: 1080,
+          quality: 85,
+          createThumbnail: true,
+        },
+        customMetadata: {
+          'uploaded-by': req.user.id,
+          'class-id': class_id,
+          'upload-context': 'class-update-attachment',
+        },
+      }
+    );
+
+    // Format attachments for class updates
+    const formattedAttachments = uploadedFiles.map(file => {
+      const metadata = storageService.getFileMetadata(file);
+      
+      return {
+        id: uuidv4(),
+        fileName: file.fileName,
+        originalName: file.originalName,
+        mimeType: file.mimeType,
+        size: file.size,
+        url: file.url,
+        key: file.key,
+        fileType: metadata.fileType,
+        isImage: metadata.isImage,
+        isVideo: metadata.isVideo,
+        isAudio: metadata.isAudio,
+        isDocument: metadata.isDocument,
+        sizeFormatted: metadata.sizeFormatted,
+        uploadedBy: req.user.id,
+        uploadedAt: new Date().toISOString(),
+        metadata: file.metadata,
+      };
+    });
+
+    res.json({
+      success: true,
+      attachments: formattedAttachments,
+      count: formattedAttachments.length,
+    });
+  } catch (error) {
+    logger.error('Error uploading class update attachments:', error);
+    res.status(500).json({ 
+      error: 'Failed to upload attachments',
+      message: error.message 
+    });
+  }
+});
+
+/**
+ * @route DELETE /api/class-updates/attachments/:key(*)
+ * @desc Delete a class update attachment
+ * @access Private (Author or Teacher)
+ */
+router.delete('/attachments/:key(*)', auth, async (req, res) => {
+  try {
+    const { key } = req.params;
+
+    if (!key) {
+      return res.status(400).json({ error: 'Attachment key is required' });
+    }
+
+    // Extract class ID from key if possible (depends on your key structure)
+    // For now, we'll allow deletion if user has teacher permissions
+    const currentUser = await db('users')
+      .where('id', req.user.id)
+      .select('user_type', 'role')
+      .first();
+
+    if (!currentUser || (currentUser.user_type !== 'teacher' && currentUser.role !== 'admin')) {
+      return res.status(403).json({ error: 'Only teachers can delete attachments' });
+    }
+
+    await storageService.deleteFile(key);
+
+    res.json({
+      success: true,
+      message: 'Attachment deleted successfully',
+    });
+  } catch (error) {
+    logger.error('Error deleting class update attachment:', error);
+    res.status(500).json({ 
+      error: 'Failed to delete attachment',
+      message: error.message 
+    });
+  }
+});
 
 // Helper function to migrate old reaction format to new format
 const migrateReactions = (reactions) => {
@@ -148,39 +337,43 @@ router.get('/:classId', auth, async (req, res) => {
     });
 
     // Format response with comment counts
-    const formattedUpdates = updates.map(update => ({
-      id: update.id,
-      class_id: update.class_id,
-      author_id: update.author_id,
-      title: update.title,
-      content: update.content,
-      update_type: update.update_type,
-              attachments: safeJsonParse(update.attachments, []),
+    const formattedUpdates = updates.map(update => {
+      const attachments = safeJsonParse(update.attachments, []);
+      
+      return {
+        id: update.id,
+        class_id: update.class_id,
+        author_id: update.author_id,
+        title: update.title,
+        content: update.content,
+        update_type: update.update_type,
+        attachments: attachments,
         reactions: migrateReactions(safeJsonParse(update.reactions, {})),
-      is_pinned: update.is_pinned,
-      is_edited: update.is_edited,
-      edited_at: update.edited_at,
-      is_deleted: update.is_deleted,
-      deleted_at: update.deleted_at,
-      created_at: update.created_at,
-      updated_at: update.updated_at,
-      author: {
-        id: update.author_user_id,
-        first_name: update.author_first_name,
-        last_name: update.author_last_name,
-        email: update.author_email,
-        phone: update.author_phone,
-        avatar_url: update.author_avatar || "",
-        user_type: update.author_user_type,
-        role: update.author_role,
-        school_id: update.author_school_id,
-        is_active: update.author_is_active,
-        last_active_at: update.author_last_active_at,
-        created_at: update.author_created_at,
-        updated_at: update.author_updated_at
-      },
-      comments_count: commentCountMap[update.id] || 0
-    }));
+        is_pinned: update.is_pinned,
+        is_edited: update.is_edited,
+        edited_at: update.edited_at,
+        is_deleted: update.is_deleted,
+        deleted_at: update.deleted_at,
+        created_at: update.created_at,
+        updated_at: update.updated_at,
+        author: {
+          id: update.author_user_id,
+          first_name: update.author_first_name,
+          last_name: update.author_last_name,
+          email: update.author_email,
+          phone: update.author_phone,
+          avatar_url: update.author_avatar || "",
+          user_type: update.author_user_type,
+          role: update.author_role,
+          school_id: update.author_school_id,
+          is_active: update.author_is_active,
+          last_active_at: update.author_last_active_at,
+          created_at: update.author_created_at,
+          updated_at: update.author_updated_at
+        },
+        comments_count: commentCountMap[update.id] || 0
+      };
+    });
 
     res.json({
       updates: formattedUpdates,

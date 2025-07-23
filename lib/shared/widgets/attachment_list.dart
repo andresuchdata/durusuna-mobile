@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_theme.dart';
 import 'attachment_preview.dart';
+import 'built_in_attachment_viewer.dart';
+import 'media_viewer.dart';
 
 class AttachmentList extends StatelessWidget {
   final List<Map<String, dynamic>> attachments;
@@ -46,7 +47,7 @@ class AttachmentList extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(
+          const Icon(
             Icons.attach_file,
             size: 16,
             color: AppTheme.textSecondary,
@@ -168,13 +169,20 @@ class AttachmentList extends StatelessWidget {
 
   Widget _buildAttachmentPreview(
       Map<String, dynamic> attachment, AttachmentPreviewMode previewMode) {
-    return AttachmentPreview(
-      fileName: attachment['fileName'] ?? 'Unknown File',
-      fileType: attachment['fileType'] ?? 'application/octet-stream',
-      fileSize: attachment['fileSize'] ?? 0,
-      fileUrl: attachment['fileUrl'],
-      mode: previewMode,
-      onTap: () => _handleAttachmentTap(attachment),
+    return Builder(
+      builder: (context) => AttachmentPreview(
+        fileName:
+            attachment['fileName'] ?? attachment['filename'] ?? 'Unknown File',
+        fileType: attachment['mimeType'] ??
+            attachment['fileType'] ??
+            'application/octet-stream',
+        fileSize: attachment['size'] ?? attachment['fileSize'] ?? 0,
+        fileUrl: attachment['url'] ?? attachment['fileUrl'],
+        mode: previewMode,
+        onTap: () {
+          _openAttachmentViewer(context, attachment);
+        },
+      ),
     );
   }
 
@@ -187,9 +195,10 @@ class AttachmentList extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withOpacity(0.1),
+            color: AppTheme.primaryColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3)),
+            border:
+                Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
           ),
           child: Text(
             '+$remainingCount more',
@@ -210,10 +219,10 @@ class AttachmentList extends StatelessWidget {
         height: mode == AttachmentListMode.horizontal ? 120 : 48,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: AppTheme.primaryColor.withOpacity(0.1),
+          color: AppTheme.primaryColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: AppTheme.primaryColor.withOpacity(0.3),
+            color: AppTheme.primaryColor.withValues(alpha: 0.3),
             style: BorderStyle.solid,
           ),
         ),
@@ -253,30 +262,46 @@ class AttachmentList extends StatelessWidget {
     );
   }
 
-  Future<void> _handleAttachmentTap(Map<String, dynamic> attachment) async {
-    final fileUrl = attachment['fileUrl'] as String?;
-    final fileName = attachment['fileName'] as String;
-    final fileType = attachment['fileType'] as String;
+  void _openAttachmentViewer(
+      BuildContext context, Map<String, dynamic> attachment) {
+    // Check if it's a media file (image, video, audio) using boolean flags
+    final isImage =
+        attachment['isImage'] == true || attachment['is_image'] == true;
+    final isVideo =
+        attachment['isVideo'] == true || attachment['is_video'] == true;
+    final isAudio =
+        attachment['isAudio'] == true || attachment['is_audio'] == true;
+    final isMediaFile = isImage || isVideo || isAudio;
 
-    if (fileUrl == null) return;
+    if (isMediaFile) {
+      // Use MediaViewer for ALL media files (provides consistent immersive experience)
+      final mediaAttachments = attachments.where((att) {
+        final isImg = att['isImage'] == true || att['is_image'] == true;
+        final isVid = att['isVideo'] == true || att['is_video'] == true;
+        final isAud = att['isAudio'] == true || att['is_audio'] == true;
+        return isImg || isVid || isAud;
+      }).toList();
 
-    try {
-      // For now, just try to open the URL
-      // In a real app, you'd want to:
-      // 1. Download the file for viewing
-      // 2. Use a file viewer for different types
-      // 3. Handle authentication if needed
+      final initialIndex = mediaAttachments.indexOf(attachment);
 
-      final uri = Uri.parse(fileUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        // Show error - could not open file
-        debugPrint('Could not launch $fileUrl');
-      }
-    } catch (e) {
-      // Handle error
-      debugPrint('Error opening attachment: $e');
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => MediaViewer(
+            attachments: mediaAttachments,
+            initialIndex: initialIndex.clamp(0, mediaAttachments.length - 1),
+            title: 'Media',
+          ),
+        ),
+      );
+    } else {
+      // Use BuiltInAttachmentViewer for documents and other files
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => BuiltInAttachmentViewer(
+            attachment: attachment,
+          ),
+        ),
+      );
     }
   }
 }

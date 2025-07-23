@@ -18,49 +18,15 @@ class AttachmentViewerPage extends StatefulWidget {
   State<AttachmentViewerPage> createState() => _AttachmentViewerPageState();
 }
 
-class _AttachmentViewerPageState extends State<AttachmentViewerPage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  late int _currentIndex;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentIndex = widget.initialIndex ?? 0;
-    _tabController = TabController(
-      length: 2,
-      vsync: this,
-      initialIndex: 0,
-    );
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
+class _AttachmentViewerPageState extends State<AttachmentViewerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
         centerTitle: true,
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'List View'),
-            Tab(text: 'Grid View'),
-          ],
-        ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildListView(),
-          _buildGridView(),
-        ],
-      ),
+      body: _buildListView(),
     );
   }
 
@@ -75,24 +41,6 @@ class _AttachmentViewerPageState extends State<AttachmentViewerPage>
           AttachmentList(
             attachments: widget.attachments,
             mode: AttachmentListMode.vertical,
-            showHeader: false,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGridView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 16),
-          AttachmentList(
-            attachments: widget.attachments,
-            mode: AttachmentListMode.grid,
             showHeader: false,
           ),
         ],

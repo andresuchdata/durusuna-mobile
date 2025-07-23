@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_update.dart';
+import '../../../../shared/models/attachment.dart';
 import '../../../../shared/services/class_updates_service.dart';
+import '../../../../shared/services/media_service.dart';
 import '../../../../shared/widgets/loading_button.dart';
+import '../widgets/attachment_preview_widget.dart';
+import '../widgets/media_upload_widget.dart';
 
 class CreateUpdatePage extends ConsumerStatefulWidget {
   final String classId;
@@ -28,6 +32,7 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
   UpdateType _selectedType = UpdateType.announcement;
   bool _isLoading = false;
   bool _hasUnsavedChanges = false;
+  List<Attachment> _attachments = [];
 
   @override
   void initState() {
@@ -36,6 +41,27 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
       _titleController.text = widget.editingUpdate!.title ?? '';
       _contentController.text = widget.editingUpdate!.content;
       _selectedType = widget.editingUpdate!.updateType;
+
+      // Safely convert existing attachments from JSON format
+      _attachments = <Attachment>[];
+      try {
+        if (widget.editingUpdate!.attachments != null &&
+            widget.editingUpdate!.attachments is List) {
+          final attachmentList = widget.editingUpdate!.attachments as List;
+          for (final item in attachmentList) {
+            try {
+              if (item != null && item is Map<String, dynamic>) {
+                final attachment = Attachment.fromJson(item);
+                _attachments.add(attachment);
+              }
+            } catch (e) {
+              debugPrint('Error parsing existing attachment: $e');
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error parsing existing attachments: $e');
+      }
     }
 
     // Listen for changes to track unsaved content
@@ -55,6 +81,13 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
     if (!_hasUnsavedChanges) {
       setState(() => _hasUnsavedChanges = true);
     }
+  }
+
+  void _onAttachmentsChanged(List<Attachment> attachments) {
+    setState(() {
+      _attachments = attachments;
+      _hasUnsavedChanges = true;
+    });
   }
 
   Future<bool> _onWillPop() async {
@@ -105,6 +138,7 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
               : null,
           content: _contentController.text.trim(),
           updateType: _selectedType,
+          attachments: _attachments.map((a) => a.toJson()).toList(),
         );
       } else {
         await service.createClassUpdate(
@@ -114,6 +148,7 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
               : null,
           content: _contentController.text.trim(),
           updateType: _selectedType,
+          attachments: _attachments.map((a) => a.toJson()).toList(),
         );
       }
 
@@ -341,46 +376,23 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
 
                       const SizedBox(height: 24),
 
-                      // Attachment Section (Enhanced placeholder)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: AppTheme.backgroundColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: AppTheme.borderColor,
-                            style: BorderStyle.solid,
-                            width: 2,
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.add_photo_alternate_outlined,
-                              size: 48,
-                              color: AppTheme.textTertiary,
-                            ),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Add attachments',
-                              style: TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
+                      // Media Upload Section
+                      MediaUploadWidget(
+                        classId: widget.classId,
+                        currentAttachments: _attachments,
+                        onAttachmentsChanged: _onAttachmentsChanged,
+                        onUploadProgress: (progress) {
+                          // Handle upload progress if needed
+                          if (progress.hasError) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content:
+                                    Text('Upload error: ${progress.error}'),
+                                backgroundColor: AppTheme.errorColor,
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Photos, documents, and files (Coming soon)',
-                              style: TextStyle(
-                                color: AppTheme.textTertiary,
-                                fontSize: 14,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
+                            );
+                          }
+                        },
                       ),
 
                       const SizedBox(height: 100), // Extra space for bottom bar

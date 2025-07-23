@@ -100,6 +100,26 @@ const messageSchema = Joi.object({
   'object.missing': 'Either conversation_id or receiver_id is required'
 });
 
+// Attachment validation schema
+const attachmentSchema = Joi.object({
+  id: Joi.string().uuid().required(),
+  fileName: Joi.string().required(),
+  originalName: Joi.string().required(),
+  mimeType: Joi.string().required(),
+  size: Joi.number().integer().min(1).required(),
+  url: Joi.string().uri().required(),
+  key: Joi.string().required(),
+  fileType: Joi.string().valid('image', 'video', 'audio', 'document', 'other').required(),
+  isImage: Joi.boolean().required(),
+  isVideo: Joi.boolean().required(),
+  isAudio: Joi.boolean().required(),
+  isDocument: Joi.boolean().required(),
+  sizeFormatted: Joi.string().required(),
+  uploadedBy: Joi.string().uuid().required(),
+  uploadedAt: Joi.string().isoDate().required(),
+  metadata: Joi.object().optional()
+});
+
 // Class update validation
 const classUpdateSchema = Joi.object({
   class_id: Joi.string().uuid().required().messages({
@@ -112,7 +132,9 @@ const classUpdateSchema = Joi.object({
     'any.required': 'Content is required'
   }),
   update_type: Joi.string().valid('announcement', 'homework', 'reminder', 'event').default('announcement'),
-  attachments: Joi.array().items(Joi.object()).optional()
+  attachments: Joi.array().items(attachmentSchema).max(5).optional().messages({
+    'array.max': 'Maximum 5 attachments allowed per update'
+  })
 });
 
 // Comment validation
@@ -159,6 +181,7 @@ module.exports = {
   passwordResetSchema,
   profileUpdateSchema,
   messageSchema,
+  attachmentSchema,
   classUpdateSchema,
   commentSchema,
   validate
