@@ -264,25 +264,24 @@ class AttachmentList extends StatelessWidget {
 
   void _openAttachmentViewer(
       BuildContext context, Map<String, dynamic> attachment) {
-    // Check if it's a media file (image, video, audio)
-    final mimeType = attachment['mimeType'] ??
-        attachment['fileType'] ??
-        'application/octet-stream';
-    final isMediaFile = mimeType.startsWith('image/') ||
-        mimeType.startsWith('video/') ||
-        mimeType.startsWith('audio/');
+    // Check if it's a media file (image, video, audio) using boolean flags
+    final isImage =
+        attachment['isImage'] == true || attachment['is_image'] == true;
+    final isVideo =
+        attachment['isVideo'] == true || attachment['is_video'] == true;
+    final isAudio =
+        attachment['isAudio'] == true || attachment['is_audio'] == true;
+    final isMediaFile = isImage || isVideo || isAudio;
 
-    // Get all media files from the attachments list
-    final mediaAttachments = attachments.where((att) {
-      final type =
-          att['mimeType'] ?? att['fileType'] ?? 'application/octet-stream';
-      return type.startsWith('image/') ||
-          type.startsWith('video/') ||
-          type.startsWith('audio/');
-    }).toList();
+    if (isMediaFile) {
+      // Use MediaViewer for ALL media files (provides consistent immersive experience)
+      final mediaAttachments = attachments.where((att) {
+        final isImg = att['isImage'] == true || att['is_image'] == true;
+        final isVid = att['isVideo'] == true || att['is_video'] == true;
+        final isAud = att['isAudio'] == true || att['is_audio'] == true;
+        return isImg || isVid || isAud;
+      }).toList();
 
-    if (isMediaFile && mediaAttachments.length > 1) {
-      // Use MediaViewer for media files when there are multiple media attachments
       final initialIndex = mediaAttachments.indexOf(attachment);
 
       Navigator.of(context).push(
@@ -295,7 +294,7 @@ class AttachmentList extends StatelessWidget {
         ),
       );
     } else {
-      // Use BuiltInAttachmentViewer for single media files or non-media files
+      // Use BuiltInAttachmentViewer for documents and other files
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => BuiltInAttachmentViewer(
