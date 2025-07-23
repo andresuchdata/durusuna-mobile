@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/attachment.dart';
-import '../../../../shared/widgets/attachment_viewer_page.dart';
 import '../../../../shared/widgets/robust_image_widget.dart';
+import '../../../../shared/widgets/built_in_attachment_viewer.dart';
+import '../../../../shared/widgets/attachment_viewer_page.dart';
 
 class AttachmentPreviewWidget extends StatelessWidget {
   final List<Attachment> attachments;
@@ -156,7 +157,18 @@ class AttachmentPreviewWidget extends StatelessWidget {
   Widget _buildImageWithOverlay(
       BuildContext context, Attachment image, int remainingCount) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        // Open AttachmentViewerPage to show all attachments in a list
+        final attachmentMaps = attachments.map((a) => a.toJson()).toList();
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => AttachmentViewerPage(
+              attachments: attachmentMaps,
+              title: 'Attachments',
+            ),
+          ),
+        );
+      },
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
@@ -337,7 +349,18 @@ class AttachmentPreviewWidget extends StatelessWidget {
 
   Widget _buildMoreIndicator(BuildContext context, int remainingCount) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        // Open AttachmentViewerPage to show all attachments in a list
+        final attachmentMaps = attachments.map((a) => a.toJson()).toList();
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => AttachmentViewerPage(
+              attachments: attachmentMaps,
+              title: 'Attachments',
+            ),
+          ),
+        );
+      },
       child: Container(
         width: 60,
         height: 60,
@@ -373,14 +396,11 @@ class AttachmentPreviewWidget extends StatelessWidget {
   }
 
   void _openAttachmentViewer(BuildContext context, Attachment attachment) {
-    // Convert attachments to the format expected by AttachmentViewerPage
-    final attachmentMaps = attachments.map((a) => a.toJson()).toList();
-
+    // Open the built-in attachment viewer directly
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => AttachmentViewerPage(
-          attachments: attachmentMaps,
-          initialIndex: attachments.indexOf(attachment),
+        builder: (context) => BuiltInAttachmentViewer(
+          attachment: attachment.toJson(),
         ),
       ),
     );
