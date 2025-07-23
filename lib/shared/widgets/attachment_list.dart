@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_theme.dart';
-import '../../core/utils/url_utils.dart';
 import 'attachment_preview.dart';
+import 'built_in_attachment_viewer.dart';
 
 class AttachmentList extends StatelessWidget {
   final List<Map<String, dynamic>> attachments;
@@ -47,7 +46,7 @@ class AttachmentList extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(
+          const Icon(
             Icons.attach_file,
             size: 16,
             color: AppTheme.textSecondary,
@@ -169,16 +168,26 @@ class AttachmentList extends StatelessWidget {
 
   Widget _buildAttachmentPreview(
       Map<String, dynamic> attachment, AttachmentPreviewMode previewMode) {
-    return AttachmentPreview(
-      fileName:
-          attachment['fileName'] ?? attachment['filename'] ?? 'Unknown File',
-      fileType: attachment['mimeType'] ??
-          attachment['fileType'] ??
-          'application/octet-stream',
-      fileSize: attachment['size'] ?? attachment['fileSize'] ?? 0,
-      fileUrl: attachment['url'] ?? attachment['fileUrl'],
-      mode: previewMode,
-      onTap: () => _handleAttachmentTap(attachment),
+    return Builder(
+      builder: (context) => AttachmentPreview(
+        fileName:
+            attachment['fileName'] ?? attachment['filename'] ?? 'Unknown File',
+        fileType: attachment['mimeType'] ??
+            attachment['fileType'] ??
+            'application/octet-stream',
+        fileSize: attachment['size'] ?? attachment['fileSize'] ?? 0,
+        fileUrl: attachment['url'] ?? attachment['fileUrl'],
+        mode: previewMode,
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => BuiltInAttachmentViewer(
+                attachment: attachment,
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -191,9 +200,10 @@ class AttachmentList extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withOpacity(0.1),
+            color: AppTheme.primaryColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3)),
+            border:
+                Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
           ),
           child: Text(
             '+$remainingCount more',
@@ -214,10 +224,10 @@ class AttachmentList extends StatelessWidget {
         height: mode == AttachmentListMode.horizontal ? 120 : 48,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: AppTheme.primaryColor.withOpacity(0.1),
+          color: AppTheme.primaryColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: AppTheme.primaryColor.withOpacity(0.3),
+            color: AppTheme.primaryColor.withValues(alpha: 0.3),
             style: BorderStyle.solid,
           ),
         ),
@@ -255,49 +265,6 @@ class AttachmentList extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _handleAttachmentTap(Map<String, dynamic> attachment) async {
-    final fileUrl = (attachment['url'] ?? attachment['fileUrl']) as String?;
-    final fileName = (attachment['fileName'] ??
-        attachment['filename'] ??
-        'Unknown File') as String;
-    final mimeType = (attachment['mimeType'] ??
-        attachment['fileType'] ??
-        'application/octet-stream') as String;
-
-    if (fileUrl == null || fileUrl.isEmpty) {
-      debugPrint('File URL not available for: $fileName');
-      return;
-    }
-
-    try {
-      // Handle different URL formats
-      String downloadUrl = fileUrl;
-
-      // If it's a relative URL, make it absolute
-      if (fileUrl.startsWith('/')) {
-        downloadUrl = 'http://localhost:3001$fileUrl';
-      } else if (!fileUrl.startsWith('http')) {
-        downloadUrl = 'http://localhost:3001/api/uploads/serve/$fileUrl';
-      }
-
-      // Rewrite URL for platform compatibility (Android emulator needs 10.0.2.2)
-      downloadUrl = UrlUtils.rewriteUrl(downloadUrl);
-
-      debugPrint('Attempting to open: $downloadUrl');
-
-      // Try to open the file
-      final uri = Uri.parse(downloadUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        debugPrint('Successfully opened: $fileName');
-      } else {
-        debugPrint('Unable to open file: $fileName at $downloadUrl');
-      }
-    } catch (e) {
-      debugPrint('Error opening attachment $fileName: $e');
-    }
   }
 }
 

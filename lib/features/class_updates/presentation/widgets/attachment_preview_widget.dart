@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/attachment.dart';
 import '../../../../shared/widgets/attachment_viewer_page.dart';
@@ -53,17 +52,165 @@ class AttachmentPreviewWidget extends StatelessWidget {
   }
 
   Widget _buildCompactView(BuildContext context) {
-    // Show only first few attachments in compact mode
-    final displayAttachments = attachments.take(3).toList();
-    final hasMore = attachments.length > 3;
+    // Group attachments by type for better presentation
+    final imageAttachments = attachments.where((a) => a.isImage).toList();
+    final otherAttachments = attachments.where((a) => !a.isImage).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Image previews
+        if (imageAttachments.isNotEmpty)
+          _buildImagePreview(context, imageAttachments),
+
+        // Other attachments
+        if (otherAttachments.isNotEmpty) ...[
+          if (imageAttachments.isNotEmpty) const SizedBox(height: 8),
+          _buildOtherAttachmentsCompact(context, otherAttachments),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildImagePreview(BuildContext context, List<Attachment> images) {
+    if (images.length == 1) {
+      return _buildSingleImagePreview(context, images.first);
+    } else if (images.length == 2) {
+      return _buildTwoImagesPreview(context, images);
+    } else {
+      return _buildMultipleImagesPreview(context, images);
+    }
+  }
+
+  Widget _buildSingleImagePreview(BuildContext context, Attachment image) {
+    return GestureDetector(
+      onTap: () => _openAttachmentViewer(context, image),
+      child: Container(
+        height: 150,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.borderColor),
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: RobustImageWidget(
+          imageUrl: image.url,
+          fit: BoxFit.cover,
+          placeholder: Container(
+            color: AppTheme.backgroundColor,
+            child: const Center(
+              child: Icon(Icons.image, color: AppTheme.textSecondary, size: 32),
+            ),
+          ),
+          errorWidget: Container(
+            color: AppTheme.backgroundColor,
+            child: const Center(
+              child: Icon(Icons.broken_image,
+                  color: AppTheme.textTertiary, size: 32),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTwoImagesPreview(BuildContext context, List<Attachment> images) {
+    return SizedBox(
+      height: 100,
+      child: Row(
+        children: [
+          Expanded(child: _buildCompactAttachmentItem(context, images[0])),
+          const SizedBox(width: 4),
+          Expanded(child: _buildCompactAttachmentItem(context, images[1])),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMultipleImagesPreview(
+      BuildContext context, List<Attachment> images) {
+    final displayImages = images.take(3).toList();
+    final hasMore = images.length > 3;
+
+    return SizedBox(
+      height: 100,
+      child: Row(
+        children: [
+          Expanded(
+              child: _buildCompactAttachmentItem(context, displayImages[0])),
+          const SizedBox(width: 4),
+          Expanded(
+              child: _buildCompactAttachmentItem(context, displayImages[1])),
+          const SizedBox(width: 4),
+          Expanded(
+            child: hasMore
+                ? _buildImageWithOverlay(
+                    context, displayImages[2], images.length - 2)
+                : _buildCompactAttachmentItem(context, displayImages[2]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImageWithOverlay(
+      BuildContext context, Attachment image, int remainingCount) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.borderColor),
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            RobustImageWidget(
+              imageUrl: image.url,
+              fit: BoxFit.cover,
+              placeholder: Container(
+                color: AppTheme.backgroundColor,
+                child: const Icon(Icons.image,
+                    color: AppTheme.textSecondary, size: 24),
+              ),
+              errorWidget: Container(
+                color: AppTheme.backgroundColor,
+                child: const Icon(Icons.broken_image,
+                    color: AppTheme.textTertiary, size: 24),
+              ),
+            ),
+            Container(
+              color: Colors.black.withValues(alpha: 0.6),
+              child: Center(
+                child: Text(
+                  '+$remainingCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOtherAttachmentsCompact(
+      BuildContext context, List<Attachment> others) {
+    final displayOthers = others.take(3).toList();
+    final hasMore = others.length > 3;
 
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        ...displayAttachments.map(
+        ...displayOthers.map(
             (attachment) => _buildCompactAttachmentItem(context, attachment)),
-        if (hasMore) _buildMoreIndicator(context, attachments.length - 3),
+        if (hasMore) _buildMoreIndicator(context, others.length - 3),
       ],
     );
   }
@@ -81,236 +228,6 @@ class AttachmentPreviewWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildImageGallery(BuildContext context, List<Attachment> images) {
-    if (images.length == 1) {
-      return _buildSingleImage(context, images.first);
-    } else if (images.length == 2) {
-      return _buildTwoImages(context, images);
-    } else {
-      return _buildMultipleImages(context, images);
-    }
-  }
-
-  Widget _buildSingleImage(BuildContext context, Attachment image) {
-    return GestureDetector(
-      onTap: () => _openAttachmentViewer(context, image),
-      child: Container(
-        height: 200,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: AppTheme.backgroundColor,
-        ),
-        clipBehavior: Clip.hardEdge,
-        child: RobustImageWidget(
-          imageUrl: image.url,
-          fit: BoxFit.cover,
-          placeholder: Container(
-            color: AppTheme.backgroundColor,
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
-          errorWidget: Container(
-            color: AppTheme.backgroundColor,
-            child: const Icon(
-              Icons.broken_image,
-              color: AppTheme.textTertiary,
-              size: 48,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTwoImages(BuildContext context, List<Attachment> images) {
-    return SizedBox(
-      height: 150,
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildImageThumbnail(context, images[0]),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: _buildImageThumbnail(context, images[1]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMultipleImages(BuildContext context, List<Attachment> images) {
-    if (isCompact) {
-      // Compact mode: show only first 4 images with "+X more" overlay
-      final displayImages = images.take(4).toList();
-      final hasMore = images.length > 4;
-
-      return SizedBox(
-        height: 150,
-        child: Row(
-          children: [
-            Expanded(
-              child: _buildImageThumbnail(context, displayImages[0]),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: _buildImageThumbnail(context, displayImages[1]),
-                  ),
-                  if (displayImages.length > 2) ...[
-                    const SizedBox(height: 4),
-                    Expanded(
-                      child: displayImages.length > 3 || hasMore
-                          ? _buildImageWithOverlay(
-                              context,
-                              displayImages.length > 3
-                                  ? displayImages[2]
-                                  : displayImages[2],
-                              hasMore
-                                  ? images.length - 3
-                                  : displayImages.length > 3
-                                      ? 1
-                                      : 0,
-                            )
-                          : _buildImageThumbnail(context, displayImages[2]),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    } else {
-      // Full mode: show all images in a grid
-      return _buildImageGrid(context, images);
-    }
-  }
-
-  Widget _buildImageGrid(BuildContext context, List<Attachment> images) {
-    // For full view, display all images in a responsive grid
-    return Column(
-      children: [
-        for (int i = 0; i < images.length; i += 2)
-          Padding(
-            padding: EdgeInsets.only(bottom: i + 2 < images.length ? 4.0 : 0),
-            child: SizedBox(
-              height: 150,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildImageThumbnail(context, images[i]),
-                  ),
-                  if (i + 1 < images.length) ...[
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: _buildImageThumbnail(context, images[i + 1]),
-                    ),
-                  ] else
-                    const Expanded(
-                        child: SizedBox()), // Empty space if odd number
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildImageThumbnail(BuildContext context, Attachment image) {
-    return GestureDetector(
-      onTap: () => _openAttachmentViewer(context, image),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          color: AppTheme.backgroundColor,
-        ),
-        clipBehavior: Clip.hardEdge,
-        child: RobustImageWidget(
-          imageUrl: image.thumbnailUrl ?? image.url,
-          fit: BoxFit.cover,
-          placeholder: Container(
-            color: AppTheme.backgroundColor,
-            child: const Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          ),
-          errorWidget: Container(
-            color: AppTheme.backgroundColor,
-            child: const Icon(
-              Icons.broken_image,
-              color: AppTheme.textTertiary,
-              size: 24,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildImageWithOverlay(
-      BuildContext context, Attachment image, int remainingCount) {
-    return GestureDetector(
-      onTap: () => _openAttachmentViewer(context, image),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          color: AppTheme.backgroundColor,
-        ),
-        clipBehavior: Clip.hardEdge,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            RobustImageWidget(
-              imageUrl: image.thumbnailUrl ?? image.url,
-              fit: BoxFit.cover,
-              placeholder: Container(
-                color: AppTheme.backgroundColor,
-                child: const Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              ),
-              errorWidget: Container(
-                color: AppTheme.backgroundColor,
-                child: const Icon(
-                  Icons.broken_image,
-                  color: AppTheme.textTertiary,
-                  size: 24,
-                ),
-              ),
-            ),
-            if (remainingCount > 0)
-              Container(
-                color: Colors.black.withValues(alpha: 0.6),
-                child: Center(
-                  child: Text(
-                    '+$remainingCount',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildCompactAttachmentItem(
       BuildContext context, Attachment attachment) {
     return GestureDetector(
@@ -319,22 +236,32 @@ class AttachmentPreviewWidget extends StatelessWidget {
         width: 60,
         height: 60,
         decoration: BoxDecoration(
-          color: _getFileTypeColor(attachment.fileType).withValues(alpha: 0.1),
+          color: attachment.isImage
+              ? Colors.transparent
+              : _getFileTypeColor(attachment.fileType).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppTheme.borderColor),
         ),
+        clipBehavior: Clip.hardEdge,
         child: attachment.isImage
             ? RobustImageWidget(
-                imageUrl: attachment.thumbnailUrl ?? attachment.url,
-                borderRadius: BorderRadius.circular(7),
+                imageUrl: attachment.url,
                 fit: BoxFit.cover,
-                placeholder: const Icon(
-                  Icons.image,
-                  color: AppTheme.textSecondary,
+                placeholder: Container(
+                  color: AppTheme.backgroundColor,
+                  child: const Icon(
+                    Icons.image,
+                    color: AppTheme.textSecondary,
+                    size: 24,
+                  ),
                 ),
-                errorWidget: const Icon(
-                  Icons.broken_image,
-                  color: AppTheme.textTertiary,
+                errorWidget: Container(
+                  color: AppTheme.backgroundColor,
+                  child: const Icon(
+                    Icons.broken_image,
+                    color: AppTheme.textTertiary,
+                    size: 24,
+                  ),
                 ),
               )
             : Icon(
