@@ -4,6 +4,7 @@ import '../../../../shared/models/attachment.dart';
 import '../../../../shared/widgets/robust_image_widget.dart';
 import '../../../../shared/widgets/built_in_attachment_viewer.dart';
 import '../../../../shared/widgets/attachment_viewer_page.dart';
+import '../../../../shared/widgets/media_viewer.dart';
 
 class AttachmentPreviewWidget extends StatelessWidget {
   final List<Attachment> attachments;
@@ -396,14 +397,36 @@ class AttachmentPreviewWidget extends StatelessWidget {
   }
 
   void _openAttachmentViewer(BuildContext context, Attachment attachment) {
-    // Open the built-in attachment viewer directly
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => BuiltInAttachmentViewer(
-          attachment: attachment.toJson(),
+    // Check if it's a media file (image, video, audio)
+    final mimeType = attachment.fileType;
+    final isMediaFile = mimeType.startsWith('image/') ||
+        mimeType.startsWith('video/') ||
+        mimeType.startsWith('audio/');
+
+    if (isMediaFile && attachments.length > 1) {
+      // Use MediaViewer for media files when there are multiple attachments
+      final attachmentMaps = attachments.map((a) => a.toJson()).toList();
+      final initialIndex = attachments.indexOf(attachment);
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => MediaViewer(
+            attachments: attachmentMaps,
+            initialIndex: initialIndex,
+            title: 'Media',
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      // Use BuiltInAttachmentViewer for single media files or non-media files
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => BuiltInAttachmentViewer(
+            attachment: attachment.toJson(),
+          ),
+        ),
+      );
+    }
   }
 
   IconData _getFileTypeIcon(String fileType) {
