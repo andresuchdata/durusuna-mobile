@@ -1,11 +1,16 @@
-# Use Node.js 18 Alpine as base image
-FROM node:18-alpine AS base
+# Use Node.js 22 LTS (current 2025 LTS) with a specific Alpine version for stability
+FROM node:22-alpine3.18 AS base
 
 # Set working directory
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init and build dependencies for better compatibility
+RUN apk add --no-cache \
+    dumb-init \
+    python3 \
+    make \
+    g++ \
+    && ln -sf python3 /usr/bin/python
 
 # Create app user for security
 RUN addgroup -g 1001 -S nodejs
@@ -35,8 +40,18 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Production stage
-FROM base AS production
+FROM node:22-alpine3.18 AS production
 ENV NODE_ENV=production
+
+# Set working directory
+WORKDIR /app
+
+# Install only runtime dependencies
+RUN apk add --no-cache dumb-init
+
+# Create app user for security
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nodejs -u 1001
 
 # Copy production dependencies
 COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
