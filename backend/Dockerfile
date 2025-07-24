@@ -16,7 +16,7 @@ RUN apk add --no-cache \
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001
 
-# Copy package files
+# Copy package files (use wildcard to handle optional files)
 COPY package*.json ./
 
 # Development stage
@@ -33,10 +33,10 @@ CMD ["dumb-init", "npm", "run", "dev"]
 FROM base AS deps
 ENV NODE_ENV=production
 
-# copy package.json and package-lock.json
-COPY package.json package-lock.json ./
+# Copy package files (use wildcard for better compatibility)
+COPY package*.json ./
 
-# install production dependencies
+# Install production dependencies
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Production stage
