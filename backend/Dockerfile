@@ -27,6 +27,11 @@ CMD ["dumb-init", "npm", "run", "dev"]
 # Production dependencies stage
 FROM base AS deps
 ENV NODE_ENV=production
+
+# copy package.json and package-lock.json
+COPY package.json package-lock.json ./
+
+# install production dependencies
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Production stage
