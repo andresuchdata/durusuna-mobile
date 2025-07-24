@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import '../../core/utils/url_utils.dart';
 import 'robust_image_widget.dart';
 import 'built_in_attachment_viewer.dart';
+import '../../core/constants/api_constants.dart';
 
 class MediaViewer extends StatefulWidget {
   final List<Map<String, dynamic>> attachments;
@@ -255,9 +256,11 @@ class _MediaViewerState extends State<MediaViewer> {
 
     if (downloadUrl.isNotEmpty) {
       if (downloadUrl.startsWith('/')) {
-        downloadUrl = 'http://localhost:3001$downloadUrl';
+        // Use the current backend base URL without /api suffix
+        final backendUrl = ApiConstants.baseUrl.replaceAll('/api', '');
+        downloadUrl = '$backendUrl$downloadUrl';
       } else if (!downloadUrl.startsWith('http')) {
-        downloadUrl = 'http://localhost:3001/api/uploads/serve/$downloadUrl';
+        downloadUrl = '${ApiConstants.baseUrl}/uploads/serve/$downloadUrl';
       }
       downloadUrl = UrlUtils.rewriteUrl(downloadUrl);
     }

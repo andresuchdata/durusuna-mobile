@@ -3,42 +3,51 @@ import 'dart:io';
 class ApiConstants {
   /// 🌐 BACKEND CONNECTION CONFIGURATION
   ///
-  /// Update these settings based on where you're testing:
+  /// Environment-based configuration for better security:
+  /// - Development: Local backend
+  /// - Staging: Test environment
+  /// - Production: Live backend
   ///
-  /// 1. 📱 Physical Device: Set _usePhysicalDevice = true
-  /// 2. 📱 Android Emulator: Set _usePhysicalDevice = false
-  /// 3. 📱 iOS Simulator: Set _usePhysicalDevice = false
-  /// 4. 🌐 Flutter Web: Set _usePhysicalDevice = false
-  ///
-  /// To find your IP: Run `ifconfig | grep inet` in terminal
+  /// For security, consider using:
+  /// 1. Environment variables
+  /// 2. Separate config files
+  /// 3. Build-time configuration
 
-  // Development machine IP (update this with your machine's IP)
+  // Environment detection
+  static const String _environment = String.fromEnvironment(
+    'ENVIRONMENT',
+    defaultValue: 'development',
+  );
+
+  // Backend URLs per environment
+  static const String _stagingBackendUrl =
+      'https://durusuna-backend-staging.sevalla.app';
+  static const String _productionBackendUrl =
+      'https://durusuna-backend-hr9m0.sevalla.app';
+
+  // Development machine IP (for physical device testing)
   static const String _developmentIP = '192.168.1.8';
 
-  // Set this to true when testing on physical device
-  static const bool _usePhysicalDevice = false;
+  // Configuration flags
+  static const bool _usePhysicalDevice =
+      false; // For local development on device
 
-  // Base URL - platform-aware configuration
-  static final String baseUrl = _getBaseUrl();
-
-  // Socket URL (without /api suffix)
-  static final String socketUrl = _getSocketUrl();
-
-  static String _getBaseUrl() {
-    if (_usePhysicalDevice) {
-      return 'http://$_developmentIP:3001/api'; // Physical device
-    }
-
-    if (Platform.isAndroid) {
-      return 'http://10.0.2.2:3001/api'; // Android emulator
-    } else {
-      return 'http://localhost:3001/api'; // iOS simulator and others
+  // Get backend URL based on environment
+  static String get _backendUrl {
+    switch (_environment) {
+      case 'production':
+        return _productionBackendUrl;
+      case 'staging':
+        return _stagingBackendUrl;
+      case 'development':
+      default:
+        return _getDevelopmentUrl();
     }
   }
 
-  static String _getSocketUrl() {
+  static String _getDevelopmentUrl() {
     if (_usePhysicalDevice) {
-      return 'http://$_developmentIP:3001'; // Physical device
+      return 'http://$_developmentIP:3001';
     }
 
     if (Platform.isAndroid) {
@@ -48,8 +57,14 @@ class ApiConstants {
     }
   }
 
+  // Base URL - environment-aware configuration
+  static String get baseUrl => '$_backendUrl/api';
+
+  // Socket URL (without /api suffix)
+  static String get socketUrl => _backendUrl;
+
   // Development/Production configuration
-  static const bool enableLogging = true; // Set to false in production
+  static bool get enableLogging => _environment != 'production';
 
   // Timeout configurations
   static const Duration connectionTimeout = Duration(seconds: 30);
@@ -106,16 +121,14 @@ class ApiConstants {
   static const String wsJoinRoom = 'join_room';
   static const String wsLeaveRoom = 'leave_room';
   static const String wsNewMessage = 'new_message';
-  static const String wsMessageReceived = 'message_received';
-  static const String wsTypingStart = 'typing_start';
-  static const String wsTypingStop = 'typing_stop';
-  static const String wsUserOnline = 'user_online';
-  static const String wsUserOffline = 'user_offline';
 
-  // Cache keys
-  static const String cacheUser = 'current_user';
-  static const String cacheToken = 'auth_token';
-  static const String cacheRefreshToken = 'refresh_token';
-  static const String cacheClasses = 'user_classes';
-  static const String cacheConversations = 'conversations';
+  // Debug info
+  static void printConfiguration() {
+    print('🔧 API Configuration:');
+    print('   Environment: $_environment');
+    print('   Backend URL: $_backendUrl');
+    print('   Base URL: $baseUrl');
+    print('   Socket URL: $socketUrl');
+    print('   Logging Enabled: $enableLogging');
+  }
 }

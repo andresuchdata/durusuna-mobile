@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_theme.dart';
+import '../../core/constants/api_constants.dart';
 import '../../core/utils/url_utils.dart';
 import 'robust_image_widget.dart';
 
@@ -40,15 +41,17 @@ class _BuiltInAttachmentViewerState extends State<BuiltInAttachmentViewer> {
     fileUrl = widget.attachment['url'] ?? widget.attachment['fileUrl'];
     fileSize = widget.attachment['size'] ?? widget.attachment['fileSize'] ?? 0;
 
-    // Handle different URL formats
+    // Handle different URL formats using dynamic backend URL
     downloadUrl = fileUrl ?? '';
     if (downloadUrl.isNotEmpty) {
       if (downloadUrl.startsWith('/')) {
-        downloadUrl = 'http://localhost:3001$downloadUrl';
+        // Use the current backend base URL without /api suffix
+        final backendUrl = ApiConstants.baseUrl.replaceAll('/api', '');
+        downloadUrl = '$backendUrl$downloadUrl';
       } else if (!downloadUrl.startsWith('http')) {
-        downloadUrl = 'http://localhost:3001/api/uploads/serve/$downloadUrl';
+        downloadUrl = '${ApiConstants.baseUrl}/uploads/serve/$downloadUrl';
       }
-      // Rewrite URL for platform compatibility
+      // Rewrite URL for platform compatibility (mainly for local development)
       downloadUrl = UrlUtils.rewriteUrl(downloadUrl);
     }
   }
