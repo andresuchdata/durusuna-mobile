@@ -27,7 +27,7 @@ CMD ["dumb-init", "npm", "run", "dev"]
 # Production dependencies stage
 FROM base AS deps
 ENV NODE_ENV=production
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Production stage
 FROM base AS production
@@ -53,4 +53,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
 # Start the application
-CMD ["dumb-init", "node", "src/server.js"] 
+CMD ["dumb-init", "node", "src/server.js"]
