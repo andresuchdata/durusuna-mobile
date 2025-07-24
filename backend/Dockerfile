@@ -1,10 +1,10 @@
-# Use Node.js 22 LTS (current 2025 LTS) with a specific Alpine version for stability
-FROM node:22-alpine3.18 AS base
+# Simple, single-stage Dockerfile for better Sevalla compatibility
+FROM node:22-alpine3.18
 
 # Set working directory
 WORKDIR /app
 
-# Install dumb-init and build dependencies for better compatibility
+# Install system dependencies
 RUN apk add --no-cache \
     dumb-init \
     python3 \
@@ -12,55 +12,23 @@ RUN apk add --no-cache \
     g++ \
     && ln -sf python3 /usr/bin/python
 
-# Create app user for security
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
+# Create app user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
 
-# Copy package files (use wildcard to handle optional files)
+# Copy package files
 COPY package*.json ./
 
-# Development stage
-FROM base AS development
-ENV NODE_ENV=development
-RUN npm ci --include=dev
-COPY . .
-RUN chown -R nodejs:nodejs /app
-USER nodejs
-EXPOSE 3001
-CMD ["dumb-init", "npm", "run", "dev"]
-
-# Production dependencies stage
-FROM base AS deps
-ENV NODE_ENV=production
-
-# Copy package files (use wildcard for better compatibility)
-COPY package*.json ./
-
-# Install production dependencies
-RUN npm ci --omit=dev && npm cache clean --force
-
-# Production stage
-FROM node:22-alpine3.18 AS production
-ENV NODE_ENV=production
-
-# Set working directory
-WORKDIR /app
-
-# Install only runtime dependencies
-RUN apk add --no-cache dumb-init
-
-# Create app user for security
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
-
-# Copy production dependencies
-COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
+# Install dependencies with fallback strategy
+RUN npm ci --only=production || npm install --only=production
+RUN npm cache clean --force
 
 # Copy application code
-COPY --chown=nodejs:nodejs . .
+COPY . .
 
-# Create uploads directory
-RUN mkdir -p uploads logs && chown -R nodejs:nodejs uploads logs
+# Create necessary directories
+RUN mkdir -p uploads logs && \
+    chown -R nodejs:nodejs /app
 
 # Switch to non-root user
 USER nodejs
