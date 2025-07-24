@@ -4,6 +4,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../core/utils/global_auth_handler.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/models/user.dart';
+import '../../../../shared/widgets/widgets.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../chat/presentation/pages/conversations_page.dart';
 
@@ -300,22 +301,15 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
               child: Column(
                 children: [
-                  CircleAvatar(
+                  AvatarManager.user(
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    currentAvatarUrl: user.avatarUrl,
                     radius: 50,
-                    backgroundColor: AppTheme.primaryColor,
-                    backgroundImage: user.avatarUrl != null
-                        ? NetworkImage(user.avatarUrl!)
-                        : null,
-                    child: user.avatarUrl == null
-                        ? Text(
-                            '${user.firstName[0]}${user.lastName[0]}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          )
-                        : null,
+                    onAvatarChanged: (updatedUser) {
+                      // Refresh user data from the server to get latest state
+                      ref.read(authStateProvider.notifier).refreshUser();
+                    },
                   ),
                   const SizedBox(height: 16),
                   Text(

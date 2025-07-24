@@ -144,6 +144,7 @@ class AuthService {
     String? lastName,
     String? phone,
     DateTime? dateOfBirth,
+    String? avatarUrl,
     Map<String, dynamic>? preferences,
   }) async {
     try {
@@ -153,6 +154,7 @@ class AuthService {
       if (phone != null) updateData['phone'] = phone;
       if (dateOfBirth != null)
         updateData['date_of_birth'] = dateOfBirth.toIso8601String();
+      if (avatarUrl != null) updateData['avatar_url'] = avatarUrl;
       if (preferences != null) updateData['preferences'] = preferences;
 
       final response = await _apiService.put(

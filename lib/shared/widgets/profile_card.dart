@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/constants/app_theme.dart';
 import '../models/user.dart';
+import 'avatar_widget.dart';
 
 class ProfileCard extends StatelessWidget {
   final User user;
@@ -46,40 +47,13 @@ class ProfileCard extends StatelessWidget {
           ),
 
           // Profile Avatar with online indicator
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 50,
-                backgroundColor: AppTheme.primaryColor,
-                backgroundImage: user.avatarUrl?.isNotEmpty == true
-                    ? NetworkImage(user.avatarUrl!)
-                    : null,
-                child: user.avatarUrl?.isEmpty != false
-                    ? Text(
-                        '${user.firstName[0]}${user.lastName[0]}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      )
-                    : null,
-              ),
-              if (isOnline)
-                Positioned(
-                  bottom: 4,
-                  right: 4,
-                  child: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
-                    ),
-                  ),
-                ),
-            ],
+          Avatar.user(
+            firstName: user.firstName,
+            lastName: user.lastName,
+            avatarUrl: user.avatarUrl,
+            radius: AvatarSize.extraLarge,
+            showOnlineIndicator: true,
+            isOnline: isOnline,
           ),
 
           const SizedBox(height: 16),

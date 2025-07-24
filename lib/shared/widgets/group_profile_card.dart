@@ -3,6 +3,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../core/constants/app_theme.dart';
 import '../models/user.dart';
 import '../services/chat_service.dart';
+import 'avatar_widget.dart';
 
 class GroupProfileCard extends StatefulWidget {
   final Conversation conversation;
@@ -54,23 +55,14 @@ class _GroupProfileCardState extends State<GroupProfileCard> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Column(
               children: [
-                // Group Avatar
+                // Group Avatar with Edit Button
                 Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundColor: AppTheme.primaryColor,
-                      backgroundImage:
-                          widget.conversation.avatarUrl?.isNotEmpty == true
-                              ? NetworkImage(widget.conversation.avatarUrl!)
-                              : null,
-                      child: widget.conversation.avatarUrl?.isEmpty != false
-                          ? const Icon(
-                              Icons.group,
-                              size: 50,
-                              color: Colors.white,
-                            )
-                          : null,
+                    Avatar.group(
+                      avatarUrl: widget.conversation.avatarUrl,
+                      radius: AvatarSize.extraLarge,
+                      fallbackIcon: Icons.group,
+                      onTap: widget.onEditGroup,
                     ),
                     if (widget.onEditGroup != null)
                       Positioned(
@@ -87,7 +79,7 @@ class _GroupProfileCardState extends State<GroupProfileCard> {
                               border: Border.all(color: Colors.white, width: 3),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
+                                  color: Colors.black.withValues(alpha: 0.2),
                                   blurRadius: 4,
                                   offset: const Offset(0, 2),
                                 ),
@@ -363,40 +355,14 @@ class _GroupProfileCardState extends State<GroupProfileCard> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
-      leading: Stack(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: AppTheme.primaryColor,
-            backgroundImage: member.avatarUrl?.isNotEmpty == true
-                ? NetworkImage(member.avatarUrl!)
-                : null,
-            child: member.avatarUrl?.isEmpty != false
-                ? Text(
-                    '${member.firstName[0]}${member.lastName[0]}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  )
-                : null,
-          ),
-          // Online indicator (for future use when we have real-time presence)
-          // Positioned(
-          //   bottom: 0,
-          //   right: 0,
-          //   child: Container(
-          //     width: 14,
-          //     height: 14,
-          //     decoration: BoxDecoration(
-          //       color: Colors.green,
-          //       shape: BoxShape.circle,
-          //       border: Border.all(color: Colors.white, width: 2),
-          //     ),
-          //   ),
-          // ),
-        ],
+      leading: Avatar.user(
+        firstName: member.firstName,
+        lastName: member.lastName,
+        avatarUrl: member.avatarUrl,
+        radius: 22,
+        showOnlineIndicator:
+            false, // Can be enabled when real-time presence is implemented
+        onTap: () => widget.onUserTap?.call(member),
       ),
       title: Text(
         member.displayName,

@@ -826,48 +826,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           children: [
             GestureDetector(
               onTap: () => _showProfileCard(),
-              child: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppTheme.primaryColor,
-                    backgroundImage: _getAvatarUrl().isNotEmpty
-                        ? NetworkImage(_getAvatarUrl())
-                        : null,
-                    child: _getAvatarUrl().isEmpty
-                        ? Text(
-                            _getInitials(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          )
-                        : null,
-                  ),
-                  // Online indicator for direct conversations
-                  if (widget.conversation.type == 'direct' &&
-                      _isOtherUserOnline)
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: Colors.green, // Force bright green
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
+              child: widget.conversation.type == 'group'
+                  ? Avatar.group(
+                      avatarUrl: widget.conversation.avatarUrl,
+                      radius: 20,
+                      fallbackIcon: Icons.group,
+                    )
+                  : Avatar.user(
+                      firstName: widget.conversation.otherUser?.firstName ?? '',
+                      lastName: widget.conversation.otherUser?.lastName ?? '',
+                      avatarUrl: widget.conversation.otherUser?.avatarUrl,
+                      radius: 20,
+                      showOnlineIndicator: true,
+                      isOnline: _isOtherUserOnline,
               ),
             ),
             const SizedBox(width: 12),
@@ -1661,22 +1632,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
-      leading: CircleAvatar(
+      leading: Avatar.user(
+        firstName: member.firstName,
+        lastName: member.lastName,
+        avatarUrl: member.avatarUrl,
         radius: 22,
-        backgroundColor: AppTheme.primaryColor,
-        backgroundImage: member.avatarUrl?.isNotEmpty == true
-            ? NetworkImage(member.avatarUrl!)
-            : null,
-        child: member.avatarUrl?.isEmpty != false
-            ? Text(
-                '${member.firstName[0]}${member.lastName[0]}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              )
-            : null,
+        showOnlineIndicator: false, // Can be enabled when real-time presence is implemented
       ),
       title: Text(
         member.displayName,
