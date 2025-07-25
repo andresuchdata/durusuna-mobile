@@ -85,8 +85,83 @@ class ClassUpdate {
     this.commentsCount,
   });
 
-  factory ClassUpdate.fromJson(Map<String, dynamic> json) =>
-      _$ClassUpdateFromJson(json);
+  factory ClassUpdate.fromJson(Map<String, dynamic> json) {
+    try {
+      // Filter out attachments with empty IDs (corrupted seed data)
+      List<Map<String, dynamic>>? filteredAttachments;
+      if (json['attachments'] != null) {
+        final attachmentList = json['attachments'] as List<dynamic>;
+        filteredAttachments = [];
+
+        for (final attachment in attachmentList) {
+          if (attachment != null &&
+              attachment is Map<String, dynamic> &&
+              attachment['id'] != null &&
+              attachment['id'].toString().trim().isNotEmpty) {
+            filteredAttachments.add(attachment);
+          }
+        }
+      }
+
+      // Use manual parsing to avoid null casting errors
+      return ClassUpdate(
+        id: json['id']?.toString() ?? '',
+        classId: json['class_id']?.toString() ?? '',
+        authorId: json['author_id']?.toString() ?? '',
+        title: json['title']?.toString(),
+        content: json['content']?.toString() ?? '',
+        updateType: UpdateType.values.firstWhere(
+          (e) => e.name == json['update_type'],
+          orElse: () => UpdateType.announcement,
+        ),
+        attachments: filteredAttachments,
+        reactions: json['reactions'] != null
+            ? (json['reactions'] as Map<String, dynamic>).map(
+                (k, e) =>
+                    MapEntry(k, Reaction.fromJson(e as Map<String, dynamic>)),
+              )
+            : null,
+        isPinned: json['is_pinned'] == true,
+        isEdited: json['is_edited'] == true,
+        editedAt: json['edited_at'] != null
+            ? DateTime.tryParse(json['edited_at'].toString())
+            : null,
+        isDeleted: json['is_deleted'] == true,
+        deletedAt: json['deleted_at'] != null
+            ? DateTime.tryParse(json['deleted_at'].toString())
+            : null,
+        createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+            DateTime.now(),
+        updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? '') ??
+            DateTime.now(),
+        author: json['author'] != null
+            ? _safeParseUser(json['author'] as Map<String, dynamic>)
+            : null,
+        comments: json['comments'] != null
+            ? (json['comments'] as List<dynamic>)
+                .map((e) =>
+                    ClassUpdateComment.fromJson(e as Map<String, dynamic>))
+                .toList()
+            : null,
+        commentsCount: json['comments_count'] != null
+            ? int.tryParse(json['comments_count'].toString())
+            : null,
+      );
+    } catch (e) {
+      print('Error parsing ClassUpdate: $e');
+      rethrow;
+    }
+  }
+
+  static User? _safeParseUser(Map<String, dynamic> json) {
+    try {
+      return User.fromJson(json);
+    } catch (e) {
+      print('Error parsing User in ClassUpdate: $e');
+      return null;
+    }
+  }
+
   Map<String, dynamic> toJson() => _$ClassUpdateToJson(this);
 
   bool get hasAttachments => attachments != null && attachments!.isNotEmpty;

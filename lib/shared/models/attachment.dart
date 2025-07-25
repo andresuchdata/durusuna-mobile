@@ -52,7 +52,7 @@ class Attachment {
             json['original_name']?.toString() ??
             '',
         mimeType: json['mimeType']?.toString() ??
-            json['mime_type']?.toStrings() ??
+            json['mime_type']?.toString() ??
             'application/octet-stream',
         size: json['size'] is int
             ? json['size']
