@@ -252,8 +252,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _markMessagesAsReadViaAPI(List<String> messageIds) async {
     try {
       final chatService = ref.read(chatServiceProvider);
-      await chatService.markAsRead(messageIds);
-      print('📱 ChatPage: Successfully marked messages as read via API');
+      // Use conversation-level marking instead of individual messages
+      // This endpoint is working (returns 200) unlike the message-level one (404)
+      await chatService.markConversationAsRead(widget.conversation.id);
+      print('✅ Successfully marked conversation as read via API');
     } catch (e) {
       print('⚠️ ChatPage: Failed to mark messages as read via API: $e');
     }
