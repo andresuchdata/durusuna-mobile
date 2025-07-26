@@ -46,16 +46,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     // Join conversation room for real-time updates
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print('📱 ChatPage: Joining conversation ${widget.conversation.id}');
       final realtimeService = ref.read(realtimeServiceProvider);
-      print(
-          '📱 ChatPage: Realtime service connected: ${realtimeService.isConnected}');
 
       // Set current conversation ID to prevent unread count increments
       ref.read(currentConversationProvider.notifier).state =
           widget.conversation.id;
-      print(
-          '📱 ChatPage: Set current conversation ID to ${widget.conversation.id}');
 
       realtimeService.joinConversation(widget.conversation.id);
 
@@ -70,8 +65,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           timeSinceLastActivity.inSeconds < 30; // Last 30 seconds
 
       if (shouldForceRefresh) {
-        print(
-            '📱 🔄 ChatPage: FORCE REFRESHING - Conversation was recently active (${timeSinceLastActivity.inSeconds}s ago)');
         ref
             .read(chatMessagesProvider(widget.conversation.id).notifier)
             .refreshMessages();
@@ -83,7 +76,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Use the more reliable scroll method with longer delays
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
-          print('📱 ChatPage: Triggering initial scroll from initState');
           _ensureScrollToBottom();
         }
       });
@@ -91,36 +83,29 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Additional backup with even longer delay
       Future.delayed(const Duration(milliseconds: 1500), () {
         if (mounted && _shouldAutoScrollOnLoad) {
-          print('📱 ChatPage: Final backup scroll from initState');
           _ensureScrollToBottom();
         }
       });
 
       // REAL-TIME READ STATUS: Mark messages as read when opening chat page
       _markAllUnreadMessagesAsReadOnOpen();
-
-      // Note: Removed additional mark-as-read safety call
-      // We now only mark as read when user actually scrolls to view messages
     });
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _messageController.dispose();
     _focusNode.dispose();
 
-    // Leave conversation room and clear current conversation tracking
-    // Do this synchronously to ensure it happens before dispose completes
+    // Leave conversation room and clear current conversation ID
     try {
       final realtimeService = ref.read(realtimeServiceProvider);
       realtimeService.leaveConversation(widget.conversation.id);
-
-      // Clear current conversation ID immediately to allow unread counts
       ref.read(currentConversationProvider.notifier).state = null;
-      print('📱 ChatPage: Cleared current conversation ID in dispose');
     } catch (e) {
-      print('⚠️ Error in dispose: $e');
+      // Error in dispose
     }
 
     super.dispose();
@@ -128,19 +113,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void deactivate() {
-    // Additional cleanup when widget is deactivated (before dispose)
-    // This ensures cleanup happens even if dispose is delayed on iOS
+    // Clear current conversation when leaving page
     try {
-      final realtimeService = ref.read(realtimeServiceProvider);
-      realtimeService.leaveConversation(widget.conversation.id);
-
-      // Clear current conversation tracking to allow unread counts
       ref.read(currentConversationProvider.notifier).state = null;
-      print('📱 ChatPage: Cleared current conversation ID in deactivate');
     } catch (e) {
-      print('⚠️ Error in deactivate: $e');
+      // Error in deactivate
     }
-
     super.deactivate();
   }
 
@@ -206,8 +184,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ref
         .read(conversationsProvider.notifier)
         .markConversationAsRead(widget.conversation.id);
-    print(
-        '📱 ChatPage: Marked conversation as read - user viewed bottom messages');
 
     // REAL-TIME READ STATUS: Mark individual messages as read via realtime service
     _markIndividualMessagesAsRead();
@@ -236,8 +212,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     if (unreadMessages.isNotEmpty) {
       final messageIds = unreadMessages.map((m) => m.id).toList();
-      print(
-          '📱 ChatPage: Marking ${messageIds.length} messages as read via realtime service');
 
       // Emit to realtime service for immediate updates
       final realtimeService = ref.read(realtimeServiceProvider);
@@ -255,9 +229,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Use conversation-level marking instead of individual messages
       // This endpoint is working (returns 200) unlike the message-level one (404)
       await chatService.markConversationAsRead(widget.conversation.id);
-      print('✅ Successfully marked conversation as read via API');
     } catch (e) {
-      print('⚠️ ChatPage: Failed to mark messages as read via API: $e');
+      // Error in API call
     }
   }
 
@@ -331,7 +304,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       await ref
           .read(conversationsProvider.notifier)
           .markConversationAsRead(widget.conversation.id);
-      print('📱 ChatPage: Marked conversation as read after sending message');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -345,21 +317,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _scrollToBottom({bool animated = true}) {
-    print('📱 _scrollToBottom() called - Animated: $animated');
-
     if (!mounted || !_scrollController.hasClients) {
-      print('❌ _scrollToBottom() - Not mounted or no clients');
       return;
     }
 
     final position = _scrollController.position;
     final targetPosition = position.maxScrollExtent;
 
-    print(
-        '📱 _scrollToBottom() - Target: $targetPosition, Current: ${position.pixels}');
-
     if (targetPosition <= 0) {
-      print('📱 _scrollToBottom() - No content to scroll to');
       return;
     }
 
@@ -377,28 +342,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             final currentPos = _scrollController.position.pixels;
             final maxPos = _scrollController.position.maxScrollExtent;
             final diff = (maxPos - currentPos).abs();
-            print(
-                '📱 After animation - Current: $currentPos, Target: $maxPos, Diff: $diff');
             if (diff > 10) {
-              print('📱 Animation didn\'t reach bottom, using jumpTo');
               _scrollController.jumpTo(maxPos);
             }
           }
         });
       } else {
         _scrollController.jumpTo(targetPosition);
-        print('✅ _scrollToBottom() - Jumped to $targetPosition');
       }
     } catch (e) {
-      print('⚠️ _scrollToBottom() failed: $e');
+      // Error in scrollToBottom
     }
   }
 
   // More aggressive scroll method that waits for everything to be ready
   void _ensureScrollToBottom() {
     if (!mounted) return;
-
-    print('📱 _ensureScrollToBottom() called');
 
     // Wait for the next frame cycle to ensure ListView is fully built
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -411,16 +370,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _attemptScrollWithRetry(int attempt, {int maxAttempts = 12}) {
     if (!mounted || attempt > maxAttempts) {
-      print('❌ _attemptScrollWithRetry - Stopped at attempt $attempt');
       return;
     }
 
-    print('📱 _attemptScrollWithRetry - Attempt $attempt (Android optimized)');
-
     if (_scrollController.hasClients &&
         _scrollController.position.maxScrollExtent > 0) {
-      print('📱 ScrollController ready on attempt $attempt - executing scroll');
-
       // Use immediate jumpTo for better reliability on Android
       final targetPosition = _scrollController.position.maxScrollExtent;
       _scrollController.jumpTo(targetPosition);
@@ -431,11 +385,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           final currentPos = _scrollController.position.pixels;
           final maxPos = _scrollController.position.maxScrollExtent;
           final diff = (maxPos - currentPos).abs();
-          print(
-              '📱 Verify scroll - Current: $currentPos, Target: $maxPos, Diff: $diff');
 
           if (diff > 5) {
-            print('📱 Not at bottom, trying again immediately');
             _scrollController.jumpTo(maxPos);
 
             // Double-check after another delay
@@ -443,14 +394,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               if (mounted && _scrollController.hasClients) {
                 final finalPos = _scrollController.position.pixels;
                 final finalMax = _scrollController.position.maxScrollExtent;
-                print('📱 Final position check: $finalPos vs $finalMax');
                 if ((finalMax - finalPos).abs() > 5) {
                   _scrollController.jumpTo(finalMax);
                 }
               }
             });
           } else {
-            print('✅ Successfully scrolled to bottom');
             // User has been scrolled to bottom, mark conversation as read
             _markAsReadWhenAtBottom();
           }
@@ -459,8 +408,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     } else {
       // Wait longer between attempts for later retries (Android needs more time)
       final delay = Duration(milliseconds: 150 + (attempt * 75));
-      print(
-          '📱 ScrollController not ready, retrying in ${delay.inMilliseconds}ms');
       Future.delayed(delay, () {
         _attemptScrollWithRetry(attempt + 1, maxAttempts: maxAttempts);
       });
@@ -471,15 +418,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _forceScrollToBottomWhenReady() {
     if (!mounted) return;
 
-    print('📱 _forceScrollToBottomWhenReady() called');
-
     // Keep trying until scroll controller has clients and maxScrollExtent > 0
     void waitForScrollController(int attempt) {
       if (!mounted) return;
 
       if (_scrollController.hasClients &&
           _scrollController.position.maxScrollExtent > 0) {
-        print('📱 ScrollController ready, forcing scroll to bottom');
         _scrollToBottom(animated: false);
 
         // Additional attempts
@@ -492,12 +436,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         });
       } else if (attempt < 20) {
         // Try for up to 2 seconds
-        print('📱 ScrollController not ready, attempt $attempt');
         Future.delayed(const Duration(milliseconds: 100), () {
           waitForScrollController(attempt + 1);
         });
       } else {
-        print('❌ ScrollController never became ready');
+        // ScrollController never became ready
       }
     }
 
@@ -520,13 +463,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ref.watch(chatMessagesProvider(widget.conversation.id));
 
     // Debug: Print green dot status every build
-    print(
-        '🟢 Build: Green dot status - type: ${widget.conversation.type}, online: $_isOtherUserOnline, typing: ${messagesState.isTyping}');
+    // print(
+    //     '🟢 Build: Green dot status - type: ${widget.conversation.type}, online: $_isOtherUserOnline, typing: ${messagesState.isTyping}');
 
     // Safety check: If someone is typing, they must be online
     if (messagesState.isTyping && !_isOtherUserOnline) {
-      print(
-          '🔄 Safety check: User is typing but not marked online - fixing this');
+      // print(
+      //     '🔄 Safety check: User is typing but not marked online - fixing this');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           setState(() {
@@ -540,7 +483,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (!messagesState.isLoading &&
         messagesState.messages.isNotEmpty &&
         _shouldAutoScrollOnLoad) {
-      print('📱 Build: Messages already loaded, forcing scroll to bottom');
+      // print('📱 Build: Messages already loaded, forcing scroll to bottom');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _shouldAutoScrollOnLoad = false;
@@ -556,9 +499,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           previous?.isLoading == true &&
           next.isLoading == false &&
           next.messages.isNotEmpty) {
-        print(
-            '📱 ChatPage: Auto-scrolling to bottom after initial messages loaded');
-        print('📱 ChatPage: Message count: ${next.messages.length}');
+        // print(
+        //     '📱 ChatPage: Auto-scrolling to bottom after initial messages loaded');
+        // print('📱 ChatPage: Message count: ${next.messages.length}');
         _shouldAutoScrollOnLoad = false; // Prevent future auto-scrolls
 
         // Use multiple scroll attempts for Android reliability
@@ -567,14 +510,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         // Additional scroll attempts with longer delays for Android
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
-            print('📱 ChatPage: Secondary scroll attempt (800ms delay)');
+            // print('📱 ChatPage: Secondary scroll attempt (800ms delay)');
             _ensureScrollToBottom();
           }
         });
 
         Future.delayed(const Duration(milliseconds: 1500), () {
           if (mounted) {
-            print('📱 ChatPage: Final scroll attempt (1500ms delay)');
+            // print('📱 ChatPage: Final scroll attempt (1500ms delay)');
             _scrollToBottom(animated: false); // Force immediate scroll
           }
         });
@@ -585,36 +528,36 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ref.listen(realtimeConnectionProvider, (previous, next) {
       next?.when(
         data: (isConnected) {
-          print('📱 ChatPage: Realtime connection status: $isConnected');
+          // print('📱 ChatPage: Realtime connection status: $isConnected');
           if (isConnected) {
-            print(
-                '📱 ChatPage: Realtime service connected - joining conversation');
+            // print(
+            //     '📱 ChatPage: Realtime service connected - joining conversation');
             final realtimeService = ref.read(realtimeServiceProvider);
             realtimeService.joinConversation(widget.conversation.id);
           }
         },
         loading: () {
-          print('📱 ChatPage: Realtime connection loading...');
+          // print('📱 ChatPage: Realtime connection loading...');
         },
         error: (error, stack) {
-          print('❌ ChatPage: Realtime connection error: $error');
+          // print('❌ ChatPage: Realtime connection error: $error');
         },
       );
     });
 
     // Listen for new messages from realtime service
     ref.listen(realtimeMessagesProvider, (previous, next) {
-      print('📱 ChatPage: realtimeMessagesProvider state change');
+      // print('📱 ChatPage: realtimeMessagesProvider state change');
       next?.when(
         data: (realtimeMessage) {
-          print(
-              '📱 ChatPage: Received realtime message - Action: ${realtimeMessage.action}');
-          print(
-              '📱 ChatPage: Message conversation ID: ${realtimeMessage.conversationId}');
-          print(
-              '📱 ChatPage: Current conversation ID: ${widget.conversation.id}');
-          print(
-              '📱 ChatPage: Message content: ${realtimeMessage.message.content}');
+          // print(
+          //     '📱 ChatPage: Received realtime message - Action: ${realtimeMessage.action}');
+          // print(
+          //     '📱 ChatPage: Message conversation ID: ${realtimeMessage.conversationId}');
+          // print(
+          //     '📱 ChatPage: Current conversation ID: ${widget.conversation.id}');
+          // print(
+          //     '📱 ChatPage: Message content: ${realtimeMessage.message.content}');
 
           if (realtimeMessage.conversationId == widget.conversation.id) {
             // Skip messages from current user (already added optimistically)
@@ -623,14 +566,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 realtimeMessage.message.senderId == currentUserId;
 
             if (isOwnMessage) {
-              print(
-                  '📱 ChatPage: Replacing optimistic message with server version');
+              // print(
+              //     '📱 ChatPage: Replacing optimistic message with server version');
               // Replace optimistic message with server version (has updated timestamps, delivery status, etc.)
               ref
                   .read(chatMessagesProvider(widget.conversation.id).notifier)
                   .replaceMessage(realtimeMessage.message);
             } else {
-              print('📱 ChatPage: Adding message from other user');
+              // print('📱 ChatPage: Adding message from other user');
               ref
                   .read(chatMessagesProvider(widget.conversation.id).notifier)
                   .addMessage(realtimeMessage.message);
@@ -638,7 +581,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
             // Auto-scroll to bottom for any new message (own or from others)
             if (realtimeMessage.action == 'created') {
-              print('📱 ChatPage: Scrolling to bottom for new message');
+              // print('📱 ChatPage: Scrolling to bottom for new message');
 
               // Check if user is near the bottom before auto-scrolling
               // Only auto-scroll if user is within 200 pixels of bottom
@@ -647,7 +590,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       _scrollController.position.maxScrollExtent - 200;
 
               if (shouldAutoScroll) {
-                print('📱 ChatPage: User is near bottom, auto-scrolling');
+                // print('📱 ChatPage: User is near bottom, auto-scrolling');
 
                 // Add a small delay to ensure the message is fully rendered
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -657,140 +600,140 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     // Additional scroll attempt with delay for reliability
                     Future.delayed(const Duration(milliseconds: 200), () {
                       if (mounted) {
-                        print('📱 ChatPage: Secondary scroll for new message');
+                        // print('📱 ChatPage: Secondary scroll for new message');
                         _scrollToBottom(animated: true);
                       }
                     });
                   }
                 });
               } else {
-                print(
-                    '📱 ChatPage: User is reading older messages, not auto-scrolling');
+                // print(
+                //     '📱 ChatPage: User is reading older messages, not auto-scrolling');
 
                 // Show a subtle indicator that there's a new message
                 // (Optional: Could add a "New message" floating button here)
               }
             }
           } else {
-            print(
-                '📱 ChatPage: Message is for different conversation - ignoring');
+            // print(
+            //     '📱 ChatPage: Message is for different conversation - ignoring');
           }
         },
         loading: () {
-          print('📱 ChatPage: Realtime messages loading...');
+          // print('📱 ChatPage: Realtime messages loading...');
         },
         error: (error, stack) {
-          print('❌ ChatPage: Error listening to realtime messages: $error');
-          print('❌ Stack: $stack');
+          // print('❌ ChatPage: Error listening to realtime messages: $error');
+          // print('❌ Stack: $stack');
         },
       );
     });
 
     // Listen for typing indicators
     ref.listen(realtimeTypingProvider, (previous, next) {
-      print('⌨️ ChatPage: realtimeTypingProvider state change');
+      // print('⌨️ ChatPage: realtimeTypingProvider state change');
       next?.when(
         data: (typing) {
-          print(
-              '⌨️ ChatPage: Received typing event - User: ${typing.userId}, Typing: ${typing.isTyping}');
-          print(
-              '⌨️ ChatPage: Typing conversation ID: ${typing.conversationId}');
-          print(
-              '⌨️ ChatPage: Current conversation ID: ${widget.conversation.id}');
-          print(
-              '⌨️ ChatPage: Current user ID: ${ref.read(authStateProvider).user?.id}');
+          // print(
+          //     '⌨️ ChatPage: Received typing event - User: ${typing.userId}, Typing: ${typing.isTyping}');
+          // print(
+          //     '⌨️ ChatPage: Typing conversation ID: ${typing.conversationId}');
+          // print(
+          //     '⌨️ ChatPage: Current conversation ID: ${widget.conversation.id}');
+          // print(
+          //     '⌨️ ChatPage: Current user ID: ${ref.read(authStateProvider).user?.id}');
 
           if (typing.conversationId == widget.conversation.id &&
               typing.userId != ref.read(authStateProvider).user?.id) {
-            print(
-                '⌨️ ChatPage: Setting typing indicator to: ${typing.isTyping}');
+            // print(
+            //     '⌨️ ChatPage: Setting typing indicator to: ${typing.isTyping}');
             ref
                 .read(chatMessagesProvider(widget.conversation.id).notifier)
                 .setTyping(typing.isTyping);
 
             // If someone is typing, they're definitely online - show green dot
             final otherUserId = widget.conversation.otherUser?.id;
-            print(
-                '🔍 Debug: otherUserId=$otherUserId, typing.userId=${typing.userId}, typing.isTyping=${typing.isTyping}');
-            print('🔍 Debug: Current _isOtherUserOnline=$_isOtherUserOnline');
+            // print(
+            //     '🔍 Debug: otherUserId=$otherUserId, typing.userId=${typing.userId}, typing.isTyping=${typing.isTyping}');
+            // print('🔍 Debug: Current _isOtherUserOnline=$_isOtherUserOnline');
 
             if (otherUserId != null &&
                 typing.userId == otherUserId &&
                 typing.isTyping) {
-              print(
-                  '👤 ChatPage: User is typing → Setting as ONLINE (green dot should appear)');
+              // print(
+              //     '👤 ChatPage: User is typing → Setting as ONLINE (green dot should appear)');
               setState(() {
                 _isOtherUserOnline = true;
               });
-              print(
-                  '🔍 Debug: After setState _isOtherUserOnline=$_isOtherUserOnline');
+              // print(
+              //     '🔍 Debug: After setState _isOtherUserOnline=$_isOtherUserOnline');
             }
           } else {
-            print(
-                '⌨️ ChatPage: Ignoring typing event (wrong conversation or own typing)');
+            // print(
+            //     '⌨️ ChatPage: Ignoring typing event (wrong conversation or own typing)');
           }
         },
         loading: () {
-          print('⌨️ ChatPage: Realtime typing loading...');
+          // print('⌨️ ChatPage: Realtime typing loading...');
         },
         error: (error, stack) {
-          print('❌ ChatPage: Error listening to typing indicators: $error');
-          print('❌ Stack: $stack');
+          // print('❌ ChatPage: Error listening to typing indicators: $error');
+          // print('❌ Stack: $stack');
         },
       );
     });
 
     // Listen for presence updates (online/offline status)
     ref.listen(realtimePresenceProvider, (previous, next) {
-      print('👤 ChatPage: realtimePresenceProvider state change');
+      // print('👤 ChatPage: realtimePresenceProvider state change');
       next?.when(
         data: (presence) {
-          print(
-              '👤 ChatPage: Received presence event - User: ${presence.userId}, Online: ${presence.isOnline}');
+          // print(
+          //     '👤 ChatPage: Received presence event - User: ${presence.userId}, Online: ${presence.isOnline}');
 
           // Check if this presence update is for the other user in this conversation
           final otherUserId = widget.conversation.otherUser?.id;
-          print('👤 ChatPage: Other user ID: $otherUserId');
-          print(
-              '👤 ChatPage: Current user ID: ${ref.read(authStateProvider).user?.id}');
+          // print('👤 ChatPage: Other user ID: $otherUserId');
+          // print(
+          //     '👤 ChatPage: Current user ID: ${ref.read(authStateProvider).user?.id}');
 
           if (otherUserId != null && presence.userId == otherUserId) {
-            print(
-                '👤 ChatPage: Updating presence for other user: ${presence.isOnline ? "Online" : "Offline"}');
-            print(
-                '👤 ChatPage: Green dot should ${presence.isOnline ? "APPEAR" : "DISAPPEAR"}');
+            // print(
+            //     '👤 ChatPage: Updating presence for other user: ${presence.isOnline ? "Online" : "Offline"}');
+            // print(
+            //     '👤 ChatPage: Green dot should ${presence.isOnline ? "APPEAR" : "DISAPPEAR"}');
             setState(() {
               _isOtherUserOnline = presence.isOnline;
             });
           } else {
-            print(
-                '👤 ChatPage: Ignoring presence event (not for other user in this conversation)');
+            // print(
+            //     '👤 ChatPage: Ignoring presence event (not for other user in this conversation)');
           }
         },
         loading: () {
-          print('👤 ChatPage: Realtime presence loading...');
+          // print('👤 ChatPage: Realtime presence loading...');
         },
         error: (error, stack) {
-          print('❌ ChatPage: Error listening to presence updates: $error');
-          print('❌ Stack: $stack');
+          // print('❌ ChatPage: Error listening to presence updates: $error');
+          // print('❌ Stack: $stack');
         },
       );
     });
 
     // REAL-TIME READ STATUS: Listen for message status updates
     ref.listen(realtimeMessageStatusProvider, (previous, next) {
-      print('📋 ChatPage: realtimeMessageStatusProvider state change');
+      // print('📋 ChatPage: realtimeMessageStatusProvider state change');
       next?.when(
         data: (statusEvent) {
-          print(
-              '📋 ChatPage: Received message status event - Status: ${statusEvent.status}');
-          print('📋 ChatPage: Message IDs: ${statusEvent.messageIds}');
-          print('📋 ChatPage: Conversation ID: ${statusEvent.conversationId}');
+          // print(
+          //     '📋 ChatPage: Received message status event - Status: ${statusEvent.status}');
+          // print('📋 ChatPage: Message IDs: ${statusEvent.messageIds}');
+          // print('📋 ChatPage: Conversation ID: ${statusEvent.conversationId}');
 
           // Only process if it's for this conversation
           if (statusEvent.conversationId == widget.conversation.id) {
-            print(
-                '📋 ChatPage: Updating message status for ${statusEvent.messageIds.length} messages');
+            // print(
+            //     '📋 ChatPage: Updating message status for ${statusEvent.messageIds.length} messages');
 
             // Update message status in the local state
             final messagesNotifier =
@@ -800,20 +743,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   messageId, statusEvent.status, statusEvent.timestamp);
             }
 
-            print(
-                '✅ ChatPage: Updated read status for messages - double ticks should update');
+            // print(
+            //     '✅ ChatPage: Updated read status for messages - double ticks should update');
           } else {
-            print(
-                '📋 ChatPage: Ignoring status event (different conversation)');
+            // print(
+            //     '📋 ChatPage: Ignoring status event (different conversation)');
           }
         },
         loading: () {
-          print('📋 ChatPage: Realtime message status loading...');
+          // print('📋 ChatPage: Realtime message status loading...');
         },
         error: (error, stack) {
-          print(
-              '❌ ChatPage: Error listening to message status updates: $error');
-          print('❌ Stack: $stack');
+          // print(
+          //     '❌ ChatPage: Error listening to message status updates: $error');
+          // print('❌ Stack: $stack');
         },
       );
     });

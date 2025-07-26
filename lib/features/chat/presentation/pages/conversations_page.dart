@@ -115,8 +115,6 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                               ref
                                   .read(currentConversationProvider.notifier)
                                   .state = null;
-                              print(
-                                  '📱 ConversationsPage: Cleared current conversation before navigation');
 
                               Navigator.of(context)
                                   .push(
@@ -135,8 +133,6 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                                       .read(
                                           currentConversationProvider.notifier)
                                       .state = null;
-                                  print(
-                                      '📱 ConversationsPage: Cleared current conversation after returning from chat');
 
                                   // Refresh conversations to get latest unread counts
                                   ref
@@ -280,10 +276,6 @@ class ConversationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Debug: Print conversation status every time it builds
-    print(
-        '🏗️ Building ConversationTile for ${displayName} - type: ${conversation.type}, isOnline: ${conversation.isOnline}');
-
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Stack(
@@ -305,14 +297,6 @@ class ConversationTile extends StatelessWidget {
                 : null,
           ),
           if (conversation.type == 'direct' && conversation.isOnline) ...[
-            // Debug log when green dot should show in conversations list
-            Builder(
-              builder: (context) {
-                print(
-                    '🟢 CONVERSATIONS: Green dot should show for ${conversation.otherUser?.displayName} - isOnline: ${conversation.isOnline}');
-                return const SizedBox.shrink();
-              },
-            ),
             Positioned(
               bottom: 0,
               right: 0,
@@ -325,7 +309,7 @@ class ConversationTile extends StatelessWidget {
                   border: Border.all(color: Colors.white, width: 3),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 2,
                       offset: const Offset(0, 1),
                     ),
@@ -342,7 +326,7 @@ class ConversationTile extends StatelessWidget {
                 width: 16,
                 height: 16,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.8),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.8),
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
                 ),

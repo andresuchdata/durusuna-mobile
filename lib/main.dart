@@ -51,37 +51,18 @@ class DurusunaMobileApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
 
-    // Watch realtime connection status for debugging
-    ref.listen(realtimeConnectionProvider, (previous, next) {
-      next?.when(
-        data: (isConnected) {
-          print('📱 App: Realtime connection status changed: $isConnected');
-        },
-        loading: () {
-          print('📱 App: Realtime connection loading...');
-        },
-        error: (error, stack) {
-          print('📱 App: Realtime connection error: $error');
-        },
-      );
-    });
-
     // Listen for presence updates to keep conversations list in sync
     ref.listen(realtimePresenceProvider, (previous, next) {
       next?.when(
         data: (presence) {
-          print(
-              '📱 App: Global presence update - User: ${presence.userId}, Online: ${presence.isOnline}');
-          print('📱 App: Updating conversations list with presence change');
           // Update conversation list with latest presence
           ref
               .read(conversationsProvider.notifier)
               .updateUserStatus(presence.userId, presence.isOnline);
-          print('📱 App: Conversations list update completed');
         },
         loading: () {},
         error: (error, stack) {
-          print('📱 App: Error in global presence listener: $error');
+          // Error in global presence listener
         },
       );
     });
@@ -90,34 +71,15 @@ class DurusunaMobileApp extends ConsumerWidget {
     ref.listen(realtimeMessagesProvider, (previous, next) {
       next?.when(
         data: (realtimeMessage) {
-          print(
-              '📱 App: Global message update - Conversation: ${realtimeMessage.conversationId}');
-          print('📱 App: Message content: ${realtimeMessage.message.content}');
-          print('📱 App: Message sender: ${realtimeMessage.message.senderId}');
-
-          // Debug: Check current conversation provider state
-          final currentConversationId = ref.read(currentConversationProvider);
-          print(
-              '📱 App: Current conversation provider: $currentConversationId');
-          print(
-              '📱 App: Is viewing this conversation: ${currentConversationId == realtimeMessage.conversationId}');
-
-          // Get current user ID for comparison
-          final currentUserId = StorageService.getUser()?['id'];
-          print('📱 App: Current user ID: $currentUserId');
-          print(
-              '📱 App: Is own message: ${realtimeMessage.message.senderId == currentUserId}');
-
           // Update conversation's last message and unread count
           ref
               .read(conversationsProvider.notifier)
               .updateConversationLastMessage(
                   realtimeMessage.conversationId, realtimeMessage.message);
-          print('📱 App: Conversations list updated with new message');
         },
         loading: () {},
         error: (error, stack) {
-          print('📱 App: Error in global message listener: $error');
+          // Error in global message listener
         },
       );
     });
@@ -127,7 +89,6 @@ class DurusunaMobileApp extends ConsumerWidget {
       GlobalAuthHandler.initialize(navigatorKey, ref);
 
       // Initialize RealtimeService for app-wide socket connection
-      print('📱 App: Initializing RealtimeService...');
       ref.read(realtimeServiceProvider);
     });
 

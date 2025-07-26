@@ -60,9 +60,6 @@ class RealtimeService {
         throw Exception('No authentication token found');
       }
 
-      print(
-          '🔌 RealtimeService: Connecting to socket URL: ${ApiConstants.socketUrl}');
-
       _socket = IO.io(
         ApiConstants.socketUrl,
         IO.OptionBuilder()
@@ -80,17 +77,13 @@ class RealtimeService {
 
       _setupEventListeners();
       _socket!.connect();
-
-      print('🔌 RealtimeService: Connecting...');
     } catch (e) {
-      print('❌ RealtimeService connection error: $e');
       _connectionController.add(false);
     }
   }
 
   /// Disconnect from realtime service
   void disconnect() {
-    print('🔌 RealtimeService: Disconnecting...');
     _socket?.disconnect();
     _socket?.dispose();
     _socket = null;
@@ -101,7 +94,6 @@ class RealtimeService {
 
   /// Force reconnection with fresh token (useful after login)
   Future<void> reconnect() async {
-    print('🔄 RealtimeService: Force reconnecting...');
     disconnect();
     await Future.delayed(const Duration(milliseconds: 500)); // Brief delay
     await connect();
@@ -109,90 +101,73 @@ class RealtimeService {
 
   void _setupEventListeners() {
     _socket!.onConnect((_) {
-      print('✅ RealtimeService: Connected successfully');
       _isConnected = true;
       _connectionController.add(true);
       _setupUserPresence();
     });
 
     _socket!.onDisconnect((reason) {
-      print('❌ RealtimeService: Disconnected - Reason: $reason');
       _isConnected = false;
       _connectionController.add(false);
     });
 
     _socket!.onReconnect((_) {
-      print('🔄 RealtimeService: Reconnected');
       _setupUserPresence();
     });
 
     _socket!.onConnectError((error) {
-      print('❌ RealtimeService: Connection Error - $error');
       _isConnected = false;
       _connectionController.add(false);
     });
 
     _socket!.onError((error) {
-      print('❌ RealtimeService: General Error - $error');
+      // General error occurred
     });
 
     // Message events
     _socket!.on('message:new', (data) {
-      print('📨 RealtimeService: Received message:new event');
-      print('📨 Raw data: $data');
       try {
         final message = RealtimeMessage.fromJson(data);
-        print(
-            '📨 Parsed message: ${message.message.content} for conversation: ${message.conversationId}');
         _messageController.add(message);
       } catch (e) {
-        print('❌ Error parsing message:new event: $e');
-        print('❌ Raw data was: $data');
+        // Error parsing message:new event
       }
     });
 
     _socket!.on('message:updated', (data) {
-      print('📨 RealtimeService: Received message:updated event');
       try {
         final message = RealtimeMessage.fromJson(data);
         _messageController.add(message);
       } catch (e) {
-        print('❌ Error parsing message:updated event: $e');
+        // Error parsing message:updated event
       }
     });
 
     _socket!.on('message:deleted', (data) {
-      print('📨 RealtimeService: Received message:deleted event');
       try {
         final message = RealtimeMessage.fromJson(data);
         _messageController.add(message);
       } catch (e) {
-        print('❌ Error parsing message:deleted event: $e');
+        // Error parsing message:deleted event
       }
     });
 
     // Typing indicators
     _socket!.on('typing:start', (data) {
-      print('⌨️ RealtimeService: Received typing:start event');
       try {
         final event = TypingEvent.fromJson(data);
-        print(
-            '⌨️ User ${event.userId} started typing in conversation ${event.conversationId}');
         _typingController.add(event);
       } catch (e) {
-        print('❌ Error parsing typing:start event: $e');
+        // Error parsing typing:start event
       }
     });
 
     _socket!.on('typing:stop', (data) {
-      print('⌨️ RealtimeService: Received typing:stop event');
       try {
         final event = TypingEvent.fromJson(data);
-        print(
-            '⌨️ User ${event.userId} stopped typing in conversation ${event.conversationId}');
         _typingController.add(event);
       } catch (e) {
-        print('❌ Error parsing typing:stop event: $e');
+        // Error parsing typing:stop event
       }
     });
 
@@ -271,14 +246,9 @@ class RealtimeService {
 
   void _setupUserPresence() {
     final user = StorageService.getUser();
-    print('👤 Setting up user presence...');
     if (user != null) {
       _currentUserId = user['id'];
-      print('👤 Current user ID: $_currentUserId');
       _socket!.emit('user:online', {'userId': _currentUserId});
-      print('✅ Emitted user:online event for user: $_currentUserId');
-    } else {
-      print('❌ No user data found in storage');
     }
   }
 
@@ -286,24 +256,18 @@ class RealtimeService {
 
   /// Join a conversation room
   void joinConversation(String conversationId) {
-    print('🏠 Attempting to join conversation: $conversationId');
     if (!_isConnected) {
-      print('❌ Cannot join conversation - not connected to socket');
       return;
     }
     _socket!.emit('conversation:join', {'conversationId': conversationId});
-    print('✅ Emitted conversation:join event for: $conversationId');
   }
 
   /// Leave a conversation room
   void leaveConversation(String conversationId) {
-    print('🚪 Attempting to leave conversation: $conversationId');
     if (!_isConnected) {
-      print('❌ Cannot leave conversation - not connected to socket');
       return;
     }
     _socket!.emit('conversation:leave', {'conversationId': conversationId});
-    print('✅ Emitted conversation:leave event for: $conversationId');
   }
 
   /// Start typing indicator

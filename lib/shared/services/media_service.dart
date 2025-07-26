@@ -77,7 +77,6 @@ class MediaService {
       );
 
       if (image == null) {
-        debugPrint('Image picker cancelled by user');
         return null;
       }
 
@@ -93,12 +92,11 @@ class MediaService {
         type: MediaType.image,
       );
     } catch (e) {
-      debugPrint('Error picking image: $e');
       // Check for permission-specific errors
       if (e.toString().contains('Permission') ||
           e.toString().contains('denied') ||
           e.toString().contains('authorization')) {
-        debugPrint('Camera/Photo permission denied');
+        // Camera/Photo permission denied
       }
       return null;
     }
@@ -137,9 +135,6 @@ class MediaService {
 
       return results;
     } catch (e) {
-      if (kDebugMode) {
-        print('Error picking multiple images: $e');
-      }
       return [];
     }
   }
@@ -169,9 +164,6 @@ class MediaService {
         type: MediaType.video,
       );
     } catch (e) {
-      if (kDebugMode) {
-        print('Error picking video: $e');
-      }
       return null;
     }
   }
@@ -200,9 +192,6 @@ class MediaService {
 
         // Check file size limit
         if (fileSizeLimit != null && file.size > fileSizeLimit) {
-          if (kDebugMode) {
-            print('File ${file.name} exceeds size limit');
-          }
           continue;
         }
 
@@ -229,9 +218,6 @@ class MediaService {
 
       return mediaResults;
     } catch (e) {
-      if (kDebugMode) {
-        print('Error picking files: $e');
-      }
       return [];
     }
   }
@@ -361,9 +347,6 @@ class MediaService {
       await _dio
           .delete('${ApiConstants.baseUrl}/class-updates/attachments/$key');
     } catch (e) {
-      if (kDebugMode) {
-        print('Error deleting attachment: $e');
-      }
       rethrow;
     }
   }

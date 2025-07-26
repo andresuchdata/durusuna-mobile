@@ -13,27 +13,20 @@ class ChatService {
   /// Get conversations list for current user
   Future<List<Conversation>> getConversations() async {
     try {
-      print('🔍 ChatService.getConversations() - Making API call...');
       final response = await _apiService.get(ApiConstants.getConversations);
-      print('🔍 Response status: ${response.statusCode}');
-      print('🔍 Response data: ${response.data}');
 
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
         final conversationsList = data['conversations'] as List;
-        print('🔍 Found ${conversationsList.length} conversations');
 
         final conversations = conversationsList.map((json) {
           try {
             return Conversation.fromJson(json);
           } catch (e) {
-            print('❌ Error parsing conversation: $e');
-            print('❌ Raw JSON: $json');
             rethrow;
           }
         }).toList();
 
-        print('✅ Successfully parsed ${conversations.length} conversations');
         return conversations;
       } else {
         throw ApiException(
@@ -42,7 +35,6 @@ class ChatService {
         );
       }
     } catch (e) {
-      print('❌ ChatService.getConversations() error: $e');
       if (e is ApiException) rethrow;
       throw ApiException(
         message: 'Failed to get conversations: ${e.toString()}',
@@ -103,12 +95,6 @@ class ChatService {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      print('📤 ChatService.sendMessage() called with:');
-      print('📤   conversationId: $conversationId');
-      print('📤   receiverId: $receiverId');
-      print('📤   content: $content');
-      print('📤   messageType: ${messageType.name}');
-
       final data = <String, dynamic>{
         'message_type': messageType.name,
         if (conversationId != null) 'conversation_id': conversationId,
@@ -117,8 +103,6 @@ class ChatService {
         if (replyToId != null) 'reply_to_id': replyToId,
         if (metadata != null) 'metadata': metadata,
       };
-
-      print('📤 Request data: $data');
 
       final response = await _apiService.post(
         ApiConstants.sendMessage,
@@ -404,7 +388,6 @@ class Conversation {
             : DateTime.now(),
       );
     } catch (e) {
-      print('⚠️ Error parsing last_message, using fallback: $e');
       // Return a minimal message if parsing fails
       return Message(
         id: json['id'] ?? 'unknown',
@@ -544,25 +527,19 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
 
   ConversationsNotifier(this._chatService, this._ref)
       : super(ConversationsState()) {
-    print('📱 ConversationsNotifier created - loading conversations...');
     loadConversations();
   }
 
   Future<void> loadConversations() async {
-    print('📱 ConversationsNotifier.loadConversations() - starting...');
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       final conversations = await _chatService.getConversations();
-      print(
-          '📱 ConversationsNotifier - received ${conversations.length} conversations');
       state = state.copyWith(
         conversations: conversations,
         isLoading: false,
       );
-      print('📱 ConversationsNotifier - state updated successfully');
     } catch (e) {
-      print('❌ ConversationsNotifier - error loading conversations: $e');
       state = state.copyWith(
         isLoading: false,
         error: e.toString(),
@@ -571,19 +548,12 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
   }
 
   void updateConversationLastMessage(String conversationId, Message message) {
-    print(
-        '🔄 ConversationsNotifier.updateConversationLastMessage() - Conversation: $conversationId');
-    print('🔄 Message from: ${message.senderId}, content: ${message.content}');
-
     final index = state.conversations.indexWhere((c) => c.id == conversationId);
     if (index != -1) {
       final conversation = state.conversations[index];
-      print('🔄 Found conversation: ${conversation.otherUser?.displayName}');
 
       // Get current user ID from storage for more reliable comparison
       final currentUserId = StorageService.getUser()?['id'];
-      print('🔄 Current user ID from storage: $currentUserId');
-      print('🔄 Message sender ID: ${message.senderId}');
 
       // Determine if message is from another user
       final isFromOtherUser = message.senderId != currentUserId &&
@@ -596,10 +566,6 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
       final isViewingThisConversation =
           currentlyViewedConversationId == conversationId;
 
-      print('🔄 Is from other user: $isFromOtherUser');
-      print('🔄 Currently viewed conversation: $currentlyViewedConversationId');
-      print('🔄 Is viewing this conversation: $isViewingThisConversation');
-
       // Determine new unread count
       int newUnreadCount;
 
@@ -607,21 +573,13 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
         // If user is viewing this conversation, always set unread count to 0
         // regardless of who sent the message
         newUnreadCount = 0;
-        print('🔄 User is viewing conversation - setting unread count to 0');
       } else if (isFromOtherUser && message.senderId?.isNotEmpty == true) {
         // Only increment if message is from another user and user is not viewing
         newUnreadCount = conversation.unreadCount + 1;
-        print(
-            '🔄 Message from other user while not viewing - incrementing unread count');
       } else {
         // Keep existing unread count for own messages when not viewing
         newUnreadCount = conversation.unreadCount;
-        print(
-            '🔄 Own message or other condition - keeping existing unread count');
       }
-
-      print(
-          '🔄 Updated unread count: ${conversation.unreadCount} → $newUnreadCount');
 
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = conversation.copyWith(
@@ -635,21 +593,15 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
       updatedConversations.insert(0, updatedConversation);
 
       state = state.copyWith(conversations: updatedConversations);
-      print('🔄 Conversation moved to top and state updated');
     } else {
-      print('🔄 Conversation not found in list');
+      // Conversation not found in list
     }
   }
 
   Future<void> markConversationAsRead(String conversationId) async {
-    print(
-        '🔄 ConversationsNotifier.markConversationAsRead() - Conversation: $conversationId');
     final index = state.conversations.indexWhere((c) => c.id == conversationId);
     if (index != -1) {
       final conversation = state.conversations[index];
-      print(
-          '🔄 Found conversation: ${conversation.otherUser?.displayName ?? conversation.name}');
-      print('🔄 Current unread count: ${conversation.unreadCount}');
 
       // Update local state immediately
       final updatedConversations = [...state.conversations];
@@ -657,57 +609,37 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
         unreadCount: 0,
       );
       state = state.copyWith(conversations: updatedConversations);
-      print('🔄 Updated local unread count: ${conversation.unreadCount} → 0');
 
       // Call server API to mark conversation as read
       try {
         await _chatService.markConversationAsRead(conversationId);
-        print('✅ Successfully marked conversation as read on server');
       } catch (e) {
-        print('⚠️ Failed to mark conversation as read on server: $e');
         // Revert local state if server call fails
         final revertedConversations = [...state.conversations];
         revertedConversations[index] = revertedConversations[index].copyWith(
           unreadCount: conversation.unreadCount, // Restore original count
         );
         state = state.copyWith(conversations: revertedConversations);
-        print('🔄 Reverted local state due to server error');
       }
     } else {
-      print('⚠️ Conversation not found in local state: $conversationId');
+      // Conversation not found in local state
     }
   }
 
   void updateUserStatus(String userId, bool isOnline) {
-    print(
-        '🔄 ConversationsNotifier.updateUserStatus() - User: $userId, Online: $isOnline');
-    print('🔄 Current conversations count: ${state.conversations.length}');
-
     final index = state.conversations
         .indexWhere((c) => c.type == 'direct' && c.otherUser?.id == userId);
 
     if (index != -1) {
-      print('🔄 Found conversation at index $index for user $userId');
       final conversation = state.conversations[index];
-      print(
-          '🔄 Before: ${conversation.otherUser?.displayName} - isOnline: ${conversation.isOnline}');
 
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = updatedConversations[index].copyWith(
         isOnline: isOnline,
       );
       state = state.copyWith(conversations: updatedConversations);
-
-      print(
-          '🔄 After: ${updatedConversations[index].otherUser?.displayName} - isOnline: ${updatedConversations[index].isOnline}');
     } else {
-      print('🔄 No conversation found for user $userId');
-      // Debug: List all conversations
-      for (int i = 0; i < state.conversations.length; i++) {
-        final conv = state.conversations[i];
-        print(
-            '🔄 Conversation $i: type=${conv.type}, otherUserId=${conv.otherUser?.id}, displayName=${conv.otherUser?.displayName}');
-      }
+      // No conversation found for user
     }
   }
 
@@ -780,9 +712,6 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     if (loadMore && state.isLoadingMore) return;
     if (!loadMore && state.isLoading && !forceRefresh) return;
 
-    print(
-        '📋 ChatMessagesNotifier.loadMessages() - conversationId: $_conversationWithId, loadMore: $loadMore, forceRefresh: $forceRefresh');
-
     // Check if we should force refresh based on conversation's lastActivity
     if (!loadMore && !forceRefresh) {
       final conversationsState = _ref.read(conversationsProvider);
@@ -799,8 +728,6 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
             timeSinceLastActivity.inSeconds < 10; // Less than 10 seconds
 
         if (shouldForceRefresh) {
-          print(
-              '📋 🔄 FORCE REFRESH: Conversation was recently active (${timeSinceLastActivity.inSeconds}s ago)');
           forceRefresh = true;
         }
       }
@@ -820,24 +747,9 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         page: loadMore ? state.currentPage + 1 : 1,
       );
 
-      print(
-          '📋 Loaded ${messages.length} messages for conversation $_conversationWithId');
-
-      // Debug: Print first few messages
-      if (messages.isNotEmpty) {
-        print(
-            '📋 First message: ${messages.first.content} (${messages.first.createdAt})');
-        if (messages.length > 1) {
-          print(
-              '📋 Last message: ${messages.last.content} (${messages.last.createdAt})');
-        }
-      }
-
       // CRITICAL: Always ensure conversation's last message is included on initial load
       if (!loadMore) {
         await _ensureLastMessageIncluded(messages);
-        print(
-            '📋 After ensuring last message - final count: ${messages.length}');
       }
 
       if (mounted) {
@@ -857,10 +769,8 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
             currentPage: 1,
           );
         }
-        print('📋 Updated state with ${state.messages.length} total messages');
       }
     } catch (e) {
-      print('❌ Error loading messages: $e');
       if (mounted) {
         state = state.copyWith(
           isLoading: false,
@@ -884,13 +794,9 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
 
       if (conversation?.lastMessage != null) {
         final lastMessage = conversation!.lastMessage!;
-        print(
-            '📋 Conversation last message: ${lastMessage.content} (${lastMessage.createdAt})');
-        print('📋 Last message ID: ${lastMessage.id}');
 
         // Check if the last message is already in the loaded messages
         final isIncluded = loadedMessages.any((m) => m.id == lastMessage.id);
-        print('📋 Last message included in loaded messages: $isIncluded');
 
         // Also check by content and recent time as fallback (in case ID format differs)
         final recentThreshold =
@@ -898,12 +804,8 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         final isRecentlyIncluded = loadedMessages.any((m) =>
             m.content == lastMessage.content &&
             m.createdAt.isAfter(recentThreshold));
-        print('📋 Last message included by content+time: $isRecentlyIncluded');
 
         if (!isIncluded && !isRecentlyIncluded) {
-          print('📋 ⚠️ CRITICAL: Last message missing from API response!');
-          print('📋 Adding missing last message to ensure it appears in chat');
-
           // Create a properly formatted message from the conversation's lastMessage
           final missingMessage = Message(
             id: lastMessage.id.isNotEmpty
@@ -931,27 +833,15 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
 
           // Sort messages by createdAt to maintain proper order
           loadedMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-
-          print(
-              '📋 ✅ Added and sorted messages. New count: ${loadedMessages.length}');
-          print(
-              '📋 ✅ Added message: ${missingMessage.content} (${missingMessage.id})');
-        } else {
-          print('📋 ✅ Last message is already included in API response');
         }
-      } else {
-        print('📋 ℹ️ No last message in conversation to check');
       }
     } catch (e) {
-      print('⚠️ Error ensuring last message included: $e');
-      print('⚠️ Stack trace: ${StackTrace.current}');
+      // Error ensuring last message included
     }
   }
 
   /// Force refresh messages to ensure sync with conversation list
   Future<void> refreshMessages() async {
-    print(
-        '📋 🔄 ChatMessagesNotifier.refreshMessages() - Force refreshing to sync with conversations list');
     await loadMessages(forceRefresh: true);
   }
 
@@ -972,26 +862,20 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
 
     // Add optimistic message immediately for instant UI feedback
     if (mounted) {
-      print(
-          '📤 Adding OPTIMISTIC message: ${optimisticMessage.content} (temp ID: ${optimisticMessage.id})');
       state = state.copyWith(
         messages: [...state.messages, optimisticMessage],
       );
     }
 
     try {
-      print(
-          '📤 ChatMessagesNotifier.sendMessage() - conversationId: $_conversationWithId');
       final Message serverMessage;
       final bool isNewConversation = _conversationWithId.startsWith('new_');
-      print('📤 Is new conversation: $isNewConversation');
 
       // Handle new conversations
       if (isNewConversation) {
         // Extract user ID from the conversation ID format: 'new_userId'
         final receiverId =
             _conversationWithId.substring(4); // Remove 'new_' prefix
-        print('📤 Extracted receiverId: "$receiverId"');
 
         if (receiverId.isEmpty) {
           throw Exception(
@@ -1010,7 +894,6 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         _ref.read(conversationsProvider.notifier).loadConversations();
       } else {
         // Use existing conversation ID
-        print('📤 Using existing conversationId: $_conversationWithId');
         serverMessage = await _chatService.sendMessage(
           conversationId: _conversationWithId,
           content: content,
@@ -1022,8 +905,6 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
 
       // Replace optimistic message with server response
       if (mounted) {
-        print(
-            '📤 Replacing optimistic message with server response: ${serverMessage.content} (ID: ${serverMessage.id})');
         final updatedMessages = state.messages.map((msg) {
           return msg.id == optimisticMessage.id ? serverMessage : msg;
         }).toList();
@@ -1033,7 +914,6 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     } catch (e) {
       // Remove optimistic message on error
       if (mounted) {
-        print('❌ Removing optimistic message due to error: ${e.toString()}');
         final updatedMessages = state.messages
             .where((msg) => msg.id != optimisticMessage.id)
             .toList();
@@ -1049,14 +929,9 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
   void addMessage(Message message) {
     // Check if message already exists
     if (mounted && !state.messages.any((m) => m.id == message.id)) {
-      print(
-          '💬 Adding REAL-TIME message: ${message.content} (ID: ${message.id})');
       state = state.copyWith(
         messages: [...state.messages, message],
       );
-    } else {
-      print(
-          '⚠️ Message already exists, skipping: ${message.content} (ID: ${message.id})');
     }
   }
 
@@ -1082,8 +957,6 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         );
 
     if (optimisticIndex != -1) {
-      print(
-          '🔄 Replacing TEMPORARY message with server version: ${serverMessage.content} (${state.messages[optimisticIndex].id} → ${serverMessage.id})');
       final updatedMessages = [...state.messages];
       updatedMessages[optimisticIndex] = serverMessage;
       state = state.copyWith(messages: updatedMessages);
@@ -1092,12 +965,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       final existsIndex =
           state.messages.indexWhere((m) => m.id == serverMessage.id);
       if (existsIndex == -1) {
-        print(
-            '⚠️ Could not find temporary message to replace, adding new: ${serverMessage.content} (ID: ${serverMessage.id})');
         addMessage(serverMessage);
-      } else {
-        print(
-            'ℹ️ Message already exists with server ID, skipping: ${serverMessage.content} (ID: ${serverMessage.id})');
       }
     }
   }
@@ -1136,9 +1004,6 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       updatedMessages[messageIndex] = updatedMessage;
 
       state = state.copyWith(messages: updatedMessages);
-      print('✅ Updated message $messageId status to $status');
-    } else {
-      print('⚠️ Message $messageId not found for status update');
     }
   }
 }

@@ -75,8 +75,6 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     try {
       // Clear any currently viewed conversation before starting chat
       ref.read(currentConversationProvider.notifier).state = null;
-      print(
-          '📱 ContactsPage: Cleared current conversation before starting chat');
 
       // First check if conversation already exists
       await ref.read(conversationsProvider.notifier).loadConversations();
@@ -98,10 +96,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       } else {
         // Create a new conversation object for new chat
         // The actual backend conversation will be created when first message is sent
-        print(
-            '📞 ContactsPage - Creating new conversation for user: ${user.id}');
         final conversationId = 'new_${user.id}';
-        print('📞 ContactsPage - Generated conversation ID: $conversationId');
 
         conversation = Conversation(
           id: conversationId, // Special ID format for new conversations

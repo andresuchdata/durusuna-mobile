@@ -32,19 +32,12 @@ class ApiService {
           options.headers['Authorization'] = 'Bearer $token';
         }
 
-        print('REQUEST[${options.method}] => PATH: ${options.path}');
         handler.next(options);
       },
       onResponse: (response, handler) {
-        print(
-            'RESPONSE[${response.statusCode}] => PATH: ${response.requestOptions.path}');
         handler.next(response);
       },
       onError: (error, handler) async {
-        print(
-            'ERROR[${error.response?.statusCode}] => PATH: ${error.requestOptions.path}');
-        print('ERROR MESSAGE: ${error.message}');
-
         // Handle unauthorized responses (401)
         if (error.response?.statusCode == 401) {
           // Check if this is already a logout/login request to avoid loops
@@ -77,7 +70,6 @@ class ApiService {
                 }
               } catch (refreshError) {
                 // Refresh failed, logout user
-                print('Token refresh failed: $refreshError');
                 await GlobalAuthHandler.tokenRefreshFailed();
               }
             } else {
@@ -121,7 +113,7 @@ class ApiService {
         return data;
       }
     } catch (e) {
-      print('Refresh token failed: $e');
+      // Refresh token failed
     }
     return null;
   }
@@ -133,7 +125,6 @@ class ApiService {
     } else {
       // Fallback if global handler not initialized
       await StorageService.clearUser();
-      print('GlobalAuthHandler not initialized - using fallback logout');
     }
   }
 

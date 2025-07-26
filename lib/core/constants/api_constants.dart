@@ -123,12 +123,5 @@ class ApiConstants {
   static const String wsNewMessage = 'new_message';
 
   // Debug info
-  static void printConfiguration() {
-    print('🔧 API Configuration:');
-    print('   Environment: $_environment');
-    print('   Backend URL: $_backendUrl');
-    print('   Base URL: $baseUrl');
-    print('   Socket URL: $socketUrl');
-    print('   Logging Enabled: $enableLogging');
-  }
+  static void printConfiguration() {}
 }

@@ -148,7 +148,6 @@ class ClassUpdate {
             : null,
       );
     } catch (e) {
-      print('Error parsing ClassUpdate: $e');
       rethrow;
     }
   }
@@ -157,7 +156,6 @@ class ClassUpdate {
     try {
       return User.fromJson(json);
     } catch (e) {
-      print('Error parsing User in ClassUpdate: $e');
       return null;
     }
   }

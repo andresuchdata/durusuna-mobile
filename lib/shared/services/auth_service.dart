@@ -29,13 +29,9 @@ class AuthService {
         await StorageService.saveToken(authResponse.accessToken);
 
         // Force reconnect realtime service with fresh token
-        print(
-            '🔄 AuthService: Login successful, reconnecting realtime service...');
         try {
           await RealtimeService.instance.reconnect();
-          print('✅ AuthService: Realtime service reconnected successfully');
         } catch (e) {
-          print('⚠️ AuthService: Realtime reconnection failed: $e');
           // Don't fail login if realtime fails
         }
 
@@ -230,7 +226,7 @@ class AuthService {
         return newToken;
       }
     } catch (e) {
-      print('Token refresh failed: $e');
+      // Token refresh failed
     }
     return null;
   }
@@ -242,15 +238,12 @@ class AuthService {
       await _apiService.post(ApiConstants.logout);
     } catch (e) {
       // Continue with local logout even if server call fails
-      print('Logout API call failed: $e');
     } finally {
       // Disconnect realtime service
-      print('🔌 AuthService: Logout - disconnecting realtime service...');
       RealtimeService.instance.disconnect();
 
       // Clear local storage
       await StorageService.clearUser();
-      print('✅ AuthService: Logout completed');
     }
   }
 
