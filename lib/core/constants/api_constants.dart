@@ -90,7 +90,9 @@ class ApiConstants {
   static const String classes = '/classes';
   static const String lessons = '/lessons';
   static const String messages = '/messages';
+  static const String conversations = '/conversations';
   static const String uploads = '/uploads';
+  static const String classUpdates = '/class-updates';
 
   // Auth endpoints
   static const String login = '$auth/login';
@@ -101,19 +103,48 @@ class ApiConstants {
   static const String changePassword = '$auth/change-password';
 
   // Message endpoints
-  static const String sendMessage = '$messages/send';
-  static const String getConversations = '$messages/conversations';
-  static const String getConversationMessages = '$messages/conversation';
-  static const String markAsRead = '$messages/mark-read';
-  static const String markConversationAsRead = '$messages/conversation';
-  static const String deleteMessage = '$messages/delete';
+  static const String sendMessage = messages;
+  static const String searchMessages = '$messages/search';
 
-  // Class update endpoints
-  static const String classUpdates = '/class-updates';
-  static const String createClassUpdate = '$classUpdates/create';
-  static const String getClassUpdates = classUpdates;
-  static const String addComment = '$classUpdates/comment';
-  static const String addReaction = '$classUpdates/reaction';
+  // Conversation endpoints
+  static String getConversations = conversations;
+  static String getConversationMessages(String conversationId) =>
+      '$conversations/$conversationId/messages';
+  static String loadMoreMessages(String conversationId) =>
+      '$conversations/$conversationId/messages/load-more';
+  static String sendConversationMessage(String conversationId) =>
+      '$conversations/$conversationId/messages';
+  static String markConversationAsRead(String conversationId) =>
+      '$conversations/$conversationId/mark-read';
+
+  // Class endpoints - for getting class updates from a specific class
+  static String getClassUpdates(String classId) => '$classes/$classId/updates';
+  static String createClassUpdate(String classId) =>
+      '$classes/$classId/updates';
+
+  // Class update endpoints - for individual class update operations
+  static String uploadAttachments = '$classUpdates/upload-attachments';
+  static String deleteAttachment(String key) =>
+      '$classUpdates/attachments/$key';
+  static String getClassUpdate(String updateId) => '$classUpdates/$updateId';
+  static String updateClassUpdate(String updateId) => '$classUpdates/$updateId';
+  static String deleteClassUpdate(String updateId) => '$classUpdates/$updateId';
+  static String pinClassUpdate(String updateId) =>
+      '$classUpdates/$updateId/pin';
+
+  // Comment endpoints
+  static String getComments(String updateId) =>
+      '$classUpdates/$updateId/comments';
+  static String addComment(String updateId) =>
+      '$classUpdates/$updateId/comments';
+  static String updateComment(String commentId) =>
+      '$classUpdates/comments/$commentId';
+  static String deleteComment(String commentId) =>
+      '$classUpdates/comments/$commentId';
+
+  // Reaction endpoints
+  static String addReaction(String updateId) =>
+      '$classUpdates/$updateId/reactions';
 
   // Notification endpoints
   static const String notifications = '/notifications';

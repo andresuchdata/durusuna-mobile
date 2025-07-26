@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../core/constants/app_theme.dart';
 import '../models/user.dart';
-import '../services/chat_service.dart';
+import '../models/conversation.dart';
 
 class GroupProfileCard extends StatefulWidget {
   final Conversation conversation;

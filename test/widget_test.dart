@@ -15,7 +15,7 @@ void main() {
 
     // Verify that the app starts up (look for any text content)
     await tester.pumpAndSettle();
-    
+
     // This test just ensures the app doesn't crash on startup
     expect(find.byType(MaterialApp), findsOneWidget);
   });
@@ -30,6 +30,6 @@ void main() {
     await tester.pumpAndSettle();
 
     // Look for login-related widgets (adjust based on your actual UI)
-    expect(find.text('Durusuna'), findsAtLeastOneWidget);
+    expect(find.text('Durusuna'), findsWidgets);
   });
-} 
+}

@@ -8,17 +8,19 @@ part of 'message.dart';
 
 Message _$MessageFromJson(Map<String, dynamic> json) => Message(
       id: json['id'] as String,
-      senderId: json['sender_id'] as String?,
+      conversationId: json['conversation_id'] as String,
+      senderId: json['sender_id'] as String,
       receiverId: json['receiver_id'] as String?,
       content: json['content'] as String?,
       messageType: $enumDecode(_$MessageTypeEnumMap, json['message_type']),
       metadata: json['metadata'] as Map<String, dynamic>?,
       replyToId: json['reply_to_id'] as String?,
+      isRead: json['is_read'] as bool? ?? false,
       isEdited: json['is_edited'] as bool? ?? false,
+      isDeleted: json['is_deleted'] as bool? ?? false,
       editedAt: json['edited_at'] == null
           ? null
           : DateTime.parse(json['edited_at'] as String),
-      isDeleted: json['is_deleted'] as bool? ?? false,
       deletedAt: json['deleted_at'] == null
           ? null
           : DateTime.parse(json['deleted_at'] as String),
@@ -55,15 +57,17 @@ Message _$MessageFromJson(Map<String, dynamic> json) => Message(
 
 Map<String, dynamic> _$MessageToJson(Message instance) => <String, dynamic>{
       'id': instance.id,
+      'conversation_id': instance.conversationId,
       'sender_id': instance.senderId,
       'receiver_id': instance.receiverId,
       'content': instance.content,
       'message_type': _$MessageTypeEnumMap[instance.messageType]!,
       'metadata': instance.metadata,
       'reply_to_id': instance.replyToId,
+      'is_read': instance.isRead,
       'is_edited': instance.isEdited,
-      'edited_at': instance.editedAt?.toIso8601String(),
       'is_deleted': instance.isDeleted,
+      'edited_at': instance.editedAt?.toIso8601String(),
       'deleted_at': instance.deletedAt?.toIso8601String(),
       'delivered_at': instance.deliveredAt?.toIso8601String(),
       'read_at': instance.readAt?.toIso8601String(),

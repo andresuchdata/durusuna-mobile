@@ -17,7 +17,7 @@ class ClassUpdatesService {
   }) async {
     try {
       final response = await _apiService.get(
-        '${ApiConstants.classUpdates}/$classId',
+        ApiConstants.getClassUpdates(classId),
         queryParameters: {
           'page': page,
           'limit': limit,
@@ -63,7 +63,7 @@ class ClassUpdatesService {
       };
 
       final response = await _apiService.post(
-        ApiConstants.createClassUpdate,
+        ApiConstants.createClassUpdate(classId),
         data: data,
       );
 
@@ -101,7 +101,7 @@ class ClassUpdatesService {
       if (attachments != null) data['attachments'] = attachments;
 
       final response = await _apiService.put(
-        '${ApiConstants.classUpdates}/$updateId',
+        ApiConstants.updateClassUpdate(updateId),
         data: data,
       );
 
@@ -127,7 +127,7 @@ class ClassUpdatesService {
   Future<void> deleteClassUpdate(String updateId) async {
     try {
       final response = await _apiService.delete(
-        '${ApiConstants.classUpdates}/$updateId',
+        ApiConstants.deleteClassUpdate(updateId),
       );
 
       if (response.statusCode != 200) {
@@ -153,7 +153,7 @@ class ClassUpdatesService {
   }) async {
     try {
       final response = await _apiService.get(
-        '${ApiConstants.classUpdates}/$updateId/comments',
+        ApiConstants.getComments(updateId),
         queryParameters: {
           'page': page,
           'limit': limit,
@@ -194,7 +194,7 @@ class ClassUpdatesService {
       };
 
       final response = await _apiService.post(
-        '${ApiConstants.classUpdates}/$updateId/comments',
+        ApiConstants.addComment(updateId),
         data: data,
       );
 
@@ -223,7 +223,7 @@ class ClassUpdatesService {
   }) async {
     try {
       final response = await _apiService.put(
-        '${ApiConstants.classUpdates}/comments/$commentId',
+        ApiConstants.updateComment(commentId),
         data: {'content': content},
       );
 
@@ -249,7 +249,7 @@ class ClassUpdatesService {
   Future<void> deleteComment(String commentId) async {
     try {
       final response = await _apiService.delete(
-        '${ApiConstants.classUpdates}/comments/$commentId',
+        ApiConstants.deleteComment(commentId),
       );
 
       if (response.statusCode != 200) {
@@ -267,6 +267,60 @@ class ClassUpdatesService {
     }
   }
 
+  /// Upload attachments for class updates
+  Future<List<Map<String, dynamic>>> uploadAttachments(
+    List<String> filePaths,
+  ) async {
+    try {
+      // This would typically use FormData for file uploads
+      // Implementation depends on how you handle file uploads in your app
+      final response = await _apiService.post(
+        ApiConstants.uploadAttachments,
+        data: {
+          'files': filePaths
+        }, // Simplified - actual implementation would use FormData
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data as Map<String, dynamic>;
+        return List<Map<String, dynamic>>.from(data['attachments'] ?? []);
+      } else {
+        throw ApiException(
+          message: 'Failed to upload attachments',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to upload attachments: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
+  /// Delete an attachment
+  Future<void> deleteAttachment(String key) async {
+    try {
+      final response = await _apiService.delete(
+        ApiConstants.deleteAttachment(key),
+      );
+
+      if (response.statusCode != 200) {
+        throw ApiException(
+          message: 'Failed to delete attachment',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to delete attachment: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
   /// Toggle reaction on a class update
   Future<ClassUpdate> toggleReaction({
     required String updateId,
@@ -274,7 +328,7 @@ class ClassUpdatesService {
   }) async {
     try {
       final response = await _apiService.post(
-        '${ApiConstants.classUpdates}/$updateId/reactions',
+        ApiConstants.addReaction(updateId),
         data: {'emoji': emoji},
       );
 
@@ -300,7 +354,7 @@ class ClassUpdatesService {
   Future<ClassUpdate> togglePin(String updateId, bool isPinned) async {
     try {
       final response = await _apiService.put(
-        '${ApiConstants.classUpdates}/$updateId/pin',
+        ApiConstants.pinClassUpdate(updateId),
         data: {'is_pinned': isPinned},
       );
 

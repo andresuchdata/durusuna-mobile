@@ -8,6 +8,7 @@ import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/message.dart';
 import '../../../../shared/models/user.dart';
+import '../../../../shared/models/conversation.dart';
 import '../../../../shared/widgets/widgets.dart';
 import '../../../../shared/widgets/group_profile_card.dart';
 import '../widgets/message_bubble.dart';
@@ -59,10 +60,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       // CRITICAL: Force refresh messages if conversation was recently active
       // This ensures chat messages are synced with conversation list
-      final timeSinceLastActivity =
-          DateTime.now().difference(widget.conversation.lastActivity);
-      final shouldForceRefresh =
-          timeSinceLastActivity.inSeconds < 30; // Last 30 seconds
+      final lastActivity = widget.conversation.lastActivity;
+      final shouldForceRefresh = lastActivity != null &&
+          DateTime.now().difference(lastActivity).inSeconds <
+              30; // Last 30 seconds
 
       if (shouldForceRefresh) {
         ref
@@ -835,7 +836,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           ? 'Online'
                           : messagesState.isTyping
                               ? 'Typing...'
-                              : 'Last seen ${timeago.format(widget.conversation.lastActivity)}',
+                              : widget.conversation.lastActivity != null
+                                  ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
+                                  : 'Last seen recently',
                       style: TextStyle(
                         fontSize: 12,
                         color: _isOtherUserOnline || messagesState.isTyping

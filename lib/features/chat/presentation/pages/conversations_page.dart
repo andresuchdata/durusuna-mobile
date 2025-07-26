@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/chat_service.dart';
+import '../../../../shared/models/conversation.dart';
 import 'chat_page.dart';
 import 'contacts_page.dart';
 
