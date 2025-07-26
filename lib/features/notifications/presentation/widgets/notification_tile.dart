@@ -18,27 +18,16 @@ class NotificationTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: notification.isRead
-                ? Colors.white
-                : AppTheme.primaryColor.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: notification.isRead
-                  ? AppTheme.borderColor
-                  : AppTheme.primaryColor.withOpacity(0.2),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
+            color: Colors.white,
+            border: Border(
+              bottom: BorderSide(
+                color: AppTheme.borderColor.withValues(alpha: 0.3),
+                width: 1,
               ),
-            ],
+            ),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,

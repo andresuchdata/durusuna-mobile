@@ -71,7 +71,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                 style: TextStyle(
                   color: notificationsState.unreadCount > 0
                       ? Colors.white
-                      : Colors.white.withOpacity(0.5),
+                      : Colors.white.withValues(alpha: 0.5),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -112,10 +112,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: AppTheme.primaryColor.withOpacity(0.1),
+            color: AppTheme.primaryColor.withValues(alpha: 0.1),
             child: Text(
               '${state.unreadCount} unread notification${state.unreadCount == 1 ? '' : 's'}',
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppTheme.primaryColor,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -123,11 +123,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             ),
           ),
         Expanded(
-          child: ListView.separated(
+          child: ListView.builder(
             controller: _scrollController,
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.zero,
             itemCount: state.notifications.length + (state.hasMore ? 1 : 0),
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               if (index >= state.notifications.length) {
                 // Loading indicator for pagination
@@ -149,9 +148,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20),
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: Colors.red,
-                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
                     Icons.delete,
@@ -193,7 +191,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -202,7 +200,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             size: 80,
             color: AppTheme.textSecondary,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
             'No notifications yet',
             style: TextStyle(
@@ -211,7 +209,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
               color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             'You\'ll see important updates here',
             style: TextStyle(
@@ -229,13 +227,13 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.error_outline,
             size: 80,
             color: AppTheme.errorColor,
           ),
           const SizedBox(height: 16),
-          Text(
+          const Text(
             'Something went wrong',
             style: TextStyle(
               fontSize: 20,
@@ -246,7 +244,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           const SizedBox(height: 8),
           Text(
             error,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 14,
               color: AppTheme.textSecondary,
             ),
