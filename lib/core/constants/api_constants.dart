@@ -115,6 +115,9 @@ class ApiConstants {
   static const String addComment = '$classUpdates/comment';
   static const String addReaction = '$classUpdates/reaction';
 
+  // Notification endpoints
+  static const String notifications = '/notifications';
+
   // WebSocket events
   static const String wsConnect = 'connect';
   static const String wsDisconnect = 'disconnect';
