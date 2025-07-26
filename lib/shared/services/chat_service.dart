@@ -24,6 +24,9 @@ class ChatService {
           try {
             return Conversation.fromJson(json);
           } catch (e) {
+            // Enhanced error logging for debugging
+            print('❌ Error parsing conversation: $e');
+            print('📄 Conversation JSON: ${json.toString()}');
             rethrow;
           }
         }).toList();
@@ -495,8 +498,16 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
       }
 
       final updatedConversations = [...state.conversations];
+      // Convert full Message to simplified LastMessage
+      final lastMessage = LastMessage(
+        content: message.content,
+        messageType: message.messageType,
+        createdAt: message.createdAt,
+        isFromMe: message.isFromMe,
+      );
+
       updatedConversations[index] = conversation.copyWith(
-        lastMessage: message,
+        lastMessage: lastMessage,
         lastActivity: message.createdAt,
         unreadCount: newUnreadCount,
       );
@@ -708,37 +719,24 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       if (conversation?.lastMessage != null) {
         final lastMessage = conversation!.lastMessage!;
 
-        // Check if the last message is already in the loaded messages
-        final isIncluded = loadedMessages.any((m) => m.id == lastMessage.id);
-
-        // Also check by content and recent time as fallback (in case ID format differs)
+        // Check by content and recent time since LastMessage doesn't have ID
         final recentThreshold =
             DateTime.now().subtract(const Duration(minutes: 5));
         final isRecentlyIncluded = loadedMessages.any((m) =>
             m.content == lastMessage.content &&
-            m.createdAt.isAfter(recentThreshold));
+            m.createdAt.isAfter(recentThreshold) &&
+            m.messageType == lastMessage.messageType);
 
-        if (!isIncluded && !isRecentlyIncluded) {
-          // Create a properly formatted message from the conversation's lastMessage
+        if (!isRecentlyIncluded) {
+          // Create a basic message from the conversation's lastMessage
+          // Note: LastMessage has limited data, so we'll create a minimal Message
           final missingMessage = Message(
-            id: lastMessage.id.isNotEmpty
-                ? lastMessage.id
-                : 'missing_${DateTime.now().millisecondsSinceEpoch}',
+            id: 'last_${DateTime.now().millisecondsSinceEpoch}',
             conversationId: _conversationWithId,
-            senderId: lastMessage.senderId ?? '',
-            receiverId: lastMessage.receiverId,
+            senderId: '', // Not available in LastMessage
             content: lastMessage.content,
             messageType: lastMessage.messageType,
-            replyToId: lastMessage.replyToId,
-            metadata: lastMessage.metadata,
-            reactions: lastMessage.reactions ?? const {},
-            attachments: lastMessage.attachments,
-            isEdited: lastMessage.isEdited ?? false,
-            editedAt: lastMessage.editedAt,
-            deliveredAt: lastMessage.deliveredAt,
-            readAt: lastMessage.readAt,
             createdAt: lastMessage.createdAt,
-            updatedAt: lastMessage.updatedAt ?? lastMessage.createdAt,
             isFromMe: lastMessage.isFromMe ?? false,
           );
 

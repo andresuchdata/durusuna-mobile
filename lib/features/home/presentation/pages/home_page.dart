@@ -421,7 +421,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             // Profile Info
             _buildInfoSection('Personal Information', [
               _buildInfoTile('Phone', user.phone ?? 'Not provided'),
-              _buildInfoTile('Role', user.role.name.toUpperCase()),
+              _buildInfoTile(
+                  'Role', user.role?.name.toUpperCase() ?? 'Not assigned'),
               _buildInfoTile('School', user.school?.name ?? 'Not assigned'),
             ]),
           ],

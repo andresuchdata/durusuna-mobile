@@ -6,6 +6,30 @@ part of 'conversation.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+LastMessage _$LastMessageFromJson(Map<String, dynamic> json) => LastMessage(
+      content: json['content'] as String?,
+      messageType: $enumDecode(_$MessageTypeEnumMap, json['message_type']),
+      createdAt: DateTime.parse(json['created_at'] as String),
+      isFromMe: json['is_from_me'] as bool?,
+    );
+
+Map<String, dynamic> _$LastMessageToJson(LastMessage instance) =>
+    <String, dynamic>{
+      'content': instance.content,
+      'message_type': _$MessageTypeEnumMap[instance.messageType]!,
+      'created_at': instance.createdAt.toIso8601String(),
+      'is_from_me': instance.isFromMe,
+    };
+
+const _$MessageTypeEnumMap = {
+  MessageType.text: 'text',
+  MessageType.image: 'image',
+  MessageType.video: 'video',
+  MessageType.audio: 'audio',
+  MessageType.file: 'file',
+  MessageType.emoji: 'emoji',
+};
+
 Conversation _$ConversationFromJson(Map<String, dynamic> json) => Conversation(
       id: json['id'] as String,
       type: json['type'] as String,
@@ -33,7 +57,7 @@ Conversation _$ConversationFromJson(Map<String, dynamic> json) => Conversation(
           : User.fromJson(json['other_user'] as Map<String, dynamic>),
       lastMessage: json['last_message'] == null
           ? null
-          : Message.fromJson(json['last_message'] as Map<String, dynamic>),
+          : LastMessage.fromJson(json['last_message'] as Map<String, dynamic>),
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
       lastActivity: json['last_activity'] == null
           ? null

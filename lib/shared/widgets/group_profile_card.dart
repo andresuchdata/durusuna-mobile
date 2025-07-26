@@ -373,7 +373,7 @@ class _GroupProfileCardState extends State<GroupProfileCard> {
                 : null,
             child: member.avatarUrl?.isEmpty != false
                 ? Text(
-                    '${member.firstName[0]}${member.lastName[0]}',
+                    _getUserInitials(member),
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
@@ -585,6 +585,22 @@ class _GroupProfileCardState extends State<GroupProfileCard> {
       case UserType.parent:
         return AppTheme.warningColor;
     }
+  }
+
+  String _getUserInitials(User user) {
+    final firstName = user.firstName.trim();
+    final lastName = user.lastName.trim();
+    final firstInitial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '';
+    final lastInitial = lastName.isNotEmpty ? lastName[0].toUpperCase() : '';
+
+    if (firstInitial.isNotEmpty && lastInitial.isNotEmpty) {
+      return '$firstInitial$lastInitial';
+    } else if (firstInitial.isNotEmpty) {
+      return firstInitial;
+    } else if (lastInitial.isNotEmpty) {
+      return lastInitial;
+    }
+    return 'U';
   }
 
   /// Show group profile card as a modal bottom sheet

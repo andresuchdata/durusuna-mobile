@@ -5,6 +5,47 @@ import 'message.dart';
 part 'conversation.g.dart';
 
 @JsonSerializable()
+class LastMessage {
+  final String? content;
+  @JsonKey(name: 'message_type')
+  final MessageType messageType;
+  @JsonKey(name: 'created_at')
+  final DateTime createdAt;
+  @JsonKey(name: 'is_from_me')
+  final bool? isFromMe;
+
+  LastMessage({
+    this.content,
+    required this.messageType,
+    required this.createdAt,
+    this.isFromMe,
+  });
+
+  factory LastMessage.fromJson(Map<String, dynamic> json) =>
+      _$LastMessageFromJson(json);
+  Map<String, dynamic> toJson() => _$LastMessageToJson(this);
+
+  String get displayContent {
+    if (content != null && content!.isNotEmpty) return content!;
+
+    switch (messageType) {
+      case MessageType.image:
+        return '📷 Image';
+      case MessageType.video:
+        return '🎥 Video';
+      case MessageType.audio:
+        return '🎵 Audio';
+      case MessageType.file:
+        return '📄 File';
+      case MessageType.emoji:
+        return '😊';
+      default:
+        return '';
+    }
+  }
+}
+
+@JsonSerializable()
 class Conversation {
   final String id;
   final String type; // 'direct' or 'group'
@@ -30,7 +71,7 @@ class Conversation {
   @JsonKey(name: 'other_user')
   final User? otherUser; // For direct chats
   @JsonKey(name: 'last_message')
-  final Message? lastMessage;
+  final LastMessage? lastMessage; // Changed from Message to LastMessage
   @JsonKey(name: 'unread_count')
   final int unreadCount;
   @JsonKey(name: 'last_activity')
@@ -80,7 +121,7 @@ class Conversation {
     DateTime? updatedAt,
     List<User>? participants,
     User? otherUser,
-    Message? lastMessage,
+    LastMessage? lastMessage,
     int? unreadCount,
     DateTime? lastActivity,
     String? userRole,

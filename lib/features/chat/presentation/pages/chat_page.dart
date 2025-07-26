@@ -10,7 +10,6 @@ import '../../../../shared/models/message.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/models/conversation.dart';
 import '../../../../shared/widgets/widgets.dart';
-import '../../../../shared/widgets/group_profile_card.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
 
@@ -141,15 +140,31 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   String _getInitials() {
     if (widget.conversation.type == 'group') {
       final name = widget.conversation.name ?? 'Group';
-      final words = name.split(' ');
-      if (words.length >= 2) {
-        return '${words[0][0]}${words[1][0]}';
+      final words = name.split(' ').where((word) => word.isNotEmpty).toList();
+      if (words.length >= 2 && words[0].isNotEmpty && words[1].isNotEmpty) {
+        return '${words[0][0].toUpperCase()}${words[1][0].toUpperCase()}';
       }
       return name.isNotEmpty ? name[0].toUpperCase() : 'G';
     }
     final otherUser = widget.conversation.otherUser;
     if (otherUser != null) {
-      return '${otherUser.firstName[0]}${otherUser.lastName[0]}';
+      return _getUserInitials(otherUser);
+    }
+    return 'U';
+  }
+
+  String _getUserInitials(User user) {
+    final firstName = user.firstName.trim();
+    final lastName = user.lastName.trim();
+    final firstInitial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '';
+    final lastInitial = lastName.isNotEmpty ? lastName[0].toUpperCase() : '';
+
+    if (firstInitial.isNotEmpty && lastInitial.isNotEmpty) {
+      return '$firstInitial$lastInitial';
+    } else if (firstInitial.isNotEmpty) {
+      return firstInitial;
+    } else if (lastInitial.isNotEmpty) {
+      return lastInitial;
     }
     return 'U';
   }
@@ -935,7 +950,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     radius: 12,
                     backgroundColor: AppTheme.primaryColor,
                     child: Text(
-                      _getInitials()[0],
+                      _getInitials().isNotEmpty ? _getInitials()[0] : 'U',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
@@ -1617,7 +1632,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             : null,
         child: member.avatarUrl?.isEmpty != false
             ? Text(
-                '${member.firstName[0]}${member.lastName[0]}',
+                _getUserInitials(member),
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,

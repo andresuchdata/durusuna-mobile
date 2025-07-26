@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/class_update.dart';
 import '../models/class_update_comment.dart';
 import '../../core/constants/api_constants.dart';
+import '../../core/storage/storage_service.dart';
 import 'api_service.dart';
 
 class ClassUpdatesService {
@@ -322,7 +323,7 @@ class ClassUpdatesService {
   }
 
   /// Toggle reaction on a class update
-  Future<ClassUpdate> toggleReaction({
+  Future<void> toggleReaction({
     required String updateId,
     required String emoji,
   }) async {
@@ -332,15 +333,13 @@ class ClassUpdatesService {
         data: {'emoji': emoji},
       );
 
-      if (response.statusCode == 200) {
-        final updateData = response.data['update'] as Map<String, dynamic>;
-        return ClassUpdate.fromJson(updateData);
-      } else {
+      if (response.statusCode != 200) {
         throw ApiException(
           message: 'Failed to toggle reaction',
           statusCode: response.statusCode ?? 0,
         );
-      }
+      } else {}
+      // Success - no need to return anything, optimistic update is already applied
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(
@@ -530,22 +529,87 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
   }
 
   Future<void> toggleReaction(String updateId, String emoji) async {
-    try {
-      // Call the API to toggle the reaction
-      final updatedClassUpdate =
-          await _service.toggleReaction(updateId: updateId, emoji: emoji);
+    // Find the update to potentially revert changes
+    final index = state.updates.indexWhere((u) => u.id == updateId);
+    if (index == -1) return;
 
-      // Update the state with the returned data from the server
-      final index = state.updates.indexWhere((u) => u.id == updateId);
-      if (index != -1) {
-        final newUpdates = [...state.updates];
-        newUpdates[index] = updatedClassUpdate;
-        state = state.copyWith(updates: newUpdates);
+    final originalUpdate = state.updates[index];
+
+    // Get current user ID synchronously for immediate optimistic update
+    final currentUserId = _getCurrentUserIdSync();
+    if (currentUserId == null) return;
+
+    try {
+      // Optimistic update: Update UI immediately
+      final optimisticReactions =
+          Map<String, Reaction>.from(originalUpdate.reactions ?? {});
+
+      if (optimisticReactions.containsKey(emoji)) {
+        final reactionData = optimisticReactions[emoji]!;
+        final userIds = List<String>.from(reactionData.users);
+
+        if (userIds.contains(currentUserId)) {
+          // Remove user's reaction
+          userIds.remove(currentUserId);
+          if (userIds.isEmpty) {
+            optimisticReactions.remove(emoji);
+          } else {
+            optimisticReactions[emoji] = Reaction(
+              count: userIds.length,
+              users: userIds,
+            );
+          }
+        } else {
+          // Add user's reaction
+          userIds.add(currentUserId);
+          optimisticReactions[emoji] = Reaction(
+            count: userIds.length,
+            users: userIds,
+          );
+        }
+      } else {
+        // Add new reaction - this should make it appear in the UI
+        optimisticReactions[emoji] = Reaction(
+          count: 1,
+          users: [currentUserId],
+        );
       }
+
+      // Update state optimistically (immediate UI feedback)
+      final optimisticUpdate =
+          originalUpdate.copyWith(reactions: optimisticReactions);
+
+      final newUpdates = [...state.updates];
+      newUpdates[index] = optimisticUpdate;
+
+      // Ensure UI rebuilds by creating a new state object
+      state = state.copyWith(updates: newUpdates);
+
+      // Call the API to persist the change (but don't overwrite optimistic update)
+      await _service.toggleReaction(updateId: updateId, emoji: emoji);
+
+      // Keep the optimistic update since it's already correct
+      // The server response only contains reaction data, not the full update
     } catch (e) {
-      // On error, reload to get accurate state
-      loadUpdates(refresh: true);
-      state = state.copyWith(error: e.toString());
+      // Revert to original state on error
+      final revertedUpdates = [...state.updates];
+      revertedUpdates[index] = originalUpdate;
+      state = state.copyWith(
+        updates: revertedUpdates,
+        error: 'Failed to update reaction: ${e.toString()}',
+      );
+    }
+  }
+
+  String? _getCurrentUserIdSync() {
+    try {
+      final userData = StorageService.getUser();
+      if (userData != null) {
+        return userData['id']?.toString();
+      }
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 
