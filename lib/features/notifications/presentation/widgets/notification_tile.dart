@@ -110,17 +110,13 @@ class NotificationTile extends StatelessWidget {
         iconData = Icons.message;
         iconColor = AppTheme.successColor;
         break;
-      case NotificationType.classUpdate:
-        iconData = Icons.announcement;
-        iconColor = AppTheme.primaryColor;
-        break;
       case NotificationType.assignment:
         iconData = Icons.assignment;
         iconColor = AppTheme.warningColor;
         break;
       case NotificationType.announcement:
         iconData = Icons.campaign;
-        iconColor = AppTheme.infoColor;
+        iconColor = AppTheme.primaryColor;
         break;
       case NotificationType.event:
         iconData = Icons.event;
@@ -169,12 +165,10 @@ class NotificationTile extends StatelessWidget {
     switch (notification.type) {
       case NotificationType.message:
         return AppTheme.successColor;
-      case NotificationType.classUpdate:
-        return AppTheme.primaryColor;
       case NotificationType.assignment:
         return AppTheme.warningColor;
       case NotificationType.announcement:
-        return AppTheme.infoColor;
+        return AppTheme.primaryColor;
       case NotificationType.event:
         return Colors.purple;
       case NotificationType.system:

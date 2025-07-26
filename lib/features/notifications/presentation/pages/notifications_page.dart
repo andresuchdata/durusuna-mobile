@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/notification_service.dart';
+import '../../../../shared/services/notification_navigation_service.dart';
 import '../../../../shared/models/notification.dart';
 import '../widgets/notification_tile.dart';
 
@@ -18,9 +19,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   @override
   void initState() {
     super.initState();
-    // Initialize notifications when page loads
+    // Initialize notifications with full data when page loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(notificationsProvider.notifier).initialize();
+      ref.read(notificationsProvider.notifier).initializeWithData();
     });
 
     // Add scroll listener for pagination
@@ -296,40 +297,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 
   void _handleNotificationAction(NotificationModel notification) {
-    // Handle different notification actions based on type
-    switch (notification.type) {
-      case NotificationType.message:
-        // Navigate to chat/conversation
-        debugPrint('Navigate to chat for notification: ${notification.id}');
-        break;
-      case NotificationType.classUpdate:
-        // Navigate to class updates
-        debugPrint(
-            'Navigate to class updates for notification: ${notification.id}');
-        break;
-      case NotificationType.assignment:
-        // Navigate to assignments
-        debugPrint(
-            'Navigate to assignments for notification: ${notification.id}');
-        break;
-      case NotificationType.announcement:
-        // Navigate to announcements
-        debugPrint(
-            'Navigate to announcements for notification: ${notification.id}');
-        break;
-      case NotificationType.event:
-        // Navigate to events/calendar
-        debugPrint('Navigate to events for notification: ${notification.id}');
-        break;
-      case NotificationType.system:
-        // Handle system notifications
-        debugPrint('Handle system notification: ${notification.id}');
-        break;
-    }
-
-    // If there's an action URL, you could navigate there
-    if (notification.actionUrl != null) {
-      debugPrint('Navigate to: ${notification.actionUrl}');
-    }
+    // Use the navigation service to handle the notification action
+    final navigationService = getNotificationNavigationService(ref);
+    navigationService.handleNotificationAction(notification);
   }
 }

@@ -31,7 +31,8 @@ class NotificationService {
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> notificationsJson = response.data['data'] ?? [];
+        final List<dynamic> notificationsJson =
+            response.data['notifications'] ?? [];
         return notificationsJson
             .map((json) => NotificationModel.fromJson(json))
             .toList();
@@ -53,12 +54,17 @@ class NotificationService {
   /// Mark notification as read
   Future<NotificationModel> markAsRead(String notificationId) async {
     try {
-      final response = await _apiService.put(
+      final response = await _apiService.patch(
         '${ApiConstants.notifications}/$notificationId/read',
+        data: {}, // Some backends expect an empty body for PATCH requests
       );
 
       if (response.statusCode == 200) {
-        return NotificationModel.fromJson(response.data);
+        // Backend might return the notification directly or wrapped in a data object
+        final notificationData = response.data is Map<String, dynamic>
+            ? (response.data['notification'] ?? response.data)
+            : response.data;
+        return NotificationModel.fromJson(notificationData);
       } else {
         throw ApiException(
           message: 'Failed to mark notification as read',
@@ -75,13 +81,17 @@ class NotificationService {
   }
 
   /// Mark all notifications as read
-  Future<void> markAllAsRead() async {
+  Future<Map<String, dynamic>> markAllAsRead() async {
     try {
-      final response = await _apiService.put(
+      final response = await _apiService.patch(
         '${ApiConstants.notifications}/read-all',
+        data: {}, // Some backends expect an empty body for PATCH requests
       );
 
-      if (response.statusCode != 200) {
+      if (response.statusCode == 200) {
+        return response.data ??
+            {'success': true, 'message': 'All notifications marked as read'};
+      } else {
         throw ApiException(
           message: 'Failed to mark all notifications as read',
           statusCode: response.statusCode ?? 0,
@@ -126,7 +136,7 @@ class NotificationService {
       );
 
       if (response.statusCode == 200) {
-        return response.data['count'] ?? 0;
+        return response.data['unread_count'] ?? 0;
       } else {
         throw ApiException(
           message: 'Failed to fetch unread count',
@@ -295,7 +305,8 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   /// Mark all notifications as read
   Future<void> markAllAsRead() async {
     try {
-      await _notificationService.markAllAsRead();
+      final result = await _notificationService.markAllAsRead();
+      debugPrint('Mark all as read result: $result');
 
       final updatedNotifications = state.notifications.map((notification) {
         return notification.copyWith(isRead: true, readAt: DateTime.now());
@@ -307,6 +318,7 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
       );
     } catch (e) {
       state = state.copyWith(error: e.toString());
+      debugPrint('Error marking all notifications as read: $e');
     }
   }
 
@@ -339,67 +351,27 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   Future<void> _updateUnreadCount() async {
     try {
       final count = await _notificationService.getUnreadCount();
+      debugPrint('🔔 Unread count fetched: $count');
       state = state.copyWith(unreadCount: count);
     } catch (e) {
       // Handle error silently
-      debugPrint('Error updating unread count: $e');
+      debugPrint('❌ Error updating unread count: $e');
     }
   }
 
-  /// Initialize notifications
-  Future<void> initialize() async {
-    // For now, add some sample notifications for testing
-    await _addSampleNotifications();
-    await loadNotifications(refresh: true);
+  /// Load only unread count (for app startup)
+  Future<void> loadUnreadCount() async {
+    await _updateUnreadCount();
   }
 
-  /// Add sample notifications for testing
-  Future<void> _addSampleNotifications() async {
-    final now = DateTime.now();
-    final sampleNotifications = [
-      NotificationService.createLocalNotification(
-        title: 'New Message',
-        content:
-            'You have a new message from John Doe about tomorrow\'s assignment.',
-        type: NotificationType.message,
-        priority: NotificationPriority.normal,
-      ),
-      NotificationService.createLocalNotification(
-        title: 'Class Update',
-        content:
-            'Math class schedule has been updated. Please check the new timings.',
-        type: NotificationType.classUpdate,
-        priority: NotificationPriority.high,
-      ),
-      NotificationService.createLocalNotification(
-        title: 'Assignment Due',
-        content:
-            'Your Science assignment is due tomorrow. Don\'t forget to submit it.',
-        type: NotificationType.assignment,
-        priority: NotificationPriority.urgent,
-      ),
-      NotificationService.createLocalNotification(
-        title: 'School Announcement',
-        content:
-            'School will be closed next Friday due to a holiday. Enjoy your long weekend!',
-        type: NotificationType.announcement,
-        priority: NotificationPriority.normal,
-      ),
-      NotificationService.createLocalNotification(
-        title: 'Upcoming Event',
-        content:
-            'Science fair is next week. Register now if you haven\'t already.',
-        type: NotificationType.event,
-        priority: NotificationPriority.low,
-      ),
-    ];
+  /// Initialize notifications (for app startup - only load unread count)
+  Future<void> initialize() async {
+    await _updateUnreadCount();
+  }
 
-    // Add sample notifications to the state
-    final notifications = [...sampleNotifications, ...state.notifications];
-    state = state.copyWith(
-      notifications: notifications,
-      unreadCount: sampleNotifications.length,
-    );
+  /// Initialize notifications with full data (for notification page)
+  Future<void> initializeWithData() async {
+    await loadNotifications(refresh: true);
   }
 }
 

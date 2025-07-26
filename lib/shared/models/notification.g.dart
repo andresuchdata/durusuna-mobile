@@ -52,7 +52,6 @@ Map<String, dynamic> _$NotificationModelToJson(NotificationModel instance) =>
 
 const _$NotificationTypeEnumMap = {
   NotificationType.message: 'message',
-  NotificationType.classUpdate: 'class_update',
   NotificationType.assignment: 'assignment',
   NotificationType.announcement: 'announcement',
   NotificationType.event: 'event',

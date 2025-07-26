@@ -6,8 +6,6 @@ part 'notification.g.dart';
 enum NotificationType {
   @JsonValue('message')
   message,
-  @JsonValue('class_update')
-  classUpdate,
   @JsonValue('assignment')
   assignment,
   @JsonValue('announcement')
@@ -136,8 +134,6 @@ class NotificationModel {
     switch (type) {
       case NotificationType.message:
         return 'Message';
-      case NotificationType.classUpdate:
-        return 'Class Update';
       case NotificationType.assignment:
         return 'Assignment';
       case NotificationType.announcement:

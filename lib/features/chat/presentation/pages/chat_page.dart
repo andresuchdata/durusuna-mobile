@@ -15,10 +15,14 @@ import '../widgets/chat_input.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   final Conversation conversation;
+  final String? highlightMessageId;
+  final bool scrollToMessage;
 
   const ChatPage({
     super.key,
     required this.conversation,
+    this.highlightMessageId,
+    this.scrollToMessage = false,
   });
 
   @override
@@ -35,6 +39,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   // Track if we should auto-scroll to bottom on initial load
   bool _shouldAutoScrollOnLoad = true;
+
+  // Key for tracking highlighted message
+  final Map<String, GlobalKey> _messageKeys = {};
 
   @override
   void initState() {
@@ -73,19 +80,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Note: We don't immediately mark as read here - only when user scrolls to view messages
       // This ensures better UX where messages are only marked as read when actually viewed
 
-      // Use the more reliable scroll method with longer delays
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          _ensureScrollToBottom();
-        }
-      });
+      // Handle message highlighting and scrolling if requested
+      if (widget.highlightMessageId != null && widget.scrollToMessage) {
+        _scrollToHighlightedMessage();
+      } else {
+        // Use the more reliable scroll method with longer delays
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _ensureScrollToBottom();
+          }
+        });
 
-      // Additional backup with even longer delay
-      Future.delayed(const Duration(milliseconds: 1500), () {
-        if (mounted && _shouldAutoScrollOnLoad) {
-          _ensureScrollToBottom();
-        }
-      });
+        // Additional backup with even longer delay
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted && _shouldAutoScrollOnLoad) {
+            _ensureScrollToBottom();
+          }
+        });
+      }
 
       // REAL-TIME READ STATUS: Mark messages as read when opening chat page
       _markAllUnreadMessagesAsReadOnOpen();
@@ -1088,6 +1100,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ),
               ),
             MessageBubble(
+              key: widget.highlightMessageId == message.id
+                  ? _getMessageKey(message.id)
+                  : null,
               message: message,
               isMe: isMe,
               onReply: (msg) => _replyToMessage(msg),
@@ -1751,6 +1766,38 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       case UserType.parent:
         return AppTheme.warningColor;
     }
+  }
+
+  /// Scroll to and highlight a specific message
+  void _scrollToHighlightedMessage() {
+    if (widget.highlightMessageId == null) return;
+
+    // Wait for messages to load, then scroll to the highlighted message
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      final messageKey = _messageKeys[widget.highlightMessageId];
+      if (messageKey?.currentContext != null) {
+        Scrollable.ensureVisible(
+          messageKey!.currentContext!,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+
+        // Add highlighting animation
+        _highlightMessage(widget.highlightMessageId!);
+      }
+    });
+  }
+
+  /// Highlight a specific message with animation
+  void _highlightMessage(String messageId) {
+    // This would typically involve updating the message's visual state
+    // For now, we'll just log it - the UI highlighting would be handled in MessageBubble
+    debugPrint('Highlighting message: $messageId');
+  }
+
+  /// Get or create a GlobalKey for a message
+  GlobalKey _getMessageKey(String messageId) {
+    return _messageKeys.putIfAbsent(messageId, () => GlobalKey());
   }
 }
 

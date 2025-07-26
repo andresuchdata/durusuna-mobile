@@ -24,6 +24,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     super.initState();
     // Initialize notifications when home page loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('🏠 Home page loaded - initializing notifications...');
       ref.read(notificationsProvider.notifier).initialize();
     });
   }
@@ -91,6 +92,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             Consumer(
               builder: (context, ref, child) {
                 final unreadCount = ref.watch(unreadNotificationsCountProvider);
+                debugPrint('🔴 Notification badge count: $unreadCount');
                 return Stack(
                   children: [
                     IconButton(
