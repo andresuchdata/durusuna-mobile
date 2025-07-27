@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/storage/storage_service.dart';
 
+// Export notification providers for easy access
+export '../services/notification_service.dart' show 
+    notificationServiceProvider, 
+    notificationsProvider, 
+    unreadNotificationsCountProvider;
+
 // Theme Mode Provider
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>(
   (ref) => ThemeModeNotifier(),

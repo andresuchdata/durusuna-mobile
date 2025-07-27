@@ -8,17 +8,21 @@ import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/message.dart';
 import '../../../../shared/models/user.dart';
+import '../../../../shared/models/conversation.dart';
 import '../../../../shared/widgets/widgets.dart';
-import '../../../../shared/widgets/group_profile_card.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   final Conversation conversation;
+  final String? highlightMessageId;
+  final bool scrollToMessage;
 
   const ChatPage({
     super.key,
     required this.conversation,
+    this.highlightMessageId,
+    this.scrollToMessage = false,
   });
 
   @override
@@ -35,6 +39,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   // Track if we should auto-scroll to bottom on initial load
   bool _shouldAutoScrollOnLoad = true;
+
+  // Key for tracking highlighted message
+  final Map<String, GlobalKey> _messageKeys = {};
 
   @override
   void initState() {
@@ -59,10 +66,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       // CRITICAL: Force refresh messages if conversation was recently active
       // This ensures chat messages are synced with conversation list
-      final timeSinceLastActivity =
-          DateTime.now().difference(widget.conversation.lastActivity);
-      final shouldForceRefresh =
-          timeSinceLastActivity.inSeconds < 30; // Last 30 seconds
+      final lastActivity = widget.conversation.lastActivity;
+      final shouldForceRefresh = lastActivity != null &&
+          DateTime.now().difference(lastActivity).inSeconds <
+              30; // Last 30 seconds
 
       if (shouldForceRefresh) {
         ref
@@ -73,19 +80,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       // Note: We don't immediately mark as read here - only when user scrolls to view messages
       // This ensures better UX where messages are only marked as read when actually viewed
 
-      // Use the more reliable scroll method with longer delays
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          _ensureScrollToBottom();
-        }
-      });
+      // Handle message highlighting and scrolling if requested
+      if (widget.highlightMessageId != null && widget.scrollToMessage) {
+        _scrollToHighlightedMessage();
+      } else {
+        // Use the more reliable scroll method with longer delays
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _ensureScrollToBottom();
+          }
+        });
 
-      // Additional backup with even longer delay
-      Future.delayed(const Duration(milliseconds: 1500), () {
-        if (mounted && _shouldAutoScrollOnLoad) {
-          _ensureScrollToBottom();
-        }
-      });
+        // Additional backup with even longer delay
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted && _shouldAutoScrollOnLoad) {
+            _ensureScrollToBottom();
+          }
+        });
+      }
 
       // REAL-TIME READ STATUS: Mark messages as read when opening chat page
       _markAllUnreadMessagesAsReadOnOpen();
@@ -140,15 +152,31 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   String _getInitials() {
     if (widget.conversation.type == 'group') {
       final name = widget.conversation.name ?? 'Group';
-      final words = name.split(' ');
-      if (words.length >= 2) {
-        return '${words[0][0]}${words[1][0]}';
+      final words = name.split(' ').where((word) => word.isNotEmpty).toList();
+      if (words.length >= 2 && words[0].isNotEmpty && words[1].isNotEmpty) {
+        return '${words[0][0].toUpperCase()}${words[1][0].toUpperCase()}';
       }
       return name.isNotEmpty ? name[0].toUpperCase() : 'G';
     }
     final otherUser = widget.conversation.otherUser;
     if (otherUser != null) {
-      return '${otherUser.firstName[0]}${otherUser.lastName[0]}';
+      return _getUserInitials(otherUser);
+    }
+    return 'U';
+  }
+
+  String _getUserInitials(User user) {
+    final firstName = user.firstName.trim();
+    final lastName = user.lastName.trim();
+    final firstInitial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '';
+    final lastInitial = lastName.isNotEmpty ? lastName[0].toUpperCase() : '';
+
+    if (firstInitial.isNotEmpty && lastInitial.isNotEmpty) {
+      return '$firstInitial$lastInitial';
+    } else if (firstInitial.isNotEmpty) {
+      return firstInitial;
+    } else if (lastInitial.isNotEmpty) {
+      return lastInitial;
     }
     return 'U';
   }
@@ -835,7 +863,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           ? 'Online'
                           : messagesState.isTyping
                               ? 'Typing...'
-                              : 'Last seen ${timeago.format(widget.conversation.lastActivity)}',
+                              : widget.conversation.lastActivity != null
+                                  ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
+                                  : 'Last seen recently',
                       style: TextStyle(
                         fontSize: 12,
                         color: _isOtherUserOnline || messagesState.isTyping
@@ -932,7 +962,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     radius: 12,
                     backgroundColor: AppTheme.primaryColor,
                     child: Text(
-                      _getInitials()[0],
+                      _getInitials().isNotEmpty ? _getInitials()[0] : 'U',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
@@ -1070,6 +1100,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ),
               ),
             MessageBubble(
+              key: widget.highlightMessageId == message.id
+                  ? _getMessageKey(message.id)
+                  : null,
               message: message,
               isMe: isMe,
               onReply: (msg) => _replyToMessage(msg),
@@ -1614,7 +1647,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             : null,
         child: member.avatarUrl?.isEmpty != false
             ? Text(
-                '${member.firstName[0]}${member.lastName[0]}',
+                _getUserInitials(member),
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
@@ -1733,6 +1766,38 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       case UserType.parent:
         return AppTheme.warningColor;
     }
+  }
+
+  /// Scroll to and highlight a specific message
+  void _scrollToHighlightedMessage() {
+    if (widget.highlightMessageId == null) return;
+
+    // Wait for messages to load, then scroll to the highlighted message
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      final messageKey = _messageKeys[widget.highlightMessageId];
+      if (messageKey?.currentContext != null) {
+        Scrollable.ensureVisible(
+          messageKey!.currentContext!,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+
+        // Add highlighting animation
+        _highlightMessage(widget.highlightMessageId!);
+      }
+    });
+  }
+
+  /// Highlight a specific message with animation
+  void _highlightMessage(String messageId) {
+    // This would typically involve updating the message's visual state
+    // For now, we'll just log it - the UI highlighting would be handled in MessageBubble
+    debugPrint('Highlighting message: $messageId');
+  }
+
+  /// Get or create a GlobalKey for a message
+  GlobalKey _getMessageKey(String messageId) {
+    return _messageKeys.putIfAbsent(messageId, () => GlobalKey());
   }
 }
 

@@ -1,0 +1,66 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'notification.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+NotificationModel _$NotificationModelFromJson(Map<String, dynamic> json) =>
+    NotificationModel(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      content: json['content'] as String,
+      type: $enumDecode(_$NotificationTypeEnumMap, json['notification_type']),
+      priority: $enumDecodeNullable(
+              _$NotificationPriorityEnumMap, json['priority']) ??
+          NotificationPriority.normal,
+      isRead: json['is_read'] as bool? ?? false,
+      userId: json['user_id'] as String,
+      senderId: json['sender_id'] as String?,
+      sender: json['sender'] == null
+          ? null
+          : User.fromJson(json['sender'] as Map<String, dynamic>),
+      actionUrl: json['action_url'] as String?,
+      actionData: json['action_data'] as Map<String, dynamic>?,
+      imageUrl: json['image_url'] as String?,
+      readAt: json['read_at'] == null
+          ? null
+          : DateTime.parse(json['read_at'] as String),
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+    );
+
+Map<String, dynamic> _$NotificationModelToJson(NotificationModel instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'title': instance.title,
+      'content': instance.content,
+      'notification_type': _$NotificationTypeEnumMap[instance.type]!,
+      'priority': _$NotificationPriorityEnumMap[instance.priority]!,
+      'is_read': instance.isRead,
+      'user_id': instance.userId,
+      'sender_id': instance.senderId,
+      'sender': instance.sender,
+      'action_url': instance.actionUrl,
+      'action_data': instance.actionData,
+      'image_url': instance.imageUrl,
+      'read_at': instance.readAt?.toIso8601String(),
+      'created_at': instance.createdAt.toIso8601String(),
+      'updated_at': instance.updatedAt.toIso8601String(),
+    };
+
+const _$NotificationTypeEnumMap = {
+  NotificationType.message: 'message',
+  NotificationType.assignment: 'assignment',
+  NotificationType.announcement: 'announcement',
+  NotificationType.event: 'event',
+  NotificationType.system: 'system',
+};
+
+const _$NotificationPriorityEnumMap = {
+  NotificationPriority.low: 'low',
+  NotificationPriority.normal: 'normal',
+  NotificationPriority.high: 'high',
+  NotificationPriority.urgent: 'urgent',
+};

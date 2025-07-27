@@ -31,8 +31,10 @@ enum ReadStatus {
 @JsonSerializable()
 class Message {
   final String id;
+  @JsonKey(name: 'conversation_id')
+  final String conversationId;
   @JsonKey(name: 'sender_id')
-  final String? senderId;
+  final String senderId;
   @JsonKey(name: 'receiver_id')
   final String? receiverId;
   final String? content;
@@ -41,12 +43,14 @@ class Message {
   final Map<String, dynamic>? metadata;
   @JsonKey(name: 'reply_to_id')
   final String? replyToId;
+  @JsonKey(name: 'is_read')
+  final bool isRead;
   @JsonKey(name: 'is_edited')
   final bool isEdited;
-  @JsonKey(name: 'edited_at')
-  final DateTime? editedAt;
   @JsonKey(name: 'is_deleted')
   final bool isDeleted;
+  @JsonKey(name: 'edited_at')
+  final DateTime? editedAt;
   @JsonKey(name: 'deleted_at')
   final DateTime? deletedAt;
   @JsonKey(name: 'delivered_at')
@@ -72,15 +76,17 @@ class Message {
 
   Message({
     required this.id,
-    this.senderId,
+    required this.conversationId,
+    required this.senderId,
     this.receiverId,
     this.content,
     required this.messageType,
     this.metadata,
     this.replyToId,
+    this.isRead = false,
     this.isEdited = false,
-    this.editedAt,
     this.isDeleted = false,
+    this.editedAt,
     this.deletedAt,
     this.deliveredAt,
     this.readAt,
@@ -100,9 +106,9 @@ class Message {
       _$MessageFromJson(json);
   Map<String, dynamic> toJson() => _$MessageToJson(this);
 
-  bool get isRead => readAt != null;
   bool get hasAttachments => attachments != null && attachments!.isNotEmpty;
   bool get isReply => replyToId != null;
+  bool get wasRead => readAt != null;
 
   String get displayContent {
     if (isDeleted) return 'This message was deleted';
@@ -126,15 +132,17 @@ class Message {
 
   Message copyWith({
     String? id,
+    String? conversationId,
     String? senderId,
     String? receiverId,
     String? content,
     MessageType? messageType,
     Map<String, dynamic>? metadata,
     String? replyToId,
+    bool? isRead,
     bool? isEdited,
-    DateTime? editedAt,
     bool? isDeleted,
+    DateTime? editedAt,
     DateTime? deletedAt,
     DateTime? deliveredAt,
     DateTime? readAt,
@@ -150,15 +158,17 @@ class Message {
   }) {
     return Message(
       id: id ?? this.id,
+      conversationId: conversationId ?? this.conversationId,
       senderId: senderId ?? this.senderId,
       receiverId: receiverId ?? this.receiverId,
       content: content ?? this.content,
       messageType: messageType ?? this.messageType,
       metadata: metadata ?? this.metadata,
       replyToId: replyToId ?? this.replyToId,
+      isRead: isRead ?? this.isRead,
       isEdited: isEdited ?? this.isEdited,
-      editedAt: editedAt ?? this.editedAt,
       isDeleted: isDeleted ?? this.isDeleted,
+      editedAt: editedAt ?? this.editedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       deliveredAt: deliveredAt ?? this.deliveredAt,
       readAt: readAt ?? this.readAt,

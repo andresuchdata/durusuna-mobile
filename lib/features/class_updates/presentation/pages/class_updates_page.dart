@@ -13,11 +13,15 @@ import 'create_update_page.dart';
 class ClassUpdatesPage extends ConsumerStatefulWidget {
   final String classId;
   final String className;
+  final String? highlightUpdateId;
+  final bool scrollToUpdate;
 
   const ClassUpdatesPage({
     super.key,
     required this.classId,
     required this.className,
+    this.highlightUpdateId,
+    this.scrollToUpdate = false,
   });
 
   @override
@@ -26,11 +30,19 @@ class ClassUpdatesPage extends ConsumerStatefulWidget {
 
 class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
   final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _updateKeys = {};
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+
+    // Handle update highlighting and scrolling if requested
+    if (widget.highlightUpdateId != null && widget.scrollToUpdate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToHighlightedUpdate();
+      });
+    }
   }
 
   @override
@@ -179,6 +191,9 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
 
                             final update = updatesState.updates[index];
                             return ClassUpdateCard(
+                              key: widget.highlightUpdateId == update.id
+                                  ? _getUpdateKey(update.id)
+                                  : null,
                               update: update,
                               currentUserId: authState.user?.id,
                               onReaction: (emoji) {
@@ -320,6 +335,38 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
         },
       ),
     );
+  }
+
+  /// Scroll to and highlight a specific update
+  void _scrollToHighlightedUpdate() {
+    if (widget.highlightUpdateId == null) return;
+
+    // Wait for updates to load, then scroll to the highlighted update
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      final updateKey = _updateKeys[widget.highlightUpdateId];
+      if (updateKey?.currentContext != null) {
+        Scrollable.ensureVisible(
+          updateKey!.currentContext!,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+
+        // Add highlighting animation
+        _highlightUpdate(widget.highlightUpdateId!);
+      }
+    });
+  }
+
+  /// Highlight a specific update with animation
+  void _highlightUpdate(String updateId) {
+    // This would typically involve updating the update's visual state
+    // For now, we'll just log it - the UI highlighting would be handled in ClassUpdateCard
+    debugPrint('Highlighting update: $updateId');
+  }
+
+  /// Get or create a GlobalKey for an update
+  GlobalKey _getUpdateKey(String updateId) {
+    return _updateKeys.putIfAbsent(updateId, () => GlobalKey());
   }
 }
 

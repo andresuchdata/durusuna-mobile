@@ -32,18 +32,18 @@ class User {
   final String? avatarUrl;
   @JsonKey(name: 'user_type')
   final UserType userType;
-  final UserRole role;
+  final UserRole? role;
   @JsonKey(name: 'school_id')
   final String? schoolId;
   final School? school;
   @JsonKey(name: 'is_active')
-  final bool isActive;
+  final bool? isActive;
   @JsonKey(name: 'last_active_at')
   final DateTime? lastActiveAt;
   @JsonKey(name: 'created_at')
-  final DateTime createdAt;
+  final DateTime? createdAt;
   @JsonKey(name: 'updated_at')
-  final DateTime updatedAt;
+  final DateTime? updatedAt;
 
   User({
     required this.id,
@@ -53,13 +53,13 @@ class User {
     this.phone,
     this.avatarUrl,
     required this.userType,
-    required this.role,
+    this.role,
     this.schoolId,
     this.school,
-    required this.isActive,
+    this.isActive,
     this.lastActiveAt,
-    required this.createdAt,
-    required this.updatedAt,
+    this.createdAt,
+    this.updatedAt,
   });
 
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../core/utils/global_auth_handler.dart';
 import '../../../../shared/services/auth_service.dart';
+import '../../../../shared/services/notification_service.dart';
 import '../../../../shared/models/user.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../chat/presentation/pages/conversations_page.dart';
+import '../../../notifications/presentation/pages/notifications_page.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -16,6 +18,16 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize notifications when home page loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('🏠 Home page loaded - initializing notifications...');
+      ref.read(notificationsProvider.notifier).initialize();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +88,58 @@ class _HomePageState extends ConsumerState<HomePage> {
           pinned: true,
           elevation: 0,
           backgroundColor: AppTheme.primaryColor,
+          actions: [
+            Consumer(
+              builder: (context, ref, child) {
+                final unreadCount = ref.watch(unreadNotificationsCountProvider);
+                debugPrint('🔴 Notification badge count: $unreadCount');
+                return Stack(
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.notifications_outlined,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const NotificationsPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            unreadCount > 99 ? '99+' : unreadCount.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
           flexibleSpace: FlexibleSpaceBar(
             title: Text(
               'Welcome, ${user.firstName}!',
@@ -359,7 +423,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             // Profile Info
             _buildInfoSection('Personal Information', [
               _buildInfoTile('Phone', user.phone ?? 'Not provided'),
-              _buildInfoTile('Role', user.role.name.toUpperCase()),
+              _buildInfoTile(
+                  'Role', user.role?.name.toUpperCase() ?? 'Not assigned'),
               _buildInfoTile('School', user.school?.name ?? 'Not assigned'),
             ]),
           ],

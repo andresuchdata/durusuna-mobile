@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/models/user.dart';
+import '../../../../shared/models/conversation.dart';
 import '../widgets/contact_tile.dart';
 import 'chat_page.dart';
 
@@ -101,12 +102,13 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
         conversation = Conversation(
           id: conversationId, // Special ID format for new conversations
           type: 'direct',
+          createdBy: user.id,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
           participants: [user],
           otherUser: user,
           unreadCount: 0,
           lastActivity: DateTime.now(),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
           isOnline: false,
         );
       }

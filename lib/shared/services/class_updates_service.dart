@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/class_update.dart';
 import '../models/class_update_comment.dart';
 import '../../core/constants/api_constants.dart';
+import '../../core/storage/storage_service.dart';
 import 'api_service.dart';
 
 class ClassUpdatesService {
@@ -17,7 +18,7 @@ class ClassUpdatesService {
   }) async {
     try {
       final response = await _apiService.get(
-        '${ApiConstants.classUpdates}/$classId',
+        ApiConstants.getClassUpdates(classId),
         queryParameters: {
           'page': page,
           'limit': limit,
@@ -63,7 +64,7 @@ class ClassUpdatesService {
       };
 
       final response = await _apiService.post(
-        ApiConstants.createClassUpdate,
+        ApiConstants.createClassUpdate(classId),
         data: data,
       );
 
@@ -101,7 +102,7 @@ class ClassUpdatesService {
       if (attachments != null) data['attachments'] = attachments;
 
       final response = await _apiService.put(
-        '${ApiConstants.classUpdates}/$updateId',
+        ApiConstants.updateClassUpdate(updateId),
         data: data,
       );
 
@@ -127,7 +128,7 @@ class ClassUpdatesService {
   Future<void> deleteClassUpdate(String updateId) async {
     try {
       final response = await _apiService.delete(
-        '${ApiConstants.classUpdates}/$updateId',
+        ApiConstants.deleteClassUpdate(updateId),
       );
 
       if (response.statusCode != 200) {
@@ -153,7 +154,7 @@ class ClassUpdatesService {
   }) async {
     try {
       final response = await _apiService.get(
-        '${ApiConstants.classUpdates}/$updateId/comments',
+        ApiConstants.getComments(updateId),
         queryParameters: {
           'page': page,
           'limit': limit,
@@ -194,7 +195,7 @@ class ClassUpdatesService {
       };
 
       final response = await _apiService.post(
-        '${ApiConstants.classUpdates}/$updateId/comments',
+        ApiConstants.addComment(updateId),
         data: data,
       );
 
@@ -223,7 +224,7 @@ class ClassUpdatesService {
   }) async {
     try {
       final response = await _apiService.put(
-        '${ApiConstants.classUpdates}/comments/$commentId',
+        ApiConstants.updateComment(commentId),
         data: {'content': content},
       );
 
@@ -249,7 +250,7 @@ class ClassUpdatesService {
   Future<void> deleteComment(String commentId) async {
     try {
       final response = await _apiService.delete(
-        '${ApiConstants.classUpdates}/comments/$commentId',
+        ApiConstants.deleteComment(commentId),
       );
 
       if (response.statusCode != 200) {
@@ -267,26 +268,78 @@ class ClassUpdatesService {
     }
   }
 
+  /// Upload attachments for class updates
+  Future<List<Map<String, dynamic>>> uploadAttachments(
+    List<String> filePaths,
+  ) async {
+    try {
+      // This would typically use FormData for file uploads
+      // Implementation depends on how you handle file uploads in your app
+      final response = await _apiService.post(
+        ApiConstants.uploadAttachments,
+        data: {
+          'files': filePaths
+        }, // Simplified - actual implementation would use FormData
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data as Map<String, dynamic>;
+        return List<Map<String, dynamic>>.from(data['attachments'] ?? []);
+      } else {
+        throw ApiException(
+          message: 'Failed to upload attachments',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to upload attachments: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
+  /// Delete an attachment
+  Future<void> deleteAttachment(String key) async {
+    try {
+      final response = await _apiService.delete(
+        ApiConstants.deleteAttachment(key),
+      );
+
+      if (response.statusCode != 200) {
+        throw ApiException(
+          message: 'Failed to delete attachment',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to delete attachment: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
   /// Toggle reaction on a class update
-  Future<ClassUpdate> toggleReaction({
+  Future<void> toggleReaction({
     required String updateId,
     required String emoji,
   }) async {
     try {
       final response = await _apiService.post(
-        '${ApiConstants.classUpdates}/$updateId/reactions',
+        ApiConstants.addReaction(updateId),
         data: {'emoji': emoji},
       );
 
-      if (response.statusCode == 200) {
-        final updateData = response.data['update'] as Map<String, dynamic>;
-        return ClassUpdate.fromJson(updateData);
-      } else {
+      if (response.statusCode != 200) {
         throw ApiException(
           message: 'Failed to toggle reaction',
           statusCode: response.statusCode ?? 0,
         );
-      }
+      } else {}
+      // Success - no need to return anything, optimistic update is already applied
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(
@@ -300,7 +353,7 @@ class ClassUpdatesService {
   Future<ClassUpdate> togglePin(String updateId, bool isPinned) async {
     try {
       final response = await _apiService.put(
-        '${ApiConstants.classUpdates}/$updateId/pin',
+        ApiConstants.pinClassUpdate(updateId),
         data: {'is_pinned': isPinned},
       );
 
@@ -476,22 +529,87 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
   }
 
   Future<void> toggleReaction(String updateId, String emoji) async {
-    try {
-      // Call the API to toggle the reaction
-      final updatedClassUpdate =
-          await _service.toggleReaction(updateId: updateId, emoji: emoji);
+    // Find the update to potentially revert changes
+    final index = state.updates.indexWhere((u) => u.id == updateId);
+    if (index == -1) return;
 
-      // Update the state with the returned data from the server
-      final index = state.updates.indexWhere((u) => u.id == updateId);
-      if (index != -1) {
-        final newUpdates = [...state.updates];
-        newUpdates[index] = updatedClassUpdate;
-        state = state.copyWith(updates: newUpdates);
+    final originalUpdate = state.updates[index];
+
+    // Get current user ID synchronously for immediate optimistic update
+    final currentUserId = _getCurrentUserIdSync();
+    if (currentUserId == null) return;
+
+    try {
+      // Optimistic update: Update UI immediately
+      final optimisticReactions =
+          Map<String, Reaction>.from(originalUpdate.reactions ?? {});
+
+      if (optimisticReactions.containsKey(emoji)) {
+        final reactionData = optimisticReactions[emoji]!;
+        final userIds = List<String>.from(reactionData.users);
+
+        if (userIds.contains(currentUserId)) {
+          // Remove user's reaction
+          userIds.remove(currentUserId);
+          if (userIds.isEmpty) {
+            optimisticReactions.remove(emoji);
+          } else {
+            optimisticReactions[emoji] = Reaction(
+              count: userIds.length,
+              users: userIds,
+            );
+          }
+        } else {
+          // Add user's reaction
+          userIds.add(currentUserId);
+          optimisticReactions[emoji] = Reaction(
+            count: userIds.length,
+            users: userIds,
+          );
+        }
+      } else {
+        // Add new reaction - this should make it appear in the UI
+        optimisticReactions[emoji] = Reaction(
+          count: 1,
+          users: [currentUserId],
+        );
       }
+
+      // Update state optimistically (immediate UI feedback)
+      final optimisticUpdate =
+          originalUpdate.copyWith(reactions: optimisticReactions);
+
+      final newUpdates = [...state.updates];
+      newUpdates[index] = optimisticUpdate;
+
+      // Ensure UI rebuilds by creating a new state object
+      state = state.copyWith(updates: newUpdates);
+
+      // Call the API to persist the change (but don't overwrite optimistic update)
+      await _service.toggleReaction(updateId: updateId, emoji: emoji);
+
+      // Keep the optimistic update since it's already correct
+      // The server response only contains reaction data, not the full update
     } catch (e) {
-      // On error, reload to get accurate state
-      loadUpdates(refresh: true);
-      state = state.copyWith(error: e.toString());
+      // Revert to original state on error
+      final revertedUpdates = [...state.updates];
+      revertedUpdates[index] = originalUpdate;
+      state = state.copyWith(
+        updates: revertedUpdates,
+        error: 'Failed to update reaction: ${e.toString()}',
+      );
+    }
+  }
+
+  String? _getCurrentUserIdSync() {
+    try {
+      final userData = StorageService.getUser();
+      if (userData != null) {
+        return userData['id']?.toString();
+      }
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/message.dart';
 import '../models/user.dart';
+import '../models/conversation.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/storage/storage_service.dart';
 import 'api_service.dart';
@@ -23,6 +24,9 @@ class ChatService {
           try {
             return Conversation.fromJson(json);
           } catch (e) {
+            // Enhanced error logging for debugging
+            print('❌ Error parsing conversation: $e');
+            print('📄 Conversation JSON: ${json.toString()}');
             rethrow;
           }
         }).toList();
@@ -57,7 +61,7 @@ class ChatService {
       }
 
       final response = await _apiService.get(
-        '${ApiConstants.getConversationMessages}/$conversationWithId',
+        ApiConstants.getConversationMessages(conversationWithId),
         queryParameters: {
           'page': page,
           'limit': limit,
@@ -85,6 +89,47 @@ class ChatService {
     }
   }
 
+  /// Load more messages for a conversation (optimized endpoint)
+  Future<List<Message>> loadMoreMessages(
+    String conversationId, {
+    String? beforeMessageId,
+    int limit = 50,
+  }) async {
+    try {
+      final queryParameters = <String, dynamic>{
+        'limit': limit,
+      };
+
+      if (beforeMessageId != null) {
+        queryParameters['before'] = beforeMessageId;
+      }
+
+      final response = await _apiService.get(
+        ApiConstants.loadMoreMessages(conversationId),
+        queryParameters: queryParameters,
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data as Map<String, dynamic>;
+        final messages = (data['messages'] as List)
+            .map((json) => Message.fromJson(json))
+            .toList();
+        return messages;
+      } else {
+        throw ApiException(
+          message: 'Failed to load more messages',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to load more messages: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
   /// Send a message
   Future<Message> sendMessage({
     String? conversationId,
@@ -97,17 +142,30 @@ class ChatService {
     try {
       final data = <String, dynamic>{
         'message_type': messageType.name,
-        if (conversationId != null) 'conversation_id': conversationId,
-        if (receiverId != null) 'receiver_id': receiverId,
         if (content != null) 'content': content,
         if (replyToId != null) 'reply_to_id': replyToId,
         if (metadata != null) 'metadata': metadata,
       };
 
-      final response = await _apiService.post(
-        ApiConstants.sendMessage,
-        data: data,
-      );
+      String endpoint;
+
+      // Determine which endpoint to use based on whether it's a conversation message or direct message
+      if (conversationId != null) {
+        // Send message to existing conversation
+        endpoint = ApiConstants.sendConversationMessage(conversationId);
+        data['conversation_id'] = conversationId;
+      } else if (receiverId != null) {
+        // Send direct message (creates conversation if needed)
+        endpoint = ApiConstants.sendMessage;
+        data['receiver_id'] = receiverId;
+      } else {
+        throw ApiException(
+          message: 'Either conversation_id or receiver_id is required',
+          statusCode: 400,
+        );
+      }
+
+      final response = await _apiService.post(endpoint, data: data);
 
       if (response.statusCode == 201) {
         final messageData = response.data['message'] as Map<String, dynamic>;
@@ -127,42 +185,36 @@ class ChatService {
     }
   }
 
-  /// Mark messages as read
-  Future<void> markAsRead(List<String> messageIds) async {
+  /// Mark conversation as read
+  Future<void> markConversationAsRead(String conversationId) async {
     try {
-      final response = await _apiService.post(
-        ApiConstants.markAsRead,
-        data: {'message_ids': messageIds},
+      final response = await _apiService.put(
+        ApiConstants.markConversationAsRead(conversationId),
       );
 
       if (response.statusCode != 200) {
         throw ApiException(
-          message: 'Failed to mark messages as read',
+          message: 'Failed to mark conversation as read',
           statusCode: response.statusCode ?? 0,
         );
       }
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(
-        message: 'Failed to mark messages as read: ${e.toString()}',
+        message: 'Failed to mark conversation as read: ${e.toString()}',
         statusCode: 0,
       );
     }
   }
 
-  /// Delete a message
+  /// Delete a message (Note: This functionality may not be available in the current backend)
   Future<void> deleteMessage(String messageId) async {
     try {
-      final response = await _apiService.delete(
-        '${ApiConstants.deleteMessage}/$messageId',
+      // TODO: Update this when message deletion endpoint is available in backend
+      throw ApiException(
+        message: 'Message deletion not currently supported',
+        statusCode: 501,
       );
-
-      if (response.statusCode != 200) {
-        throw ApiException(
-          message: 'Failed to delete message',
-          statusCode: response.statusCode ?? 0,
-        );
-      }
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(
@@ -193,6 +245,35 @@ class ChatService {
       if (e is ApiException) rethrow;
       throw ApiException(
         message: 'Failed to edit message: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
+  /// Search messages
+  Future<List<Message>> searchMessages(String query) async {
+    try {
+      final response = await _apiService.get(
+        ApiConstants.searchMessages,
+        queryParameters: {'q': query},
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data as Map<String, dynamic>;
+        final messages = (data['messages'] as List)
+            .map((json) => Message.fromJson(json))
+            .toList();
+        return messages;
+      } else {
+        throw ApiException(
+          message: 'Failed to search messages',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to search messages: ${e.toString()}',
         statusCode: 0,
       );
     }
@@ -293,192 +374,28 @@ class ChatService {
       );
     }
   }
-
-  /// Mark a conversation as read
-  Future<void> markConversationAsRead(String conversationId) async {
-    try {
-      final response = await _apiService.put(
-        '${ApiConstants.markConversationAsRead}/$conversationId/mark-read',
-      );
-
-      if (response.statusCode != 200) {
-        throw ApiException(
-          message: 'Failed to mark conversation as read',
-          statusCode: response.statusCode ?? 0,
-        );
-      }
-    } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException(
-        message: 'Failed to mark conversation as read: ${e.toString()}',
-        statusCode: 0,
-      );
-    }
-  }
 }
 
-// Conversation model for chat list
-class Conversation {
-  final String id;
-  final String type; // 'direct' or 'group'
-  final String? name; // For group chats
-  final String? description; // For group chats
-  final String? avatarUrl; // For group chats
-  final List<User> participants; // All participants
-  final User? otherUser; // For direct chats, the other participant
-  final Message? lastMessage;
-  final int unreadCount;
-  final DateTime lastActivity;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-  final bool isOnline; // For direct chats
+// Helper function to safely parse message type
+MessageType _parseMessageType(dynamic messageType) {
+  if (messageType == null) return MessageType.text;
 
-  Conversation({
-    required this.id,
-    required this.type,
-    this.name,
-    this.description,
-    this.avatarUrl,
-    required this.participants,
-    this.otherUser,
-    this.lastMessage,
-    required this.unreadCount,
-    required this.lastActivity,
-    required this.createdAt,
-    required this.updatedAt,
-    required this.isOnline,
-  });
-
-  factory Conversation.fromJson(Map<String, dynamic> json) {
-    return Conversation(
-      id: json['id'],
-      type: json['type'] ?? 'direct',
-      name: json['name'],
-      description: json['description'],
-      avatarUrl: json['avatar_url'],
-      participants: (json['participants'] as List?)
-              ?.map((p) => User.fromJson(p))
-              .toList() ??
-          [],
-      otherUser:
-          json['other_user'] != null ? User.fromJson(json['other_user']) : null,
-      lastMessage: json['last_message'] != null
-          ? _parseLastMessage(json['last_message'])
-          : null,
-      unreadCount: json['unread_count'] ?? 0,
-      lastActivity: json['last_activity'] != null
-          ? DateTime.parse(json['last_activity'])
-          : DateTime.now(),
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
-      isOnline: json['is_online'] ?? false,
-    );
+  switch (messageType.toString().toLowerCase()) {
+    case 'text':
+      return MessageType.text;
+    case 'image':
+      return MessageType.image;
+    case 'video':
+      return MessageType.video;
+    case 'audio':
+      return MessageType.audio;
+    case 'file':
+      return MessageType.file;
+    case 'emoji':
+      return MessageType.emoji;
+    default:
+      return MessageType.text;
   }
-
-  // Helper method to safely parse last message with minimal fields
-  static Message? _parseLastMessage(Map<String, dynamic> json) {
-    try {
-      return Message(
-        id: json['id'] ?? '',
-        content: json['content'],
-        messageType: _parseMessageType(json['message_type']),
-        isFromMe: json['is_from_me'] ?? false,
-        createdAt: json['created_at'] != null
-            ? DateTime.parse(json['created_at'])
-            : DateTime.now(),
-      );
-    } catch (e) {
-      // Return a minimal message if parsing fails
-      return Message(
-        id: json['id'] ?? 'unknown',
-        content: json['content'] ?? 'Message',
-        messageType: MessageType.text,
-        createdAt: DateTime.now(),
-      );
-    }
-  }
-
-  // Helper method to safely parse message type
-  static MessageType _parseMessageType(dynamic messageType) {
-    if (messageType == null) return MessageType.text;
-
-    switch (messageType.toString().toLowerCase()) {
-      case 'text':
-        return MessageType.text;
-      case 'image':
-        return MessageType.image;
-      case 'video':
-        return MessageType.video;
-      case 'audio':
-        return MessageType.audio;
-      case 'file':
-        return MessageType.file;
-      case 'emoji':
-        return MessageType.emoji;
-      default:
-        return MessageType.text;
-    }
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'type': type,
-      'name': name,
-      'description': description,
-      'avatar_url': avatarUrl,
-      'participants': participants.map((p) => p.toJson()).toList(),
-      'other_user': otherUser?.toJson(),
-      'last_message': lastMessage?.toJson(),
-      'unread_count': unreadCount,
-      'last_activity': lastActivity.toIso8601String(),
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
-      'is_online': isOnline,
-    };
-  }
-
-  Conversation copyWith({
-    String? id,
-    String? type,
-    String? name,
-    String? description,
-    String? avatarUrl,
-    List<User>? participants,
-    User? otherUser,
-    Message? lastMessage,
-    int? unreadCount,
-    DateTime? lastActivity,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    bool? isOnline,
-  }) {
-    return Conversation(
-      id: id ?? this.id,
-      type: type ?? this.type,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      avatarUrl: avatarUrl ?? this.avatarUrl,
-      participants: participants ?? this.participants,
-      otherUser: otherUser ?? this.otherUser,
-      lastMessage: lastMessage ?? this.lastMessage,
-      unreadCount: unreadCount ?? this.unreadCount,
-      lastActivity: lastActivity ?? this.lastActivity,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      isOnline: isOnline ?? this.isOnline,
-    );
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is Conversation &&
-          runtimeType == other.runtimeType &&
-          id == other.id;
-
-  @override
-  int get hashCode => id.hashCode;
 }
 
 // Provider for ChatService
@@ -582,8 +499,16 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
       }
 
       final updatedConversations = [...state.conversations];
+      // Convert full Message to simplified LastMessage
+      final lastMessage = LastMessage(
+        content: message.content,
+        messageType: message.messageType,
+        createdAt: message.createdAt,
+        isFromMe: message.isFromMe,
+      );
+
       updatedConversations[index] = conversation.copyWith(
-        lastMessage: message,
+        lastMessage: lastMessage,
         lastActivity: message.createdAt,
         unreadCount: newUnreadCount,
       );
@@ -721,9 +646,9 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
                 orElse: () => null,
               );
 
-      if (conversation != null) {
+      if (conversation != null && conversation.lastActivity != null) {
         final timeSinceLastActivity =
-            DateTime.now().difference(conversation.lastActivity);
+            DateTime.now().difference(conversation.lastActivity!);
         final shouldForceRefresh =
             timeSinceLastActivity.inSeconds < 10; // Less than 10 seconds
 
@@ -795,36 +720,24 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       if (conversation?.lastMessage != null) {
         final lastMessage = conversation!.lastMessage!;
 
-        // Check if the last message is already in the loaded messages
-        final isIncluded = loadedMessages.any((m) => m.id == lastMessage.id);
-
-        // Also check by content and recent time as fallback (in case ID format differs)
+        // Check by content and recent time since LastMessage doesn't have ID
         final recentThreshold =
             DateTime.now().subtract(const Duration(minutes: 5));
         final isRecentlyIncluded = loadedMessages.any((m) =>
             m.content == lastMessage.content &&
-            m.createdAt.isAfter(recentThreshold));
+            m.createdAt.isAfter(recentThreshold) &&
+            m.messageType == lastMessage.messageType);
 
-        if (!isIncluded && !isRecentlyIncluded) {
-          // Create a properly formatted message from the conversation's lastMessage
+        if (!isRecentlyIncluded) {
+          // Create a basic message from the conversation's lastMessage
+          // Note: LastMessage has limited data, so we'll create a minimal Message
           final missingMessage = Message(
-            id: lastMessage.id.isNotEmpty
-                ? lastMessage.id
-                : 'missing_${DateTime.now().millisecondsSinceEpoch}',
-            senderId: lastMessage.senderId ?? '',
-            receiverId: lastMessage.receiverId,
+            id: 'last_${DateTime.now().millisecondsSinceEpoch}',
+            conversationId: _conversationWithId,
+            senderId: '', // Not available in LastMessage
             content: lastMessage.content,
             messageType: lastMessage.messageType,
-            replyToId: lastMessage.replyToId,
-            metadata: lastMessage.metadata,
-            reactions: lastMessage.reactions ?? const {},
-            attachments: lastMessage.attachments,
-            isEdited: lastMessage.isEdited ?? false,
-            editedAt: lastMessage.editedAt,
-            deliveredAt: lastMessage.deliveredAt,
-            readAt: lastMessage.readAt,
             createdAt: lastMessage.createdAt,
-            updatedAt: lastMessage.updatedAt ?? lastMessage.createdAt,
             isFromMe: lastMessage.isFromMe ?? false,
           );
 
@@ -852,8 +765,11 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     Map<String, dynamic>? metadata,
   }) async {
     // Create optimistic message immediately with temporary ID
+    final currentUser = StorageService.getUser();
     final optimisticMessage = Message(
       id: 'temp_${DateTime.now().millisecondsSinceEpoch}', // Temporary ID
+      conversationId: _conversationWithId,
+      senderId: currentUser?['id']?.toString() ?? '',
       content: content,
       messageType: messageType,
       isFromMe: true,

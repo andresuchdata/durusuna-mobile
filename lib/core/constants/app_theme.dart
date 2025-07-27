@@ -6,23 +6,23 @@ class AppTheme {
   static const Color primaryVariant = Color(0xFF1E40AF);
   static const Color secondaryColor = Color(0xFF059669); // Green
   static const Color accentColor = Color(0xFF3B82F6); // Bright Blue
-  
+
   // Neutral Colors
   static const Color backgroundColor = Color(0xFFF8FAFC);
   static const Color surfaceColor = Colors.white;
   static const Color cardColor = Colors.white;
-  
+
   // Text Colors
   static const Color textPrimary = Color(0xFF1F2937);
   static const Color textSecondary = Color(0xFF6B7280);
   static const Color textTertiary = Color(0xFF9CA3AF);
-  
+
   // Status Colors
   static const Color successColor = Color(0xFF10B981);
   static const Color warningColor = Color(0xFFF59E0B);
-  static const Color errorColor = Color(0xFFF87171);
+  static const Color errorColor = Color.fromARGB(255, 175, 71, 71);
   static const Color infoColor = Color(0xFF3B82F6);
-  
+
   // Border Colors
   static const Color borderColor = Color(0xFFE5E7EB);
   static const Color dividerColor = Color(0xFFF3F4F6);
@@ -51,7 +51,7 @@ class AppTheme {
         onBackground: textPrimary,
         onError: Colors.white,
       ),
-      
+
       // App Bar Theme
       appBarTheme: const AppBarTheme(
         backgroundColor: surfaceColor,
@@ -66,7 +66,7 @@ class AppTheme {
         ),
         iconTheme: IconThemeData(color: textPrimary),
       ),
-      
+
       // Card Theme
       cardTheme: CardThemeData(
         color: cardColor,
@@ -76,7 +76,7 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
         ),
       ),
-      
+
       // Elevated Button Theme
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -93,7 +93,7 @@ class AppTheme {
           ),
         ),
       ),
-      
+
       // Text Button Theme
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
@@ -106,7 +106,7 @@ class AppTheme {
           ),
         ),
       ),
-      
+
       // Input Decoration Theme
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -133,7 +133,7 @@ class AppTheme {
           fontFamily: 'Inter',
         ),
       ),
-      
+
       // Bottom Navigation Bar Theme
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: surfaceColor,
@@ -142,7 +142,7 @@ class AppTheme {
         type: BottomNavigationBarType.fixed,
         elevation: 8,
       ),
-      
+
       // Text Theme
       textTheme: const TextTheme(
         displayLarge: TextStyle(
@@ -236,14 +236,14 @@ class AppTheme {
           fontFamily: 'Inter',
         ),
       ),
-      
+
       // Divider Theme
       dividerTheme: const DividerThemeData(
         color: dividerColor,
         thickness: 1,
         space: 1,
       ),
-      
+
       fontFamily: 'Inter',
     );
   }
@@ -264,7 +264,7 @@ class AppTheme {
         onBackground: darkTextPrimary,
         onError: Colors.white,
       ),
-      
+
       // App Bar Theme
       appBarTheme: const AppBarTheme(
         backgroundColor: darkSurfaceColor,
@@ -279,7 +279,7 @@ class AppTheme {
         ),
         iconTheme: IconThemeData(color: darkTextPrimary),
       ),
-      
+
       // Card Theme
       cardTheme: CardThemeData(
         color: darkCardColor,
@@ -289,9 +289,9 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
         ),
       ),
-      
+
       // Similar theme configurations adapted for dark mode...
       fontFamily: 'Inter',
     );
   }
-} 
+}

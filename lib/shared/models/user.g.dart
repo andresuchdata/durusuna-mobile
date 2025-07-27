@@ -14,17 +14,21 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
       phone: json['phone'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       userType: $enumDecode(_$UserTypeEnumMap, json['user_type']),
-      role: $enumDecode(_$UserRoleEnumMap, json['role']),
+      role: $enumDecodeNullable(_$UserRoleEnumMap, json['role']),
       schoolId: json['school_id'] as String?,
       school: json['school'] == null
           ? null
           : School.fromJson(json['school'] as Map<String, dynamic>),
-      isActive: json['is_active'] as bool,
+      isActive: json['is_active'] as bool?,
       lastActiveAt: json['last_active_at'] == null
           ? null
           : DateTime.parse(json['last_active_at'] as String),
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: json['created_at'] == null
+          ? null
+          : DateTime.parse(json['created_at'] as String),
+      updatedAt: json['updated_at'] == null
+          ? null
+          : DateTime.parse(json['updated_at'] as String),
     );
 
 Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
@@ -35,13 +39,13 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
       'phone': instance.phone,
       'avatar_url': instance.avatarUrl,
       'user_type': _$UserTypeEnumMap[instance.userType]!,
-      'role': _$UserRoleEnumMap[instance.role]!,
+      'role': _$UserRoleEnumMap[instance.role],
       'school_id': instance.schoolId,
       'school': instance.school,
       'is_active': instance.isActive,
       'last_active_at': instance.lastActiveAt?.toIso8601String(),
-      'created_at': instance.createdAt.toIso8601String(),
-      'updated_at': instance.updatedAt.toIso8601String(),
+      'created_at': instance.createdAt?.toIso8601String(),
+      'updated_at': instance.updatedAt?.toIso8601String(),
     };
 
 const _$UserTypeEnumMap = {
