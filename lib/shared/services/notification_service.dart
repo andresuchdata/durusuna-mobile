@@ -52,7 +52,7 @@ class NotificationService {
   }
 
   /// Mark notification as read
-  Future<NotificationModel> markAsRead(String notificationId) async {
+  Future<void> markAsRead(String notificationId) async {
     try {
       final response = await _apiService.patch(
         '${ApiConstants.notifications}/$notificationId/read',
@@ -60,11 +60,8 @@ class NotificationService {
       );
 
       if (response.statusCode == 200) {
-        // Backend might return the notification directly or wrapped in a data object
-        final notificationData = response.data is Map<String, dynamic>
-            ? (response.data['notification'] ?? response.data)
-            : response.data;
-        return NotificationModel.fromJson(notificationData);
+        // Backend returns simple success response: {"success":true,"notification_id":"..."}
+        // No need to parse as full notification object
       } else {
         throw ApiException(
           message: 'Failed to mark notification as read',
@@ -281,44 +278,85 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
     await loadNotifications();
   }
 
-  /// Mark notification as read
+  /// Mark notification as read with optimistic updates
   Future<void> markAsRead(String notificationId) async {
+    // Find the notification to update
+    final notificationIndex =
+        state.notifications.indexWhere((n) => n.id == notificationId);
+    if (notificationIndex == -1) return;
+
+    final notification = state.notifications[notificationIndex];
+    // Only proceed if notification is not already read
+    if (notification.isRead) return;
+
+    // Store original state for potential rollback
+    final originalNotifications =
+        List<NotificationModel>.from(state.notifications);
+    final originalUnreadCount = state.unreadCount;
+
+    // OPTIMISTIC UPDATE: Update UI immediately
+    final optimisticNotification =
+        notification.copyWith(isRead: true, readAt: DateTime.now());
+
+    final optimisticNotifications =
+        List<NotificationModel>.from(state.notifications);
+    optimisticNotifications[notificationIndex] = optimisticNotification;
+
+    // Update state with optimistic values
+    state = state.copyWith(
+      notifications: optimisticNotifications,
+      unreadCount: (state.unreadCount > 0) ? state.unreadCount - 1 : 0,
+    );
+
     try {
-      final updatedNotification =
-          await _notificationService.markAsRead(notificationId);
+      // Call API to persist the change
+      await _notificationService.markAsRead(notificationId);
 
-      final updatedNotifications = state.notifications.map((notification) {
-        if (notification.id == notificationId) {
-          return updatedNotification;
-        }
-        return notification;
-      }).toList();
-
-      state = state.copyWith(notifications: updatedNotifications);
+      // Keep the optimistic update since API was successful
+      // No need to update again with server response
+      // Optionally sync unread count with server for consistency
       await _updateUnreadCount();
     } catch (e) {
-      // Handle error silently or show a snackbar
-      debugPrint('Error marking notification as read: $e');
+      // ROLLBACK: API failed, revert to original state
+      state = state.copyWith(
+        notifications: originalNotifications,
+        unreadCount: originalUnreadCount,
+        error: 'Failed to mark notification as read',
+      );
     }
   }
 
-  /// Mark all notifications as read
+  /// Mark all notifications as read with optimistic updates
   Future<void> markAllAsRead() async {
+    // Store original state for potential rollback
+    final originalNotifications =
+        List<NotificationModel>.from(state.notifications);
+    final originalUnreadCount = state.unreadCount;
+
+    // OPTIMISTIC UPDATE: Update UI immediately
+    final optimisticNotifications = state.notifications.map((notification) {
+      return notification.copyWith(isRead: true, readAt: DateTime.now());
+    }).toList();
+
+    state = state.copyWith(
+      notifications: optimisticNotifications,
+      unreadCount: 0,
+    );
+
     try {
       final result = await _notificationService.markAllAsRead();
-      debugPrint('Mark all as read result: $result');
+      debugPrint('✅ Mark all as read result: $result');
 
-      final updatedNotifications = state.notifications.map((notification) {
-        return notification.copyWith(isRead: true, readAt: DateTime.now());
-      }).toList();
-
-      state = state.copyWith(
-        notifications: updatedNotifications,
-        unreadCount: 0,
-      );
+      // Optionally sync with server for consistency
+      await _updateUnreadCount();
     } catch (e) {
-      state = state.copyWith(error: e.toString());
-      debugPrint('Error marking all notifications as read: $e');
+      // ROLLBACK: API failed, revert to original state
+      debugPrint('❌ Error marking all notifications as read: $e');
+      state = state.copyWith(
+        notifications: originalNotifications,
+        unreadCount: originalUnreadCount,
+        error: e.toString(),
+      );
     }
   }
 
@@ -372,6 +410,11 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   /// Initialize notifications with full data (for notification page)
   Future<void> initializeWithData() async {
     await loadNotifications(refresh: true);
+  }
+
+  /// Clear error state
+  void clearError() {
+    state = state.copyWith(error: null);
   }
 }
 

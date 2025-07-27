@@ -20,18 +20,9 @@ class NotificationNavigationService {
   /// Main entry point for handling notification taps
   Future<void> handleNotificationAction(NotificationModel notification) async {
     try {
-      // Mark notification as read if it's unread
-      if (!notification.isRead) {
-        try {
-          final notificationService = _ref.read(notificationServiceProvider);
-          await notificationService.markAsRead(notification.id);
-          debugPrint('Marked notification as read: ${notification.id}');
-        } catch (e) {
-          debugPrint('Failed to mark notification as read: $e');
-          // Continue with navigation even if marking as read fails
-        }
-      }
-
+      // NOTE: markAsRead is handled by the UI layer (NotificationsPage) with optimistic updates
+      // We don't call it here to avoid duplicate API calls and provider modification errors
+      
       await _navigateBasedOnType(notification);
     } catch (e) {
       debugPrint('Error handling notification action: $e');

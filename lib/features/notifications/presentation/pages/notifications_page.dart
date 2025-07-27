@@ -46,6 +46,25 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   Widget build(BuildContext context) {
     final notificationsState = ref.watch(notificationsProvider);
 
+    // Listen for errors and show snackbar
+    ref.listen<NotificationsState>(notificationsProvider, (previous, current) {
+      if (current.error != null && previous?.error != current.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(current.error!),
+            backgroundColor: AppTheme.errorColor,
+            action: SnackBarAction(
+              label: 'Dismiss',
+              textColor: Colors.white,
+              onPressed: () {
+                ref.read(notificationsProvider.notifier).clearError();
+              },
+            ),
+          ),
+        );
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -176,9 +195,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                   notification: notification,
                   onTap: () {
                     if (!notification.isRead) {
-                      ref
-                          .read(notificationsProvider.notifier)
-                          .markAsRead(notification.id);
+                      // Delay the markAsRead call to avoid provider modification during build
+                      Future(() {
+                        ref
+                            .read(notificationsProvider.notifier)
+                            .markAsRead(notification.id);
+                      });
                     }
                     _handleNotificationAction(notification);
                   },

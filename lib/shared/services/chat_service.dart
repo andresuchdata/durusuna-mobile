@@ -153,6 +153,7 @@ class ChatService {
       if (conversationId != null) {
         // Send message to existing conversation
         endpoint = ApiConstants.sendConversationMessage(conversationId);
+        data['conversation_id'] = conversationId;
       } else if (receiverId != null) {
         // Send direct message (creates conversation if needed)
         endpoint = ApiConstants.sendMessage;

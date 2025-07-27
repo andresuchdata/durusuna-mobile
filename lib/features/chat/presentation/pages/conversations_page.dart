@@ -21,10 +21,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   @override
   void initState() {
     super.initState();
-    // Refresh conversations when page is loaded
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(conversationsProvider.notifier).loadConversations();
-    });
+    // Note: loadConversations() is automatically called by ConversationsNotifier constructor
+    // when the provider is first accessed, so no explicit call needed here
   }
 
   @override
