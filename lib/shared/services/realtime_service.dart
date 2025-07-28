@@ -66,17 +66,26 @@ class RealtimeService with WidgetsBindingObserver {
         throw Exception('No authentication token found');
       }
 
-      // iOS-friendly socket configuration
+      // More robust socket configuration for cross-platform compatibility
       final optionBuilder = io.OptionBuilder()
           .setAuth({'token': token})
-          .setTimeout(15000) // Longer timeout for iOS
-          .enableAutoConnect();
+          .setTimeout(30000) // Longer timeout for iOS and slow networks
+          .enableAutoConnect()
+          .enableReconnection()
+          .setReconnectionAttempts(5)
+          .setReconnectionDelay(1000)
+          .setReconnectionDelayMax(5000);
 
-      // iOS needs polling fallback, Android works fine with websocket only
+      // Platform-specific transport configuration
       if (Platform.isIOS) {
+        // iOS benefits from polling fallback and websocket
         optionBuilder.setTransports(['websocket', 'polling']);
+        // Additional iOS-specific options
+        optionBuilder.enableForceNew();
       } else {
-        optionBuilder.setTransports(['websocket']);
+        // Android generally works fine with websocket only
+        optionBuilder.setTransports(
+            ['websocket', 'polling']); // Add polling as backup for Android too
       }
 
       _socket = io.io(
@@ -208,40 +217,59 @@ class RealtimeService with WidgetsBindingObserver {
 
   void _setupEventListeners() {
     _socket!.onConnect((_) {
+      print('🔌 Realtime service connected successfully');
       _isConnected = true;
       _connectionController.add(true);
       _setupUserPresence();
     });
 
     _socket!.onDisconnect((reason) {
+      print('🔌 Realtime service disconnected: $reason');
       _isConnected = false;
       _connectionController.add(false);
     });
 
     _socket!.onReconnect((attempt) {
+      print('🔌 Realtime service reconnected (attempt $attempt)');
       _setupUserPresence();
     });
 
-    _socket!.onReconnectAttempt((attempt) {});
-    _socket!.onReconnectError((error) {});
+    _socket!.onReconnectAttempt((attempt) {
+      print('🔌 Realtime service reconnection attempt $attempt');
+    });
+
+    _socket!.onReconnectError((error) {
+      print('🔌 Realtime service reconnection error: $error');
+    });
 
     _socket!.onConnectError((error) {
+      print('🔌 Realtime service connection error: $error');
       _isConnected = false;
       _connectionController.add(false);
     });
 
-    _socket!.onError((error) {});
+    _socket!.onError((error) {
+      print('🔌 Realtime service error: $error');
+    });
 
     // Additional debugging events
-    _socket!.on('connect', (_) {});
+    _socket!.on('connect', (_) {
+      print('🔌 Socket connected event fired');
+    });
 
-    _socket!.on('disconnect', (reason) {});
+    _socket!.on('disconnect', (reason) {
+      print('🔌 Socket disconnected event fired: $reason');
+    });
 
     // Test event for iOS debugging
-    _socket!.on('test', (data) {});
+    _socket!.on('test', (data) {
+      print('🔌 Test event received: $data');
+    });
 
     // Engine.IO debugging events
-    _socket!.on('connect_error', (error) {});
+    _socket!.on('connect_error', (error) {
+      print('🔌 Engine.IO connect_error: $error');
+    });
 
     // Message events
     _socket!.on('message:new', (data) {

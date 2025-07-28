@@ -87,6 +87,18 @@ class ApiConstants {
   static bool get isProduction => _environment == 'production';
   static bool get isDevelopment => _environment == 'development';
 
+  // Debug info - print URLs in development
+  static void printDebugInfo() {
+    if (isDevelopment && enableLogging) {
+      print('🌐 API Configuration:');
+      print('   Environment: $_environment');
+      print('   Base URL: $baseUrl');
+      print('   Socket URL: $socketUrl'); 
+      print('   Platform: ${Platform.operatingSystem}');
+      print('   Use Physical Device: $_usePhysicalDevice');
+    }
+  }
+
   // Current configuration info (for debugging only)
   static Map<String, dynamic> get configInfo => {
         'environment': _environment,

@@ -9,6 +9,7 @@ class MessageBubble extends StatelessWidget {
   final bool isMe;
   final bool isSelected;
   final bool isSelectionMode;
+  final String conversationType; // 'direct' or 'group'
   final Function(Message)? onReply;
   final Function(Message)? onEdit;
   final Function(Message)? onDelete;
@@ -20,6 +21,7 @@ class MessageBubble extends StatelessWidget {
     super.key,
     required this.message,
     required this.isMe,
+    required this.conversationType,
     this.isSelected = false,
     this.isSelectionMode = false,
     this.onReply,
@@ -30,8 +32,30 @@ class MessageBubble extends StatelessWidget {
     this.onTap,
   });
 
+  bool get _shouldShowAvatar => conversationType == 'group' && !isMe;
+
+  String get _senderInitials {
+    if (message.sender == null) return 'U';
+    final firstName = message.sender!.firstName.trim();
+    final lastName = message.sender!.lastName.trim();
+    final firstInitial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '';
+    final lastInitial = lastName.isNotEmpty ? lastName[0].toUpperCase() : '';
+
+    if (firstInitial.isNotEmpty && lastInitial.isNotEmpty) {
+      return '$firstInitial$lastInitial';
+    } else if (firstInitial.isNotEmpty) {
+      return firstInitial;
+    } else if (lastInitial.isNotEmpty) {
+      return lastInitial;
+    }
+    return 'U';
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Use smaller horizontal padding for both direct and group chats
+    const horizontalPadding = 8.0;
+
     return GestureDetector(
       onLongPress: () {
         HapticFeedback.mediumImpact();
@@ -47,18 +71,46 @@ class MessageBubble extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 2),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppTheme.primaryColor.withOpacity(0.1)
+              ? AppTheme.primaryColor.withValues(alpha: 0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(
+              horizontal: horizontalPadding, vertical: 8),
           child: Row(
             mainAxisAlignment:
                 isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (!isMe) const SizedBox(width: 20),
+              // Left side spacing for messages from others
+              if (!isMe)
+                SizedBox(
+                    width: _shouldShowAvatar
+                        ? 4
+                        : (conversationType == 'direct' ? 4 : 20)),
+
+              // Avatar for other participants in group chats only
+              if (_shouldShowAvatar) ...[
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: AppTheme.primaryColor,
+                  backgroundImage: message.sender?.avatarUrl?.isNotEmpty == true
+                      ? NetworkImage(message.sender!.avatarUrl!)
+                      : null,
+                  child: message.sender?.avatarUrl?.isEmpty != false
+                      ? Text(
+                          _senderInitials,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 8),
+              ],
 
               // Selection indicator for selection mode
               if (isSelectionMode) ...[
@@ -105,6 +157,21 @@ class MessageBubble extends StatelessWidget {
                         ? CrossAxisAlignment.end
                         : CrossAxisAlignment.start,
                     children: [
+                      // Sender name for group chats (other participants only)
+                      if (_shouldShowAvatar) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            message.sender?.displayName ?? 'Unknown',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+
                       // Reply preview (if this message is a reply)
                       if (message.replyTo != null) ...[
                         Container(
@@ -112,7 +179,7 @@ class MessageBubble extends StatelessWidget {
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: (isMe ? Colors.white : AppTheme.primaryColor)
-                                .withOpacity(0.1),
+                                .withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Column(
@@ -136,7 +203,7 @@ class MessageBubble extends StatelessWidget {
                                   color: (isMe
                                           ? AppTheme.textSecondary
                                           : Colors.white)
-                                      .withOpacity(0.8),
+                                      .withValues(alpha: 0.8),
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -154,8 +221,9 @@ class MessageBubble extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: isSelected
                               ? (isMe
-                                  ? AppTheme.primaryColor.withOpacity(0.8)
-                                  : AppTheme.primaryColor.withOpacity(0.2))
+                                  ? AppTheme.primaryColor.withValues(alpha: 0.8)
+                                  : AppTheme.primaryColor
+                                      .withValues(alpha: 0.2))
                               : (isMe ? AppTheme.primaryColor : Colors.white),
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(16),
@@ -166,8 +234,8 @@ class MessageBubble extends StatelessWidget {
                           boxShadow: [
                             BoxShadow(
                               color: isSelected
-                                  ? AppTheme.primaryColor.withOpacity(0.3)
-                                  : Colors.black.withOpacity(0.05),
+                                  ? AppTheme.primaryColor.withValues(alpha: 0.3)
+                                  : Colors.black.withValues(alpha: 0.05),
                               blurRadius: isSelected ? 8 : 5,
                               offset: const Offset(0, 1),
                             ),
@@ -193,7 +261,8 @@ class MessageBubble extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 10,
                                         color: isMe
-                                            ? Colors.white.withOpacity(0.7)
+                                            ? Colors.white
+                                                .withValues(alpha: 0.7)
                                             : AppTheme.textTertiary,
                                         fontStyle: FontStyle.italic,
                                       ),
@@ -204,7 +273,7 @@ class MessageBubble extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: isMe
-                                        ? Colors.white.withOpacity(0.7)
+                                        ? Colors.white.withValues(alpha: 0.7)
                                         : AppTheme.textTertiary,
                                   ),
                                 ),
@@ -213,7 +282,7 @@ class MessageBubble extends StatelessWidget {
                                   Icon(
                                     _getStatusIcon(),
                                     size: 14,
-                                    color: Colors.white.withOpacity(0.7),
+                                    color: Colors.white.withValues(alpha: 0.7),
                                   ),
                                 ],
                               ],
@@ -225,7 +294,9 @@ class MessageBubble extends StatelessWidget {
                   ),
                 ),
               ),
-              if (isMe) const SizedBox(width: 20),
+
+              // Right side spacing for current user messages
+              if (isMe) const SizedBox(width: 4),
             ],
           ),
         ),

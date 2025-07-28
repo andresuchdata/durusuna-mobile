@@ -900,8 +900,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         children: [
           CircleAvatar(
             radius: 40,
-            backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-            child: Icon(
+            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+            child: const Icon(
               Icons.chat_bubble_outline,
               size: 40,
               color: AppTheme.primaryColor,
@@ -931,7 +931,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       controller: _scrollController,
       reverse: false,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(4),
       itemCount:
           messagesState.messages.length + (messagesState.isLoadingMore ? 1 : 0),
       itemBuilder: (context, index) {
@@ -977,6 +977,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   : null,
               message: message,
               isMe: isMe,
+              conversationType: widget.conversation.type,
               isSelected: _selectedMessageIds.contains(message.id),
               isSelectionMode: _isSelectionMode,
               onReply: (msg) => _replyToMessage(msg),
