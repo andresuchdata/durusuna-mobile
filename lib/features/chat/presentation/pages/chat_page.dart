@@ -1023,152 +1023,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
   }
-                    children: [
-                      GestureDetector(
-                        onTap: () => _showProfileCard(),
-                        child: Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: AppTheme.primaryColor,
-                              backgroundImage: _getAvatarUrl().isNotEmpty
-                                  ? NetworkImage(_getAvatarUrl())
-                                  : null,
-                              child: _getAvatarUrl().isEmpty
-                                  ? Text(
-                                      _getInitials(),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            // Online indicator for direct conversations
-                            if (widget.conversation.type == 'direct' &&
-                                _isOtherUserOnline)
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  width: 16,
-                                  height: 16,
-                                  decoration: BoxDecoration(
-                                    color: Colors.green, // Force bright green
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: Colors.white, width: 3),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.3),
-                                        blurRadius: 2,
-                                        offset: const Offset(0, 1),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => _showProfileCard(),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _getDisplayName(),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.textPrimary,
-                                ),
-                              ),
-                              Text(
-                                _isOtherUserOnline
-                                    ? 'Online'
-                                    : messagesState.isTyping
-                                        ? 'Typing...'
-                                        : widget.conversation.lastActivity !=
-                                                null
-                                            ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
-                                            : 'Last seen recently',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _isOtherUserOnline ||
-                                          messagesState.isTyping
-                                      ? AppTheme.successColor
-                                      : AppTheme.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.call),
-                      onPressed: () {
-                        // TODO: Implement voice call
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Voice call coming soon')),
-                        );
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.videocam),
-                      onPressed: () {
-                        // TODO: Implement video call
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Video call coming soon')),
-                        );
-                      },
-                    ),
-                    PopupMenuButton<String>(
-                      onSelected: (value) {
-                        switch (value) {
-                          case 'clear':
-                            _showClearChatDialog();
-                            break;
-                          case 'block':
-                            _showBlockUserDialog();
-                            break;
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'clear',
-                          child: Row(
-                            children: [
-                              Icon(Icons.clear_all, size: 20),
-                              SizedBox(width: 8),
-                              Text('Clear Chat'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'block',
-                          child: Row(
-                            children: [
-                              Icon(Icons.block,
-                                  size: 20, color: AppTheme.errorColor),
-                              SizedBox(width: 8),
-                              Text('Block User',
-                                  style: TextStyle(color: AppTheme.errorColor)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-
 
   void _replyToMessage(Message message) {
     setState(() {
@@ -1264,6 +1118,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   PreferredSizeWidget _buildAppBar() {
+    final messagesState =
+        ref.watch(chatMessagesProvider(widget.conversation.id));
+
     if (_isSelectionMode) {
       return ChatActionBar(
         selectedCount: _selectedMessageIds.length,
