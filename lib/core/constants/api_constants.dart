@@ -3,34 +3,53 @@ import 'dart:io';
 class ApiConstants {
   /// 🌐 BACKEND CONNECTION CONFIGURATION
   ///
-  /// Environment-based configuration for better security:
-  /// - Development: Local backend
-  /// - Staging: Test environment
-  /// - Production: Live backend
+  /// SECURITY: Uses environment variables and build-time configuration
+  /// to avoid hardcoding sensitive data in source code.
   ///
-  /// For security, consider using:
-  /// 1. Environment variables
-  /// 2. Separate config files
-  /// 3. Build-time configuration
+  /// Usage:
+  /// - Development: Uses local configuration
+  /// - Staging: Uses staging environment
+  /// - Production: Uses production environment
 
-  // Environment detection
+  // Environment detection from build-time arguments
   static const String _environment = String.fromEnvironment(
     'ENVIRONMENT',
     defaultValue: 'development',
   );
 
-  // Backend URLs per environment
-  static const String _stagingBackendUrl =
-      'https://durusuna-backend-staging.sevalla.app';
-  static const String _productionBackendUrl =
-      'https://durusuna-backend-hr9m0.sevalla.app';
+  // Backend URLs per environment (can be overridden via environment)
+  static const String _stagingBackendUrl = String.fromEnvironment(
+    'STAGING_BACKEND_URL',
+    defaultValue: 'https://durusuna-backend-staging.sevalla.app',
+  );
 
-  // Development machine IP (for physical device testing)
-  static const String _developmentIP = '192.168.1.8';
+  static const String _productionBackendUrl = String.fromEnvironment(
+    'PRODUCTION_BACKEND_URL',
+    defaultValue: 'https://durusuna-backend-hr9m0.sevalla.app',
+  );
+
+  // Development configuration - SECURE: No hardcoded IPs in source code
+  static const String _developmentIP = String.fromEnvironment(
+    'DEV_SERVER_IP',
+    defaultValue: 'localhost', // Safe fallback
+  );
+
+  static const String _developmentPort = String.fromEnvironment(
+    'DEV_SERVER_PORT',
+    defaultValue: '3001',
+  );
 
   // Configuration flags
-  static const bool _usePhysicalDevice =
-      false; // For local development on device
+  static const bool _usePhysicalDevice = bool.fromEnvironment(
+    'USE_PHYSICAL_DEVICE',
+    defaultValue: false, // Default to emulator for security
+  );
+
+  // Development mode detection
+  static const bool _isDebugMode = bool.fromEnvironment(
+    'DEBUG_MODE',
+    defaultValue: true,
+  );
 
   // Get backend URL based on environment
   static String get _backendUrl {
@@ -46,25 +65,40 @@ class ApiConstants {
   }
 
   static String _getDevelopmentUrl() {
+    // For physical device testing
     if (_usePhysicalDevice) {
-      return 'http://$_developmentIP:3001';
+      return 'http://$_developmentIP:$_developmentPort';
     }
 
+    // Platform-specific defaults for simulators/emulators
     if (Platform.isAndroid) {
-      return 'http://10.0.2.2:3001'; // Android emulator
+      return 'http://10.0.2.2:$_developmentPort'; // Android emulator
     } else {
-      return 'http://localhost:3001'; // iOS simulator and others
+      return 'http://localhost:$_developmentPort'; // iOS simulator
     }
   }
 
-  // Base URL - environment-aware configuration
+  // Public API - clean and secure
   static String get baseUrl => '$_backendUrl/api';
-
-  // Socket URL (without /api suffix)
   static String get socketUrl => _backendUrl;
 
   // Development/Production configuration
-  static bool get enableLogging => _environment != 'production';
+  static bool get enableLogging => _environment != 'production' && _isDebugMode;
+  static bool get isProduction => _environment == 'production';
+  static bool get isDevelopment => _environment == 'development';
+
+  // Current configuration info (for debugging only)
+  static Map<String, dynamic> get configInfo => {
+        'environment': _environment,
+        'usePhysicalDevice': _usePhysicalDevice,
+        'isProduction': isProduction,
+        'enableLogging': enableLogging,
+        // DO NOT expose actual URLs/IPs in production logs
+        if (!isProduction) ...{
+          'baseUrl': baseUrl,
+          'socketUrl': socketUrl,
+        }
+      };
 
   // Timeout configurations
   static const Duration connectionTimeout = Duration(seconds: 30);

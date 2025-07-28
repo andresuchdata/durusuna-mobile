@@ -4,7 +4,6 @@ import '../models/user.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/constants/api_constants.dart';
 import 'api_service.dart';
-import 'realtime_service.dart';
 
 class AuthService {
   final ApiService _apiService;
@@ -28,12 +27,8 @@ class AuthService {
         await StorageService.saveUser(authResponse.user.toJson());
         await StorageService.saveToken(authResponse.accessToken);
 
-        // Force reconnect realtime service with fresh token
-        try {
-          await RealtimeService.instance.reconnect();
-        } catch (e) {
-          // Don't fail login if realtime fails
-        }
+        // Real-time service will auto-connect via auth state listener
+        print('✅ AuthService: Login successful - real-time will auto-connect');
 
         return authResponse;
       } else {
@@ -239,10 +234,7 @@ class AuthService {
     } catch (e) {
       // Continue with local logout even if server call fails
     } finally {
-      // Disconnect realtime service
-      RealtimeService.instance.disconnect();
-
-      // Clear local storage
+      // Clear local storage (real-time service will auto-disconnect via auth state listener)
       await StorageService.clearUser();
     }
   }

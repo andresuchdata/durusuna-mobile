@@ -4,10 +4,13 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../core/utils/global_auth_handler.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/notification_service.dart';
+import '../../../../shared/services/chat_service.dart';
+import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/models/user.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../chat/presentation/pages/conversations_page.dart';
 import '../../../notifications/presentation/pages/notifications_page.dart';
+import '../../../class_management/presentation/pages/class_management_page.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -22,10 +25,21 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
-    // Initialize notifications when home page loads
+    // Initialize data when home page loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      debugPrint('🏠 Home page loaded - initializing notifications...');
+      debugPrint('🏠 Home page loaded - initializing data...');
+
+      // Initialize notifications
       ref.read(notificationsProvider.notifier).initialize();
+
+      // Preload conversations data
+      ref.read(conversationsProvider.notifier).loadConversations();
+
+      // Preload class updates data for the sample class
+      const sampleClassId = '550e8400-e29b-41d4-a716-446655440001';
+      ref.read(classUpdatesProvider(sampleClassId).notifier).loadUpdates();
+
+      debugPrint('✅ Data preloading initiated');
     });
   }
 
@@ -196,9 +210,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                 icon: Icons.class_,
                 color: AppTheme.infoColor,
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Class management coming soon')),
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const ClassManagementPage(),
+                    ),
                   );
                 },
               ),
