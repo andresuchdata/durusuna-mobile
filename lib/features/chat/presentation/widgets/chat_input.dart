@@ -86,15 +86,31 @@ class _ChatInputState extends State<ChatInput> {
   void _insertEmoji(String emoji) {
     final text = widget.controller.text;
     final selection = widget.controller.selection;
-    final newText = text.replaceRange(
-      selection.start,
-      selection.end,
-      emoji,
-    );
+
+    // Handle invalid selection values (common on iOS)
+    int start = selection.start;
+    int end = selection.end;
+
+    // If selection is invalid, append to end of text
+    if (start < 0 || end < 0 || start > text.length || end > text.length) {
+      start = text.length;
+      end = text.length;
+    }
+
+    // Ensure start <= end
+    if (start > end) {
+      final temp = start;
+      start = end;
+      end = temp;
+    }
+
+    final newText = text.replaceRange(start, end, emoji);
+    final newCursorPosition = start + emoji.length;
+
     widget.controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(
-        offset: selection.start + emoji.length,
+        offset: newCursorPosition.clamp(0, newText.length),
       ),
     );
   }
