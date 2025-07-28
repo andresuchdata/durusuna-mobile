@@ -14,6 +14,7 @@ import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/chat_action_bar.dart';
 import '../widgets/reply_preview.dart';
+import 'forward_contacts_page.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   final Conversation conversation;
@@ -48,7 +49,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   // Selection mode state
   final Set<String> _selectedMessageIds = {};
   bool _isSelectionMode = false;
-  bool _isForwardingMode = false;
   Message? _replyingToMessage;
 
   @override
@@ -1105,7 +1105,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   void _exitSelectionMode() {
     setState(() {
       _isSelectionMode = false;
-      _isForwardingMode = false;
       _selectedMessageIds.clear();
     });
   }
@@ -1122,20 +1121,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _handleForwardSelection() {
-    setState(() {
-      _isForwardingMode = true;
-    });
-    // TODO: Show contacts/conversations to forward to
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            'Forward ${_selectedMessageIds.length} message(s) - Select conversation'),
-        action: SnackBarAction(
-          label: 'Cancel',
-          onPressed: _exitSelectionMode,
+    final messagesState =
+        ref.read(chatMessagesProvider(widget.conversation.id));
+    final messagesToForward = messagesState.messages
+        .where((msg) => _selectedMessageIds.contains(msg.id))
+        .toList();
+
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(
+        builder: (context) => ForwardContactsPage(
+          messagesToForward: messagesToForward,
         ),
       ),
-    );
+    )
+        .then((_) {
+      // Exit selection mode when returning from forward page
+      _exitSelectionMode();
+    });
   }
 
   void _handleDeleteSelection() {
@@ -1170,15 +1173,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         onForward: _handleForwardSelection,
         onDelete: _handleDeleteSelection,
         onCancel: _exitSelectionMode,
-      );
-    } else if (_isForwardingMode) {
-      return ForwardingHeader(
-        selectedCount: _selectedMessageIds.length,
-        onCancel: _exitSelectionMode,
-        onConfirm: () {
-          // TODO: Confirm forward
-          _exitSelectionMode();
-        },
       );
     } else {
       return AppBar(

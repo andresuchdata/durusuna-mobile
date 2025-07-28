@@ -70,9 +70,8 @@ class MessageBubble extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.symmetric(vertical: 2),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppTheme.primaryColor.withValues(alpha: 0.1)
-              : Colors.transparent,
+          color: Colors
+              .transparent, // Always transparent, selection handled by bubble border
           borderRadius: BorderRadius.circular(16),
         ),
         child: Padding(
@@ -178,26 +177,34 @@ class MessageBubble extends StatelessWidget {
                         padding: const EdgeInsets.all(
                             0), // No padding here, handled inside
                         decoration: BoxDecoration(
-                          color: isSelected
-                              ? (isMe
-                                  ? AppTheme.primaryColor.withValues(alpha: 0.8)
-                                  : AppTheme.primaryColor
-                                      .withValues(alpha: 0.2))
-                              : (isMe ? AppTheme.primaryColor : Colors.white),
+                          color: isMe ? AppTheme.primaryColor : Colors.white,
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(16),
                             topRight: const Radius.circular(16),
                             bottomLeft: Radius.circular(isMe ? 16 : 4),
                             bottomRight: Radius.circular(isMe ? 4 : 16),
                           ),
+                          border: isSelected
+                              ? Border.all(
+                                  color: AppTheme.primaryColor,
+                                  width: 2.5,
+                                )
+                              : null,
                           boxShadow: [
                             BoxShadow(
-                              color: isSelected
-                                  ? AppTheme.primaryColor.withValues(alpha: 0.3)
-                                  : Colors.black.withValues(alpha: 0.05),
-                              blurRadius: isSelected ? 8 : 5,
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 5,
                               offset: const Offset(0, 1),
                             ),
+                            // Add selection glow effect when selected
+                            if (isSelected)
+                              BoxShadow(
+                                color: AppTheme.primaryColor
+                                    .withValues(alpha: 0.4),
+                                blurRadius: 12,
+                                spreadRadius: 2,
+                                offset: const Offset(0, 0),
+                              ),
                           ],
                         ),
                         child: Column(

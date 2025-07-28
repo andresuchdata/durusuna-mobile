@@ -6,12 +6,16 @@ class ContactTile extends StatelessWidget {
   final User user;
   final VoidCallback onTap;
   final bool showOnlineStatus;
+  final bool isSelected;
+  final Widget? trailing;
 
   const ContactTile({
     super.key,
     required this.user,
     required this.onTap,
     this.showOnlineStatus = true,
+    this.isSelected = false,
+    this.trailing,
   });
 
   @override
@@ -28,12 +32,22 @@ class ContactTile extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
+              border: isSelected
+                  ? Border.all(color: AppTheme.primaryColor, width: 2)
+                  : null,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
                 ),
+                if (isSelected)
+                  BoxShadow(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                    offset: const Offset(0, 0),
+                  ),
               ],
             ),
             child: Row(
@@ -156,12 +170,13 @@ class ContactTile extends StatelessWidget {
                   ),
                 ),
 
-                // Action icon
-                Icon(
-                  Icons.chat_bubble_outline,
-                  color: AppTheme.primaryColor,
-                  size: 20,
-                ),
+                // Trailing widget (default to chat icon if not provided)
+                trailing ??
+                    const Icon(
+                      Icons.chat_bubble_outline,
+                      color: AppTheme.primaryColor,
+                      size: 20,
+                    ),
               ],
             ),
           ),
