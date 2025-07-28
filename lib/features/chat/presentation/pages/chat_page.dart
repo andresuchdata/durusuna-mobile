@@ -849,22 +849,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           // Typing indicator
           if (messagesState.isTyping)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 12,
-                    backgroundColor: AppTheme.primaryColor,
-                    child: Text(
-                      _getInitials().isNotEmpty ? _getInitials()[0] : 'U',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
