@@ -367,8 +367,38 @@ class RealtimeService with WidgetsBindingObserver {
 
   /// Join a conversation room for real-time updates
   void joinConversation(String conversationId) {
+    if (Platform.isAndroid) {
+      print(
+          '🤖 ANDROID RealtimeService: joinConversation called for: $conversationId');
+      print('🤖 ANDROID - Socket exists: ${_socket != null}');
+      print('🤖 ANDROID - Socket connected: ${_socket?.connected}');
+      print('🤖 ANDROID - Is connected flag: $_isConnected');
+    }
+
     if (_socket?.connected == true) {
+      if (Platform.isAndroid) {
+        print(
+            '🤖 ANDROID RealtimeService: Emitting conversation:join for: $conversationId');
+      } else {
+        print('🏠 RealtimeService: Joining conversation room: $conversationId');
+      }
       _socket!.emit('conversation:join', {'conversationId': conversationId});
+      if (Platform.isAndroid) {
+        print(
+            '🤖 ANDROID RealtimeService: conversation:join emitted successfully');
+      } else {
+        print('🏠 RealtimeService: Emitted conversation:join event');
+      }
+    } else {
+      if (Platform.isAndroid) {
+        print(
+            '🤖 ANDROID RealtimeService: Cannot join conversation - socket not connected');
+        print('🤖 ANDROID - Socket null: ${_socket == null}');
+        print('🤖 ANDROID - Socket connected: ${_socket?.connected}');
+      } else {
+        print(
+            '❌ RealtimeService: Cannot join conversation - socket not connected');
+      }
     }
   }
 
