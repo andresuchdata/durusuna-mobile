@@ -13,9 +13,7 @@ ClassUpdateComment _$ClassUpdateCommentFromJson(Map<String, dynamic> json) =>
       authorId: json['author_id'] as String,
       content: json['content'] as String,
       replyToId: json['reply_to_id'] as String?,
-      reactions: (json['reactions'] as Map<String, dynamic>?)?.map(
-        (k, e) => MapEntry(k, (e as num).toInt()),
-      ),
+      reactions: json['reactions'] as Map<String, dynamic>?,
       isEdited: json['is_edited'] as bool,
       editedAt: json['edited_at'] == null
           ? null

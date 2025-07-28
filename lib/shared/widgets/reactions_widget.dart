@@ -28,10 +28,10 @@ class ReactionsWidget extends StatelessWidget {
     } else if (reactionData is Map<String, dynamic>) {
       // Detailed format with user IDs
       final users = reactionData['users'] as List<dynamic>? ?? [];
-      final hasReacted = currentUserId != null &&
-          users.any((user) => user['id'] == currentUserId);
+      final count = reactionData['count'] as int? ?? users.length;
+      final hasReacted = currentUserId != null && users.contains(currentUserId);
       return {
-        'count': users.length,
+        'count': count,
         'hasReacted': hasReacted,
       };
     } else if (reactionData is List) {

@@ -13,7 +13,7 @@ class ClassUpdateComment {
   final String content;
   @JsonKey(name: 'reply_to_id')
   final String? replyToId;
-  final Map<String, int>? reactions;
+  final Map<String, dynamic>? reactions;
   @JsonKey(name: 'is_edited')
   final bool isEdited;
   @JsonKey(name: 'edited_at')
@@ -26,7 +26,7 @@ class ClassUpdateComment {
   final DateTime createdAt;
   @JsonKey(name: 'updated_at')
   final DateTime updatedAt;
-  
+
   // Related data
   final User? author;
   @JsonKey(name: 'reply_to')
@@ -54,7 +54,7 @@ class ClassUpdateComment {
     this.repliesCount,
   });
 
-  factory ClassUpdateComment.fromJson(Map<String, dynamic> json) => 
+  factory ClassUpdateComment.fromJson(Map<String, dynamic> json) =>
       _$ClassUpdateCommentFromJson(json);
   Map<String, dynamic> toJson() => _$ClassUpdateCommentToJson(this);
 
@@ -64,7 +64,16 @@ class ClassUpdateComment {
 
   int get totalReactions {
     if (reactions == null) return 0;
-    return reactions!.values.fold(0, (sum, count) => sum + count);
+    int total = 0;
+    for (var reaction in reactions!.values) {
+      if (reaction is Map<String, dynamic>) {
+        total += (reaction['count'] as int? ?? 0);
+      } else if (reaction is int) {
+        // Fallback for legacy format
+        total += reaction;
+      }
+    }
+    return total;
   }
 
   String get displayContent {
@@ -113,11 +122,14 @@ class ClassUpdateComment {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ClassUpdateComment && runtimeType == other.runtimeType && id == other.id;
+      other is ClassUpdateComment &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
 
   @override
   int get hashCode => id.hashCode;
 
   @override
-  String toString() => 'ClassUpdateComment(id: $id, authorId: $authorId, isReply: $isReply)';
-} 
+  String toString() =>
+      'ClassUpdateComment(id: $id, authorId: $authorId, isReply: $isReply)';
+}
