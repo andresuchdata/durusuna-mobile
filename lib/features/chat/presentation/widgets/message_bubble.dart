@@ -54,7 +54,7 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Use smaller horizontal padding for both direct and group chats
-    const horizontalPadding = 8.0;
+    const horizontalPadding = 4.0;
 
     return GestureDetector(
       onLongPress: () {

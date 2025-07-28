@@ -849,7 +849,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           // Typing indicator
           if (messagesState.isTyping)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               child: Row(
                 children: [
                   CircleAvatar(
@@ -960,7 +960,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       controller: _scrollController,
       reverse: false,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       itemCount:
           messagesState.messages.length + (messagesState.isLoadingMore ? 1 : 0),
       itemBuilder: (context, index) {
@@ -1056,7 +1056,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _replyToMessage(Message message) {
     // Only allow replies to messages with proper server UUIDs (not temporary IDs)
-    if (message.id.startsWith('temp_') || message.id.startsWith('last_')) {
+    if (message.id.startsWith('temp_')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Cannot reply to message that is still sending'),
@@ -1707,7 +1707,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withOpacity(0.1),
+                              color:
+                                  AppTheme.primaryColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -1841,7 +1842,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: _getGroupMemberTypeColor(member.userType).withOpacity(0.1),
+              color: _getGroupMemberTypeColor(member.userType)
+                  .withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
