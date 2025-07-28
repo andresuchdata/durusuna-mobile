@@ -67,30 +67,36 @@ class RealtimeService with WidgetsBindingObserver {
       }
 
       // More robust socket configuration for cross-platform compatibility
-      final optionBuilder = io.OptionBuilder()
-          .setAuth({'token': token})
-          .setTimeout(30000) // Longer timeout for iOS and slow networks
-          .enableAutoConnect()
-          .enableReconnection()
-          .setReconnectionAttempts(5)
-          .setReconnectionDelay(1000)
-          .setReconnectionDelayMax(5000);
+      final options = <String, dynamic>{
+        'auth': {'token': token},
+        'timeout': 30000,
+        'autoConnect': true,
+        'reconnection': true,
+        'reconnectionAttempts': 5,
+        'reconnectionDelay': 1000,
+        'reconnectionDelayMax': 5000,
+        // Add ping configuration to prevent timeout issues
+        'pingInterval': 25000, // 25 seconds ping interval
+        'pingTimeout': 60000, // 60 seconds ping timeout
+      };
 
       // Platform-specific transport configuration
       if (Platform.isIOS) {
         // iOS benefits from polling fallback and websocket
-        optionBuilder.setTransports(['websocket', 'polling']);
+        options['transports'] = ['websocket', 'polling'];
         // Additional iOS-specific options
-        optionBuilder.enableForceNew();
+        options['forceNew'] = true;
       } else {
         // Android generally works fine with websocket only
-        optionBuilder.setTransports(
-            ['websocket', 'polling']); // Add polling as backup for Android too
+        options['transports'] = [
+          'websocket',
+          'polling'
+        ]; // Add polling as backup for Android too
       }
 
       _socket = io.io(
         ApiConstants.socketUrl,
-        optionBuilder.build(),
+        options,
       );
 
       _setupEventListeners();

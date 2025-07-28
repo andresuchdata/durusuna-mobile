@@ -14,6 +14,7 @@ class ClassUpdateCommentCard extends StatelessWidget {
   final Function(ClassUpdateComment)? onAddReaction;
   final bool showReplies;
   final int level; // For nesting depth
+  final bool isOptimistic; // Whether this is an optimistic comment
 
   const ClassUpdateCommentCard({
     super.key,
@@ -26,15 +27,66 @@ class ClassUpdateCommentCard extends StatelessWidget {
     this.onAddReaction,
     this.showReplies = true,
     this.level = 0,
+    this.isOptimistic = false,
   });
 
   bool get _isMyComment => comment.authorId == currentUserId;
 
+  // Helper method to format comment content with @mention styling
+  Widget _buildCommentContent() {
+    final content = comment.displayContent;
+
+    // Check if content starts with @mention (for level 2+ replies)
+    final mentionRegex = RegExp(r'^@(\w+)\s+(.*)$', dotAll: true);
+    final match = mentionRegex.firstMatch(content);
+
+    if (match != null) {
+      final username = match.group(1)!;
+      final restOfContent = match.group(2)!;
+
+      return RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: '@$username',
+              style: const TextStyle(
+                color: AppTheme.primaryColor,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+            TextSpan(
+              text: ' $restOfContent',
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Regular content without @mention
+    return Text(
+      content,
+      style: const TextStyle(
+        color: AppTheme.textPrimary,
+        fontSize: 14,
+        height: 1.4,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Max 1 level indentation: 0 (parent) or 1 (reply)
+    final isReply = level > 0;
+
     return Container(
       margin: EdgeInsets.only(
-        left: level * 16.0, // Indent replies
+        left: isReply ? 24.0 : 0.0, // Clear indentation for replies
         bottom: 8,
       ),
       child: Card(
@@ -51,6 +103,29 @@ class ClassUpdateCommentCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Reply indicator for level 1 comments
+              if (isReply)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.subdirectory_arrow_right,
+                        size: 14,
+                        color: AppTheme.primaryColor,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Reply',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.primaryColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               // Author info and timestamp
               Row(
                 children: [
@@ -85,12 +160,29 @@ class ClassUpdateCommentCard extends StatelessWidget {
                             color: AppTheme.textPrimary,
                           ),
                         ),
-                        Text(
-                          timeago.format(comment.createdAt),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.textSecondary,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              timeago.format(comment.createdAt),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            if (isOptimistic) ...[
+                              const SizedBox(width: 6),
+                              const SizedBox(
+                                width: 10,
+                                height: 10,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppTheme.primaryColor,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
@@ -145,7 +237,7 @@ class ClassUpdateCommentCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: AppTheme.backgroundColor,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border(
+                    border: const Border(
                       left: BorderSide(
                         color: AppTheme.primaryColor,
                         width: 3,
@@ -178,15 +270,8 @@ class ClassUpdateCommentCard extends StatelessWidget {
                 ),
               ],
 
-              // Comment content
-              Text(
-                comment.displayContent,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.textPrimary,
-                  height: 1.4,
-                ),
-              ),
+              // Comment content with @mention styling
+              _buildCommentContent(),
 
               const SizedBox(height: 8),
 
