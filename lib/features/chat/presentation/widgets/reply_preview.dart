@@ -31,10 +31,10 @@ class ReplyPreview extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.1),
+              color: AppTheme.primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(
+            child: const Icon(
               Icons.reply,
               color: AppTheme.primaryColor,
               size: 16,
@@ -44,11 +44,11 @@ class ReplyPreview extends StatelessWidget {
 
           // Vertical line indicator
           Container(
-            width: 3,
+            width: 4.5,
             height: 40,
             decoration: BoxDecoration(
               color: AppTheme.primaryColor,
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(1),
             ),
           ),
           const SizedBox(width: 12),
@@ -92,10 +92,10 @@ class ReplyPreview extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppTheme.textSecondary.withOpacity(0.1),
+                color: AppTheme.textSecondary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.close,
                 color: AppTheme.textSecondary,
                 size: 16,
