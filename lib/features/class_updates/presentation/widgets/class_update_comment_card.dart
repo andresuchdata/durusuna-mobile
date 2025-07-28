@@ -37,18 +37,19 @@ class ClassUpdateCommentCard extends StatelessWidget {
     final content = comment.displayContent;
 
     // Check if content starts with @mention (for level 2+ replies)
-    final mentionRegex = RegExp(r'^@(\w+)\s+(.*)$', dotAll: true);
+    // Updated regex to capture full names with spaces (e.g., "@John Doe")
+    final mentionRegex = RegExp(r'^@([a-zA-Z\s]+?)\s+(.*)$', dotAll: true);
     final match = mentionRegex.firstMatch(content);
 
     if (match != null) {
-      final username = match.group(1)!;
+      final fullName = match.group(1)!.trim();
       final restOfContent = match.group(2)!;
 
       return RichText(
         text: TextSpan(
           children: [
             TextSpan(
-              text: '@$username',
+              text: '@$fullName',
               style: const TextStyle(
                 color: AppTheme.primaryColor,
                 fontWeight: FontWeight.w600,
@@ -294,24 +295,22 @@ class ClassUpdateCommentCard extends StatelessWidget {
               Row(
                 children: [
                   if (onReply != null)
-                    TextButton.icon(
+                    IconButton(
                       onPressed: () => onReply!(comment),
-                      icon: const Icon(Icons.reply, size: 16),
-                      label: const Text('Reply'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppTheme.textSecondary,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
+                      icon: const Icon(Icons.reply, size: 18),
+                      color: AppTheme.textSecondary,
+                      constraints: const BoxConstraints(),
+                      padding: const EdgeInsets.all(8),
+                      tooltip: 'Reply',
                     ),
                   if (onAddReaction != null)
-                    TextButton.icon(
+                    IconButton(
                       onPressed: () => onAddReaction!(comment),
-                      icon: const Icon(Icons.emoji_emotions_outlined, size: 16),
-                      label: const Text('React'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppTheme.textSecondary,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
+                      icon: const Icon(Icons.emoji_emotions_outlined, size: 18),
+                      color: AppTheme.textSecondary,
+                      constraints: const BoxConstraints(),
+                      padding: const EdgeInsets.all(8),
+                      tooltip: 'React',
                     ),
                   if (comment.hasReplies && showReplies)
                     TextButton.icon(

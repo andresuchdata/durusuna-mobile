@@ -529,6 +529,17 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
         // Keep focus for continued conversation
         _focusNode.requestFocus();
 
+        // Scroll to the newly added reply (after server confirmation)
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+
         // Notify parent to refresh main feed
         widget.onCommentPosted?.call();
       }
@@ -648,11 +659,9 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
     }
 
     // Find all top-level comments (no parent) and create display items
+    // Backend now sorts these newest-first, so maintain that order
     final topLevelComments =
         _comments.where((comment) => comment.replyToId == null).toList();
-
-    // Sort top-level comments by creation time
-    topLevelComments.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
     for (final parentComment in topLevelComments) {
       // Get all replies for this parent (including nested ones flattened)
