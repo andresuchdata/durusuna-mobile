@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/message.dart';
+import '../../../../shared/widgets/reactions_widget.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -10,18 +11,22 @@ class MessageBubble extends StatelessWidget {
   final bool isSelected;
   final bool isSelectionMode;
   final String conversationType; // 'direct' or 'group'
+  final String? currentUserId;
   final Function(Message)? onReply;
   final Function(Message)? onEdit;
   final Function(Message)? onDelete;
   final Function(Message)? onForward;
   final Function(Message)? onLongPress;
   final Function(Message)? onTap;
+  final Function(Message, String)? onReactionTap;
+  final Function(Message)? onAddReaction;
 
   const MessageBubble({
     super.key,
     required this.message,
     required this.isMe,
     required this.conversationType,
+    this.currentUserId,
     this.isSelected = false,
     this.isSelectionMode = false,
     this.onReply,
@@ -30,6 +35,8 @@ class MessageBubble extends StatelessWidget {
     this.onForward,
     this.onLongPress,
     this.onTap,
+    this.onReactionTap,
+    this.onAddReaction,
   });
 
   bool get _shouldShowAvatar => conversationType == 'group' && !isMe;
@@ -338,6 +345,25 @@ class MessageBubble extends StatelessWidget {
                           ],
                         ),
                       ),
+
+                      // Reactions (positioned below the message bubble)
+                      if (message.hasReactions || onAddReaction != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: ReactionsWidget(
+                            reactions: message.reactions,
+                            currentUserId: currentUserId,
+                            onReactionTap: (emoji) {
+                              if (onReactionTap != null) {
+                                onReactionTap!(message, emoji);
+                              }
+                            },
+                            onAddReaction: onAddReaction != null
+                                ? () => onAddReaction!(message)
+                                : null,
+                            isMyMessage: isMe,
+                          ),
+                        ),
                     ],
                   ),
                 ),

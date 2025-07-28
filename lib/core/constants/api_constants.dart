@@ -191,6 +191,8 @@ class ApiConstants {
   // Reaction endpoints
   static String addReaction(String updateId) =>
       '$classUpdates/$updateId/reactions';
+  static String addCommentReaction(String commentId) =>
+      '$classUpdates/comments/$commentId/reactions';
 
   // Notification endpoints
   static const String notifications = '/notifications';

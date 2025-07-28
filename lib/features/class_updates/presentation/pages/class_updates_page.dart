@@ -7,7 +7,9 @@ import '../../../../shared/models/class_update_comment.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/services/auth_service.dart';
+import '../../../../shared/widgets/reactions_widget.dart';
 import '../widgets/class_update_card.dart';
+import '../widgets/class_update_comment_card.dart';
 import 'create_update_page.dart';
 
 class ClassUpdatesPage extends ConsumerStatefulWidget {
@@ -495,6 +497,101 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
     }
   }
 
+  void _handleCommentReaction(ClassUpdateComment comment, String emoji) async {
+    try {
+      final service = ref.read(classUpdatesServiceProvider);
+      await service.toggleCommentReaction(
+        commentId: comment.id,
+        emoji: emoji,
+      );
+
+      // Refresh comments to show updated reactions
+      await _loadComments();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reacted with $emoji'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add reaction: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showCommentReactionPicker(ClassUpdateComment comment) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        margin: const EdgeInsets.all(16),
+        child: ReactionPicker(
+          onEmojiSelected: (emoji) {
+            _handleCommentReaction(comment, emoji);
+          },
+          onClose: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+
+  void _replyToComment(ClassUpdateComment comment) {
+    // TODO: Implement reply functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content:
+            Text('Replying to ${comment.author?.displayName ?? "comment"}'),
+      ),
+    );
+  }
+
+  void _editComment(ClassUpdateComment comment) {
+    // TODO: Implement edit functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Edit comment functionality coming soon'),
+      ),
+    );
+  }
+
+  void _deleteComment(ClassUpdateComment comment) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Comment'),
+        content: const Text('Are you sure you want to delete this comment?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              // TODO: Implement actual delete API call
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Delete comment functionality coming soon'),
+                ),
+              );
+            },
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
@@ -581,7 +678,24 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                               itemCount: _comments.length,
                               itemBuilder: (context, index) {
                                 final comment = _comments[index];
-                                return CommentWidget(comment: comment);
+                                final currentUserId =
+                                    ref.read(authStateProvider).user?.id;
+                                return ClassUpdateCommentCard(
+                                  comment: comment,
+                                  currentUserId: currentUserId,
+                                  onReactionTap: (comment, emoji) =>
+                                      _handleCommentReaction(comment, emoji),
+                                  onAddReaction: (comment) =>
+                                      _showCommentReactionPicker(comment),
+                                  onReply: (comment) =>
+                                      _replyToComment(comment),
+                                  onEdit: currentUserId == comment.authorId
+                                      ? (comment) => _editComment(comment)
+                                      : null,
+                                  onDelete: currentUserId == comment.authorId
+                                      ? (comment) => _deleteComment(comment)
+                                      : null,
+                                );
                               },
                             ),
             ),
@@ -649,71 +763,6 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
           ],
         );
       },
-    );
-  }
-}
-
-// Individual comment widget
-class CommentWidget extends StatelessWidget {
-  final ClassUpdateComment comment;
-
-  const CommentWidget({super.key, required this.comment});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: AppTheme.primaryColor,
-            child: Text(
-              comment.author != null &&
-                      comment.author!.firstName.isNotEmpty &&
-                      comment.author!.lastName.isNotEmpty
-                  ? '${comment.author!.firstName[0]}${comment.author!.lastName[0]}'
-                  : 'U',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  comment.author != null
-                      ? '${comment.author!.firstName} ${comment.author!.lastName}'
-                      : 'Unknown User',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  comment.content,
-                  style: const TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  timeago.format(comment.createdAt),
-                  style: const TextStyle(
-                    color: AppTheme.textTertiary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

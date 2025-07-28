@@ -349,6 +349,34 @@ class ClassUpdatesService {
     }
   }
 
+  /// Toggle reaction on a class update comment
+  Future<void> toggleCommentReaction({
+    required String commentId,
+    required String emoji,
+  }) async {
+    try {
+      final response = await _apiService.post(
+        ApiConstants.addCommentReaction(commentId),
+        data: {
+          'emoji': emoji,
+        },
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw ApiException(
+          message: 'Failed to toggle comment reaction',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to toggle comment reaction: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
   /// Pin/unpin a class update
   Future<ClassUpdate> togglePin(String updateId, bool isPinned) async {
     try {
