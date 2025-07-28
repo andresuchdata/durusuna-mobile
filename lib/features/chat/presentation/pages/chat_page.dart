@@ -12,6 +12,9 @@ import '../../../../shared/models/conversation.dart';
 import '../../../../shared/widgets/widgets.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
+import '../widgets/chat_action_bar.dart';
+import '../widgets/reply_preview.dart';
+import 'forward_contacts_page.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   final Conversation conversation;
@@ -42,6 +45,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   // Key for tracking highlighted message
   final Map<String, GlobalKey> _messageKeys = {};
+
+  // Selection mode state
+  final Set<String> _selectedMessageIds = {};
+  bool _isSelectionMode = false;
+  Message? _replyingToMessage;
 
   @override
   void initState() {
@@ -316,15 +324,44 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _sendMessage({String? content, MessageType? messageType}) async {
     if (content?.trim().isEmpty ?? true) return;
 
+    // Validate reply ID - ensure it's a proper UUID, not a temporary ID
+    String? validReplyToId;
+    if (_replyingToMessage != null) {
+      final replyId = _replyingToMessage!.id;
+      if (!replyId.startsWith('temp_') && !replyId.startsWith('last_')) {
+        validReplyToId = replyId;
+      } else {
+        // Clear invalid reply and show warning
+        setState(() {
+          _replyingToMessage = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot reply to message that is still sending'),
+            backgroundColor: AppTheme.warningColor,
+          ),
+        );
+      }
+    }
+
     try {
       await ref
           .read(chatMessagesProvider(widget.conversation.id).notifier)
           .sendMessage(
             content: content,
             messageType: messageType ?? MessageType.text,
+            replyToId: validReplyToId, // Only include if valid UUID
           );
 
       _messageController.clear();
+
+      // Clear reply state after sending
+      if (_replyingToMessage != null) {
+        setState(() {
+          _replyingToMessage = null;
+        });
+      }
+
       _scrollToBottom(animated: true);
 
       // Ensure conversation is marked as read when user sends a message
@@ -791,7 +828,341 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
+      appBar: _buildAppBar(),
+      body: Column(
+        children: [
+          // Messages list
+          Expanded(
+            child: messagesState.isLoading && messagesState.messages.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : messagesState.messages.isEmpty
+                    ? SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.6,
+                          child: _buildEmptyState(),
+                        ),
+                      )
+                    : _buildMessagesList(messagesState, authState),
+          ),
+
+          // Typing indicator
+          if (messagesState.isTyping)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 8,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: List.generate(3, (index) {
+                              return AnimatedContainer(
+                                duration:
+                                    Duration(milliseconds: 600 + (index * 200)),
+                                curve: Curves.easeInOut,
+                                width: 4,
+                                height: 4,
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.textSecondary,
+                                  shape: BoxShape.circle,
+                                ),
+                              );
+                            }),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Reply preview - positioned just above text input
+          if (_replyingToMessage != null)
+            ReplyPreview(
+              replyToMessage: _replyingToMessage!,
+              onCancel: _cancelReply,
+            ),
+
+          // Chat input
+          ChatInput(
+            controller: _messageController,
+            focusNode: _focusNode,
+            onSend: (content) => _sendMessage(content: content),
+            onTyping: _handleTyping,
+            onAttachment: () => _showAttachmentOptions(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircleAvatar(
+            radius: 40,
+            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+            child: const Icon(
+              Icons.chat_bubble_outline,
+              size: 40,
+              color: AppTheme.primaryColor,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Start the conversation',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Send a message to ${_getDisplayName()}',
+            style: const TextStyle(
+              color: AppTheme.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessagesList(dynamic messagesState, dynamic authState) {
+    return ListView.builder(
+      controller: _scrollController,
+      reverse: false,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      itemCount:
+          messagesState.messages.length + (messagesState.isLoadingMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        // Show loading indicator at the top when loading older messages
+        if (messagesState.isLoadingMore && index == 0) {
+          return const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        // Adjust index if loading indicator is shown
+        final messageIndex = messagesState.isLoadingMore ? index - 1 : index;
+
+        // Return empty container if index is out of bounds
+        if (messageIndex < 0 || messageIndex >= messagesState.messages.length) {
+          return const SizedBox.shrink();
+        }
+
+        final message = messagesState.messages[messageIndex];
+        final isMe = message.senderId == authState.user?.id;
+        final showTimestamp = _shouldShowTimestamp(
+          message,
+          messageIndex > 0 ? messagesState.messages[messageIndex - 1] : null,
+        );
+
+        return Column(
+          children: [
+            if (showTimestamp)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  _formatTimestamp(message.createdAt),
+                  style: const TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            MessageBubble(
+              key: widget.highlightMessageId == message.id
+                  ? _getMessageKey(message.id)
+                  : null,
+              message: message,
+              isMe: isMe,
+              conversationType: widget.conversation.type,
+              isSelected: _selectedMessageIds.contains(message.id),
+              isSelectionMode: _isSelectionMode,
+              onReply: (msg) => _replyToMessage(msg),
+              onEdit: isMe ? (msg) => _editMessage(msg) : null,
+              onDelete: isMe ? (msg) => _deleteMessage(msg) : null,
+              onLongPress: (msg) => _enterSelectionMode(msg),
+              onTap: (msg) => _toggleMessageSelection(msg),
+            ),
+            const SizedBox(height: 4),
+          ],
+        );
+      },
+    );
+  }
+
+  bool _shouldShowTimestamp(Message current, Message? previous) {
+    if (previous == null) return true;
+
+    final currentDate = DateTime(
+      current.createdAt.year,
+      current.createdAt.month,
+      current.createdAt.day,
+    );
+
+    final previousDate = DateTime(
+      previous.createdAt.year,
+      previous.createdAt.month,
+      previous.createdAt.day,
+    );
+
+    return !currentDate.isAtSameDate(previousDate);
+  }
+
+  String _formatTimestamp(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+
+    if (messageDate == today) {
+      return 'Today';
+    } else if (messageDate == today.subtract(const Duration(days: 1))) {
+      return 'Yesterday';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
+
+  void _replyToMessage(Message message) {
+    // Only allow replies to messages with proper server UUIDs (not temporary IDs)
+    if (message.id.startsWith('temp_')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot reply to message that is still sending'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _replyingToMessage = message;
+      _isSelectionMode = false;
+      _selectedMessageIds.clear();
+    });
+    _focusNode.requestFocus();
+  }
+
+  // Selection mode methods
+  void _enterSelectionMode(Message message) {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedMessageIds.clear();
+      _selectedMessageIds.add(message.id);
+      _replyingToMessage = null; // Cancel any ongoing reply
+    });
+  }
+
+  void _toggleMessageSelection(Message message) {
+    if (!_isSelectionMode) return;
+
+    setState(() {
+      if (_selectedMessageIds.contains(message.id)) {
+        _selectedMessageIds.remove(message.id);
+        if (_selectedMessageIds.isEmpty) {
+          _isSelectionMode = false;
+        }
+      } else {
+        if (_selectedMessageIds.length < 5) {
+          // Max 5 for forwarding
+          _selectedMessageIds.add(message.id);
+        }
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedMessageIds.clear();
+    });
+  }
+
+  void _handleReplySelection() {
+    if (_selectedMessageIds.length == 1) {
+      final messagesState =
+          ref.read(chatMessagesProvider(widget.conversation.id));
+      final message = messagesState.messages.firstWhere(
+        (msg) => msg.id == _selectedMessageIds.first,
+      );
+      _replyToMessage(message);
+    }
+  }
+
+  void _handleForwardSelection() {
+    final messagesState =
+        ref.read(chatMessagesProvider(widget.conversation.id));
+    final messagesToForward = messagesState.messages
+        .where((msg) => _selectedMessageIds.contains(msg.id))
+        .toList();
+
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(
+        builder: (context) => ForwardContactsPage(
+          messagesToForward: messagesToForward,
+        ),
+      ),
+    )
+        .then((_) {
+      // Exit selection mode when returning from forward page
+      _exitSelectionMode();
+    });
+  }
+
+  void _handleDeleteSelection() {
+    // TODO: Implement proper delete functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Delete ${_selectedMessageIds.length} message(s)'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {},
+        ),
+      ),
+    );
+    _exitSelectionMode();
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyingToMessage = null;
+    });
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    final messagesState =
+        ref.watch(chatMessagesProvider(widget.conversation.id));
+
+    if (_isSelectionMode) {
+      return ChatActionBar(
+        selectedCount: _selectedMessageIds.length,
+        canReply: _selectedMessageIds.length == 1,
+        onReply: _handleReplySelection,
+        onForward: _handleForwardSelection,
+        onDelete: _handleDeleteSelection,
+        onCancel: _exitSelectionMode,
+      );
+    } else {
+      return AppBar(
         backgroundColor: Colors.white,
         elevation: 1,
         titleSpacing: 0,
@@ -934,225 +1305,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ],
           ),
         ],
-      ),
-      body: Column(
-        children: [
-          // Messages list
-          Expanded(
-            child: messagesState.isLoading && messagesState.messages.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : messagesState.messages.isEmpty
-                    ? SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        child: SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.6,
-                          child: _buildEmptyState(),
-                        ),
-                      )
-                    : _buildMessagesList(messagesState, authState),
-          ),
-
-          // Typing indicator
-          if (messagesState.isTyping)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 12,
-                    backgroundColor: AppTheme.primaryColor,
-                    child: Text(
-                      _getInitials().isNotEmpty ? _getInitials()[0] : 'U',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 8,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: List.generate(3, (index) {
-                              return AnimatedContainer(
-                                duration:
-                                    Duration(milliseconds: 600 + (index * 200)),
-                                curve: Curves.easeInOut,
-                                width: 4,
-                                height: 4,
-                                decoration: const BoxDecoration(
-                                  color: AppTheme.textSecondary,
-                                  shape: BoxShape.circle,
-                                ),
-                              );
-                            }),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Chat input
-          ChatInput(
-            controller: _messageController,
-            focusNode: _focusNode,
-            onSend: (content) => _sendMessage(content: content),
-            onTyping: _handleTyping,
-            onAttachment: () => _showAttachmentOptions(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircleAvatar(
-            radius: 40,
-            backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-            child: Icon(
-              Icons.chat_bubble_outline,
-              size: 40,
-              color: AppTheme.primaryColor,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Start the conversation',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: AppTheme.textSecondary,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Send a message to ${_getDisplayName()}',
-            style: const TextStyle(
-              color: AppTheme.textTertiary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessagesList(dynamic messagesState, dynamic authState) {
-    return ListView.builder(
-      controller: _scrollController,
-      reverse: false,
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      itemCount:
-          messagesState.messages.length + (messagesState.isLoadingMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        // Show loading indicator at the top when loading older messages
-        if (messagesState.isLoadingMore && index == 0) {
-          return const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        // Adjust index if loading indicator is shown
-        final messageIndex = messagesState.isLoadingMore ? index - 1 : index;
-
-        // Return empty container if index is out of bounds
-        if (messageIndex < 0 || messageIndex >= messagesState.messages.length) {
-          return const SizedBox.shrink();
-        }
-
-        final message = messagesState.messages[messageIndex];
-        final isMe = message.senderId == authState.user?.id;
-        final showTimestamp = _shouldShowTimestamp(
-          message,
-          messageIndex > 0 ? messagesState.messages[messageIndex - 1] : null,
-        );
-
-        return Column(
-          children: [
-            if (showTimestamp)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  _formatTimestamp(message.createdAt),
-                  style: const TextStyle(
-                    color: AppTheme.textTertiary,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            MessageBubble(
-              key: widget.highlightMessageId == message.id
-                  ? _getMessageKey(message.id)
-                  : null,
-              message: message,
-              isMe: isMe,
-              onReply: (msg) => _replyToMessage(msg),
-              onEdit: isMe ? (msg) => _editMessage(msg) : null,
-              onDelete: isMe ? (msg) => _deleteMessage(msg) : null,
-            ),
-            const SizedBox(height: 4),
-          ],
-        );
-      },
-    );
-  }
-
-  bool _shouldShowTimestamp(Message current, Message? previous) {
-    if (previous == null) return true;
-
-    final currentDate = DateTime(
-      current.createdAt.year,
-      current.createdAt.month,
-      current.createdAt.day,
-    );
-
-    final previousDate = DateTime(
-      previous.createdAt.year,
-      previous.createdAt.month,
-      previous.createdAt.day,
-    );
-
-    return !currentDate.isAtSameDate(previousDate);
-  }
-
-  String _formatTimestamp(DateTime dateTime) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
-
-    if (messageDate == today) {
-      return 'Today';
-    } else if (messageDate == today.subtract(const Duration(days: 1))) {
-      return 'Yesterday';
-    } else {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+      );
     }
-  }
-
-  void _replyToMessage(Message message) {
-    // TODO: Implement reply functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Reply feature coming soon')),
-    );
   }
 
   void _editMessage(Message message) {
@@ -1540,7 +1694,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withOpacity(0.1),
+                              color:
+                                  AppTheme.primaryColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -1674,7 +1829,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: _getGroupMemberTypeColor(member.userType).withOpacity(0.1),
+              color: _getGroupMemberTypeColor(member.userType)
+                  .withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(

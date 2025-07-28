@@ -25,8 +25,6 @@ class ChatService {
             return Conversation.fromJson(json);
           } catch (e) {
             // Enhanced error logging for debugging
-            print('❌ Error parsing conversation: $e');
-            print('📄 Conversation JSON: ${json.toString()}');
             rethrow;
           }
         }).toList();
@@ -441,6 +439,7 @@ class ConversationsState {
 class ConversationsNotifier extends StateNotifier<ConversationsState> {
   final ChatService _chatService;
   final Ref _ref;
+  final Set<String> _processedMessageIds = {}; // Track processed message IDs
 
   ConversationsNotifier(this._chatService, this._ref)
       : super(ConversationsState()) {
@@ -465,7 +464,24 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
   }
 
   void updateConversationLastMessage(String conversationId, Message message) {
+    // Check for duplicate processing
+    if (_processedMessageIds.contains(message.id)) {
+      return;
+    }
+
+    // Mark message as processed
+    _processedMessageIds.add(message.id);
+
+    // Cleanup: Keep only the last 100 processed message IDs to prevent memory issues
+    if (_processedMessageIds.length > 100) {
+      final messagesList = _processedMessageIds.toList();
+      _processedMessageIds.clear();
+      _processedMessageIds
+          .addAll(messagesList.skip(messagesList.length - 50)); // Keep last 50
+    }
+
     final index = state.conversations.indexWhere((c) => c.id == conversationId);
+
     if (index != -1) {
       final conversation = state.conversations[index];
 
@@ -518,8 +534,6 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
       updatedConversations.insert(0, updatedConversation);
 
       state = state.copyWith(conversations: updatedConversations);
-    } else {
-      // Conversation not found in list
     }
   }
 
@@ -556,8 +570,6 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
         .indexWhere((c) => c.type == 'direct' && c.otherUser?.id == userId);
 
     if (index != -1) {
-      final conversation = state.conversations[index];
-
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = updatedConversations[index].copyWith(
         isOnline: isOnline,
@@ -680,15 +692,21 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       if (mounted) {
         if (loadMore) {
           // Prepend older messages to the beginning for chronological order
+          final allMessages = [...messages, ...state.messages];
+          final messagesWithReplies = _populateAllReplyMessages(allMessages);
+
           state = state.copyWith(
-            messages: [...messages, ...state.messages],
+            messages: messagesWithReplies,
             isLoadingMore: false,
             hasMore: messages.length == 50,
             currentPage: state.currentPage + 1,
           );
         } else {
+          // Populate replyTo fields for initial load
+          final messagesWithReplies = _populateAllReplyMessages(messages);
+
           state = state.copyWith(
-            messages: messages,
+            messages: messagesWithReplies,
             isLoading: false,
             hasMore: messages.length == 50,
             currentPage: 1,
@@ -842,11 +860,48 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     }
   }
 
+  /// Helper method to populate replyTo field from reply_to_id using a provided message list
+  Message _populateReplyToMessageFromList(
+      Message message, List<Message> messageList) {
+    // If message already has replyTo populated or no reply_to_id, return as is
+    if (message.replyTo != null || message.replyToId == null) {
+      return message;
+    }
+
+    try {
+      // Find the referenced message in the provided list
+      final replyToMessage = messageList.firstWhere(
+        (m) => m.id == message.replyToId,
+      );
+
+      // Return message with populated replyTo field
+      return message.copyWith(replyTo: replyToMessage);
+    } catch (e) {
+      // If reply message not found, return original message
+      return message;
+    }
+  }
+
+  /// Helper method to populate replyTo field from reply_to_id using current state
+  Message _populateReplyToMessage(Message message) {
+    return _populateReplyToMessageFromList(message, state.messages);
+  }
+
+  /// Populate replyTo fields for all messages in a list
+  List<Message> _populateAllReplyMessages(List<Message> messages) {
+    return messages
+        .map((message) => _populateReplyToMessageFromList(message, messages))
+        .toList();
+  }
+
   void addMessage(Message message) {
     // Check if message already exists
     if (mounted && !state.messages.any((m) => m.id == message.id)) {
+      // Populate replyTo field if needed
+      final messageWithReply = _populateReplyToMessage(message);
+
       state = state.copyWith(
-        messages: [...state.messages, message],
+        messages: [...state.messages, messageWithReply],
       );
     }
   }
@@ -854,34 +909,40 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
   void updateMessage(Message updatedMessage) {
     final index = state.messages.indexWhere((m) => m.id == updatedMessage.id);
     if (index != -1) {
+      // Populate replyTo field if needed
+      final messageWithReply = _populateReplyToMessage(updatedMessage);
+
       final updatedMessages = [...state.messages];
-      updatedMessages[index] = updatedMessage;
+      updatedMessages[index] = messageWithReply;
       state = state.copyWith(messages: updatedMessages);
     }
   }
 
   void replaceMessage(Message serverMessage) {
+    // Populate replyTo field if needed
+    final messageWithReply = _populateReplyToMessage(serverMessage);
+
     // Try to find optimistic message by content and timestamp (since it has temp ID)
     final now = DateTime.now();
     final recentThreshold =
         now.subtract(const Duration(seconds: 5)); // Recent messages only
 
     final optimisticIndex = state.messages.indexWhere((m) =>
-            m.content == serverMessage.content &&
+            m.content == messageWithReply.content &&
             m.createdAt.isAfter(recentThreshold) &&
             m.id.startsWith('temp_') // Is a temporary message
         );
 
     if (optimisticIndex != -1) {
       final updatedMessages = [...state.messages];
-      updatedMessages[optimisticIndex] = serverMessage;
+      updatedMessages[optimisticIndex] = messageWithReply;
       state = state.copyWith(messages: updatedMessages);
     } else {
       // Check if it already exists with real ID (avoid duplicates)
       final existsIndex =
-          state.messages.indexWhere((m) => m.id == serverMessage.id);
+          state.messages.indexWhere((m) => m.id == messageWithReply.id);
       if (existsIndex == -1) {
-        addMessage(serverMessage);
+        addMessage(messageWithReply);
       }
     }
   }

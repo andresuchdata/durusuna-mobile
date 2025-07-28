@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'dart:io' show Platform;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/chat_service.dart';
+import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/conversation.dart';
 import 'chat_page.dart';
 import 'contacts_page.dart';
@@ -21,8 +23,64 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   @override
   void initState() {
     super.initState();
-    // Note: loadConversations() is automatically called by ConversationsNotifier constructor
-    // when the provider is first accessed, so no explicit call needed here
+
+    // Ensure conversations are loaded and provider is properly initialized
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Force load conversations to ensure provider is active
+      ref.read(conversationsProvider.notifier).loadConversations();
+
+      // Join all conversation rooms for real-time updates
+      _joinAllConversationRooms();
+    });
+  }
+
+  /// Join all conversation rooms to receive real-time updates
+  void _joinAllConversationRooms() {
+    final conversationsState = ref.read(conversationsProvider);
+    final realtimeService = ref.read(realtimeServiceProvider);
+
+    if (Platform.isAndroid) {
+      print('🤖 ANDROID ConversationsPage: Starting room join process');
+      print(
+          '🤖 ANDROID - Conversations count: ${conversationsState.conversations.length}');
+      print('🤖 ANDROID - Socket connected: ${realtimeService.isConnected}');
+    }
+
+    if (conversationsState.conversations.isEmpty) {
+      print('🏠 ConversationsPage: No conversations to join rooms for');
+      return;
+    }
+
+    if (!realtimeService.isConnected) {
+      print(
+          '🏠 ConversationsPage: Realtime service not connected, skipping room joins');
+      return;
+    }
+
+    print(
+        '🏠 ConversationsPage: Joining ${conversationsState.conversations.length} conversation rooms');
+
+    for (final conversation in conversationsState.conversations) {
+      if (Platform.isAndroid) {
+        print('🤖 ANDROID - Joining room for conversation: ${conversation.id}');
+        print('🤖 ANDROID - Conversation type: ${conversation.type}');
+        print(
+            '🤖 ANDROID - Conversation name: ${conversation.name ?? "No name"}');
+      }
+      realtimeService.joinConversation(conversation.id);
+      if (Platform.isAndroid) {
+        print('🤖 ANDROID - Join request sent for: ${conversation.id}');
+      } else {
+        print(
+            '🏠 ConversationsPage: Joined room for conversation ${conversation.id}');
+      }
+    }
+
+    if (Platform.isAndroid) {
+      print('🤖 ANDROID ConversationsPage: Completed room join process');
+    } else {
+      print('🏠 ConversationsPage: Successfully joined all conversation rooms');
+    }
   }
 
   @override
@@ -45,6 +103,31 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   @override
   Widget build(BuildContext context) {
     final conversationsState = ref.watch(conversationsProvider);
+
+    // Join conversation rooms when conversations are loaded
+    ref.listen(conversationsProvider, (previous, next) {
+      if (previous?.isLoading == true &&
+          next.isLoading == false &&
+          next.conversations.isNotEmpty) {
+        _joinAllConversationRooms();
+      }
+    });
+
+    // LOCAL BACKUP LISTENER: Ensure conversations list updates in real-time
+    // This is a backup in case the global listener in main.dart isn't active
+    ref.listen(realtimeMessagesProvider, (previous, next) {
+      next?.when(
+        data: (realtimeMessage) {
+          // Update conversation's last message and unread count
+          ref
+              .read(conversationsProvider.notifier)
+              .updateConversationLastMessage(
+                  realtimeMessage.conversationId, realtimeMessage.message);
+        },
+        loading: () {},
+        error: (error, stack) {},
+      );
+    });
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -295,28 +378,7 @@ class ConversationTile extends StatelessWidget {
                   )
                 : null,
           ),
-          if (conversation.type == 'direct' && conversation.isOnline) ...[
-            Positioned(
-              bottom: 0,
-              right: 0,
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: Colors.green, // Force bright green like chat page
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 2,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          // Removed online indicator for direct conversations - only show in actual chat page
           if (conversation.type == 'group')
             Positioned(
               bottom: 0,

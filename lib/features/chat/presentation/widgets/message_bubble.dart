@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/message.dart';
@@ -6,171 +7,347 @@ import '../../../../shared/models/message.dart';
 class MessageBubble extends StatelessWidget {
   final Message message;
   final bool isMe;
+  final bool isSelected;
+  final bool isSelectionMode;
+  final String conversationType; // 'direct' or 'group'
   final Function(Message)? onReply;
   final Function(Message)? onEdit;
   final Function(Message)? onDelete;
+  final Function(Message)? onForward;
+  final Function(Message)? onLongPress;
+  final Function(Message)? onTap;
 
   const MessageBubble({
     super.key,
     required this.message,
     required this.isMe,
+    required this.conversationType,
+    this.isSelected = false,
+    this.isSelectionMode = false,
     this.onReply,
     this.onEdit,
     this.onDelete,
+    this.onForward,
+    this.onLongPress,
+    this.onTap,
   });
+
+  bool get _shouldShowAvatar => conversationType == 'group' && !isMe;
+
+  String get _senderInitials {
+    if (message.sender == null) return 'U';
+    final firstName = message.sender!.firstName.trim();
+    final lastName = message.sender!.lastName.trim();
+    final firstInitial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '';
+    final lastInitial = lastName.isNotEmpty ? lastName[0].toUpperCase() : '';
+
+    if (firstInitial.isNotEmpty && lastInitial.isNotEmpty) {
+      return '$firstInitial$lastInitial';
+    } else if (firstInitial.isNotEmpty) {
+      return firstInitial;
+    } else if (lastInitial.isNotEmpty) {
+      return lastInitial;
+    }
+    return 'U';
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Use smaller horizontal padding for both direct and group chats
+    const horizontalPadding = 4.0;
+
     return GestureDetector(
-      onLongPress: () => _showMessageOptions(context),
-      child: Row(
-        mainAxisAlignment:
-            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMe) ...[
-            CircleAvatar(
-              radius: 12,
-              backgroundColor: AppTheme.primaryColor,
-              child: Text(
-                message.sender?.firstName[0] ?? 'U',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.75,
-              ),
-              child: Column(
-                crossAxisAlignment:
-                    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                children: [
-                  // Reply-to message (if any)
-                  if (message.replyTo != null)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isMe
-                            ? Colors.white.withOpacity(0.2)
-                            : AppTheme.backgroundColor,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border(
-                          left: BorderSide(
-                            color: isMe ? Colors.white : AppTheme.primaryColor,
-                            width: 3,
-                          ),
-                        ),
+      onLongPress: () {
+        HapticFeedback.mediumImpact();
+        if (onLongPress != null) {
+          onLongPress!(message);
+        } else {
+          _showMessageOptions(context);
+        }
+      },
+      onTap: isSelectionMode && onTap != null ? () => onTap!(message) : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors
+              .transparent, // Always transparent, selection handled by bubble border
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: horizontalPadding, vertical: 8),
+          child: Row(
+            mainAxisAlignment:
+                isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // Selection indicator for selection mode (positioned first for consistent left margin)
+              if (isSelectionMode) ...[
+                Container(
+                  margin: const EdgeInsets.only(
+                    left: 4, // Fixed 4 units from screen border
+                    right: 8, // Right margin from bubble
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected
+                          ? AppTheme.primaryColor
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.primaryColor
+                            : AppTheme.textTertiary,
+                        width: 2,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            message.replyTo!.sender?.displayName ?? 'Unknown',
-                            style: TextStyle(
+                    ),
+                    child: isSelected
+                        ? const Icon(
+                            Icons.check,
+                            size: 16,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                ),
+              ],
+
+              // Left side spacing for messages from others (only when not in selection mode)
+              if (!isMe && !isSelectionMode)
+                SizedBox(
+                    width: _shouldShowAvatar
+                        ? 4
+                        : (conversationType == 'direct' ? 4 : 20)),
+
+              // Avatar for other participants in group chats only
+              if (_shouldShowAvatar) ...[
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: AppTheme.primaryColor,
+                  backgroundImage: message.sender?.avatarUrl?.isNotEmpty == true
+                      ? NetworkImage(message.sender!.avatarUrl!)
+                      : null,
+                  child: message.sender?.avatarUrl?.isEmpty != false
+                      ? Text(
+                          _senderInitials,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 8),
+              ],
+
+              // Message content container
+              Flexible(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.75,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: isMe
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    children: [
+                      // Sender name for group chats (other participants only)
+                      if (_shouldShowAvatar) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            message.sender?.displayName ?? 'Unknown',
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color:
-                                  isMe ? Colors.white : AppTheme.primaryColor,
+                              color: AppTheme.textSecondary,
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            message.replyTo!.displayContent,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isMe
-                                  ? Colors.white.withOpacity(0.8)
-                                  : AppTheme.textSecondary,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // Main message bubble
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isMe ? AppTheme.primaryColor : Colors.white,
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(16),
-                        topRight: const Radius.circular(16),
-                        bottomLeft: Radius.circular(isMe ? 16 : 4),
-                        bottomRight: Radius.circular(isMe ? 4 : 16),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 5,
-                          offset: const Offset(0, 1),
                         ),
                       ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Message content
-                        _buildMessageContent(),
 
-                        const SizedBox(height: 4),
-
-                        // Message metadata (time, status)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (message.isEdited)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Text(
-                                  'edited',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: isMe
-                                        ? Colors.white.withOpacity(0.7)
-                                        : AppTheme.textTertiary,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ),
-                            Text(
-                              _formatTime(message.createdAt),
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: isMe
-                                    ? Colors.white.withOpacity(0.7)
-                                    : AppTheme.textTertiary,
-                              ),
+                      // Unified message bubble (includes reply if present)
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(
+                            0), // No padding here, handled inside
+                        decoration: BoxDecoration(
+                          color: isMe ? AppTheme.primaryColor : Colors.white,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(8),
+                            topRight: const Radius.circular(8),
+                            bottomLeft: Radius.circular(isMe ? 8 : 4),
+                            bottomRight: Radius.circular(isMe ? 4 : 8),
+                          ),
+                          border: isSelected
+                              ? Border.all(
+                                  color: AppTheme.primaryColor,
+                                  width: 2.5,
+                                )
+                              : null,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 5,
+                              offset: const Offset(0, 1),
                             ),
-                            if (isMe) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                _getStatusIcon(),
-                                size: 14,
-                                color: Colors.white.withOpacity(0.7),
+                            // Add selection glow effect when selected
+                            if (isSelected)
+                              BoxShadow(
+                                color: AppTheme.primaryColor
+                                    .withValues(alpha: 0.4),
+                                blurRadius: 12,
+                                spreadRadius: 2,
+                                offset: const Offset(0, 0),
                               ),
-                            ],
                           ],
                         ),
-                      ],
-                    ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Reply preview integrated at the top (if this message is a reply)
+                            if (message.replyTo != null) ...[
+                              Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: isMe
+                                      ? Colors.white.withValues(alpha: 0.2)
+                                      : AppTheme.primaryColor
+                                          .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border(
+                                    left: BorderSide(
+                                      color: isMe
+                                          ? Colors.white.withValues(alpha: 0.9)
+                                          : AppTheme.primaryColor,
+                                      width: 4,
+                                    ),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Sender name of the replied message
+                                    Text(
+                                      message.replyTo!.isFromMe
+                                          ? 'You'
+                                          : (message.replyTo!.sender
+                                                  ?.displayName ??
+                                              'Unknown'),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: isMe
+                                            ? Colors.white
+                                                .withValues(alpha: 0.9)
+                                            : AppTheme.primaryColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+
+                                    // Content of the replied message
+                                    Text(
+                                      message.replyTo!.displayContent,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: isMe
+                                            ? Colors.white
+                                                .withValues(alpha: 0.8)
+                                            : AppTheme.textSecondary
+                                                .withValues(alpha: 0.9),
+                                        height: 1.3,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+
+                            // Main message content
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.fromLTRB(
+                                  12,
+                                  message.replyTo != null
+                                      ? 8
+                                      : 12, // Less top padding if reply present
+                                  12,
+                                  8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Message content
+                                  _buildMessageContent(),
+
+                                  const SizedBox(height: 4),
+
+                                  // Message metadata (time, status)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (message.isEdited)
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(right: 4),
+                                          child: Text(
+                                            'edited',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: isMe
+                                                  ? Colors.white
+                                                      .withValues(alpha: 0.7)
+                                                  : AppTheme.textTertiary,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ),
+                                      Text(
+                                        _formatTime(message.createdAt),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: isMe
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.7)
+                                              : AppTheme.textTertiary,
+                                        ),
+                                      ),
+                                      if (isMe) ...[
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          _getStatusIcon(),
+                                          size: 14,
+                                          color: Colors.white
+                                              .withValues(alpha: 0.7),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+
+              // Right side spacing for current user messages
+              if (isMe) const SizedBox(width: 4),
+            ],
           ),
-          if (isMe) const SizedBox(width: 20),
-        ],
+        ),
       ),
     );
   }
@@ -229,8 +406,9 @@ class MessageBubble extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color:
-                isMe ? Colors.white.withOpacity(0.1) : AppTheme.backgroundColor,
+            color: isMe
+                ? Colors.white.withValues(alpha: 0.1)
+                : AppTheme.backgroundColor,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -257,7 +435,7 @@ class MessageBubble extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         color: isMe
-                            ? Colors.white.withOpacity(0.7)
+                            ? Colors.white.withValues(alpha: 0.7)
                             : AppTheme.textSecondary,
                       ),
                     ),
@@ -276,8 +454,9 @@ class MessageBubble extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color:
-                isMe ? Colors.white.withOpacity(0.1) : AppTheme.backgroundColor,
+            color: isMe
+                ? Colors.white.withValues(alpha: 0.1)
+                : AppTheme.backgroundColor,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -296,7 +475,7 @@ class MessageBubble extends StatelessWidget {
                       height: 3,
                       decoration: BoxDecoration(
                         color: isMe
-                            ? Colors.white.withOpacity(0.3)
+                            ? Colors.white.withValues(alpha: 0.3)
                             : AppTheme.borderColor,
                         borderRadius: BorderRadius.circular(2),
                       ),
@@ -317,7 +496,7 @@ class MessageBubble extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         color: isMe
-                            ? Colors.white.withOpacity(0.7)
+                            ? Colors.white.withValues(alpha: 0.7)
                             : AppTheme.textSecondary,
                       ),
                     ),
@@ -394,7 +573,13 @@ class MessageBubble extends StatelessWidget {
                 title: const Text('Copy'),
                 onTap: () {
                   Navigator.of(context).pop();
-                  // TODO: Implement copy to clipboard
+
+                  Clipboard.setData(ClipboardData(text: message.content ?? ''));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Message copied to clipboard'),
+                    ),
+                  );
                 },
               ),
               if (onEdit != null)
