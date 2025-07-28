@@ -24,7 +24,8 @@ class MessageBubble extends StatelessWidget {
     return GestureDetector(
       onLongPress: () => _showMessageOptions(context),
       child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMe) ...[
@@ -48,7 +49,8 @@ class MessageBubble extends StatelessWidget {
                 maxWidth: MediaQuery.of(context).size.width * 0.75,
               ),
               child: Column(
-                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
                   // Reply-to message (if any)
                   if (message.replyTo != null)
@@ -56,7 +58,7 @@ class MessageBubble extends StatelessWidget {
                       margin: const EdgeInsets.only(bottom: 4),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: isMe 
+                        color: isMe
                             ? Colors.white.withOpacity(0.2)
                             : AppTheme.backgroundColor,
                         borderRadius: BorderRadius.circular(8),
@@ -75,7 +77,8 @@ class MessageBubble extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: isMe ? Colors.white : AppTheme.primaryColor,
+                              color:
+                                  isMe ? Colors.white : AppTheme.primaryColor,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -83,7 +86,7 @@ class MessageBubble extends StatelessWidget {
                             message.replyTo!.displayContent,
                             style: TextStyle(
                               fontSize: 12,
-                              color: isMe 
+                              color: isMe
                                   ? Colors.white.withOpacity(0.8)
                                   : AppTheme.textSecondary,
                             ),
@@ -96,7 +99,8 @@ class MessageBubble extends StatelessWidget {
 
                   // Main message bubble
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: isMe ? AppTheme.primaryColor : Colors.white,
                       borderRadius: BorderRadius.only(
@@ -118,9 +122,9 @@ class MessageBubble extends StatelessWidget {
                       children: [
                         // Message content
                         _buildMessageContent(),
-                        
+
                         const SizedBox(height: 4),
-                        
+
                         // Message metadata (time, status)
                         Row(
                           mainAxisSize: MainAxisSize.min,
@@ -132,7 +136,7 @@ class MessageBubble extends StatelessWidget {
                                   'edited',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: isMe 
+                                    color: isMe
                                         ? Colors.white.withOpacity(0.7)
                                         : AppTheme.textTertiary,
                                     fontStyle: FontStyle.italic,
@@ -143,7 +147,7 @@ class MessageBubble extends StatelessWidget {
                               _formatTime(message.createdAt),
                               style: TextStyle(
                                 fontSize: 10,
-                                color: isMe 
+                                color: isMe
                                     ? Colors.white.withOpacity(0.7)
                                     : AppTheme.textTertiary,
                               ),
@@ -182,7 +186,7 @@ class MessageBubble extends StatelessWidget {
             height: 1.3,
           ),
         );
-      
+
       case MessageType.image:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,14 +224,13 @@ class MessageBubble extends StatelessWidget {
             ],
           ],
         );
-      
+
       case MessageType.file:
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isMe 
-                ? Colors.white.withOpacity(0.1)
-                : AppTheme.backgroundColor,
+            color:
+                isMe ? Colors.white.withOpacity(0.1) : AppTheme.backgroundColor,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -253,7 +256,7 @@ class MessageBubble extends StatelessWidget {
                       message.metadata?['filesize'] ?? '',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isMe 
+                        color: isMe
                             ? Colors.white.withOpacity(0.7)
                             : AppTheme.textSecondary,
                       ),
@@ -268,14 +271,13 @@ class MessageBubble extends StatelessWidget {
             ],
           ),
         );
-      
+
       case MessageType.audio:
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isMe 
-                ? Colors.white.withOpacity(0.1)
-                : AppTheme.backgroundColor,
+            color:
+                isMe ? Colors.white.withOpacity(0.1) : AppTheme.backgroundColor,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -293,7 +295,7 @@ class MessageBubble extends StatelessWidget {
                     Container(
                       height: 3,
                       decoration: BoxDecoration(
-                        color: isMe 
+                        color: isMe
                             ? Colors.white.withOpacity(0.3)
                             : AppTheme.borderColor,
                         borderRadius: BorderRadius.circular(2),
@@ -314,7 +316,7 @@ class MessageBubble extends StatelessWidget {
                       message.metadata?['duration'] ?? '0:00',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isMe 
+                        color: isMe
                             ? Colors.white.withOpacity(0.7)
                             : AppTheme.textSecondary,
                       ),
@@ -325,7 +327,7 @@ class MessageBubble extends StatelessWidget {
             ],
           ),
         );
-      
+
       default:
         return Text(
           message.content ?? '',
@@ -341,7 +343,7 @@ class MessageBubble extends StatelessWidget {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
-    
+
     if (messageDate == today) {
       // Same day - show time
       final hour = dateTime.hour.toString().padLeft(2, '0');
@@ -372,55 +374,58 @@ class MessageBubble extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (onReply != null)
+      builder: (context) => SafeArea(
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (onReply != null)
+                ListTile(
+                  leading: const Icon(Icons.reply),
+                  title: const Text('Reply'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onReply!(message);
+                  },
+                ),
               ListTile(
-                leading: const Icon(Icons.reply),
-                title: const Text('Reply'),
+                leading: const Icon(Icons.copy),
+                title: const Text('Copy'),
                 onTap: () {
                   Navigator.of(context).pop();
-                  onReply!(message);
+                  // TODO: Implement copy to clipboard
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.copy),
-              title: const Text('Copy'),
-              onTap: () {
-                Navigator.of(context).pop();
-                // TODO: Implement copy to clipboard
-              },
-            ),
-            if (onEdit != null)
+              if (onEdit != null)
+                ListTile(
+                  leading: const Icon(Icons.edit),
+                  title: const Text('Edit'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onEdit!(message);
+                  },
+                ),
+              if (onDelete != null)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: AppTheme.errorColor),
+                  title: const Text('Delete',
+                      style: TextStyle(color: AppTheme.errorColor)),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onDelete!(message);
+                  },
+                ),
               ListTile(
-                leading: const Icon(Icons.edit),
-                title: const Text('Edit'),
+                leading: const Icon(Icons.info_outline),
+                title: const Text('Message Info'),
                 onTap: () {
                   Navigator.of(context).pop();
-                  onEdit!(message);
+                  _showMessageInfo(context);
                 },
               ),
-            if (onDelete != null)
-              ListTile(
-                leading: const Icon(Icons.delete, color: AppTheme.errorColor),
-                title: const Text('Delete', style: TextStyle(color: AppTheme.errorColor)),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  onDelete!(message);
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('Message Info'),
-              onTap: () {
-                Navigator.of(context).pop();
-                _showMessageInfo(context);
-              },
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -437,7 +442,8 @@ class MessageBubble extends StatelessWidget {
           children: [
             _buildInfoRow('Sent', _formatFullDateTime(message.createdAt)),
             if (message.deliveredAt != null)
-              _buildInfoRow('Delivered', _formatFullDateTime(message.deliveredAt!)),
+              _buildInfoRow(
+                  'Delivered', _formatFullDateTime(message.deliveredAt!)),
             if (message.readAt != null)
               _buildInfoRow('Read', _formatFullDateTime(message.readAt!)),
             if (message.isEdited)
@@ -479,7 +485,7 @@ class MessageBubble extends StatelessWidget {
     final year = dateTime.year;
     final hour = dateTime.hour.toString().padLeft(2, '0');
     final minute = dateTime.minute.toString().padLeft(2, '0');
-    
+
     return '$day/$month/$year $hour:$minute';
   }
-} 
+}

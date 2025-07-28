@@ -148,6 +148,33 @@ class ClassManagementService {
     }
   }
 
+  /// Get subjects for a specific class with their lessons
+  Future<List<Map<String, dynamic>>> getClassSubjects(String classId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/classes/$classId/subjects'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> subjectsJson = data['subjects'] ?? [];
+
+        return subjectsJson.cast<Map<String, dynamic>>();
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied to this class');
+      } else {
+        throw Exception(
+            'Failed to fetch class subjects: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching class subjects: $e');
+    }
+  }
+
   /// Create a new class (teachers only)
   Future<ClassModel> createClass({
     required String name,
