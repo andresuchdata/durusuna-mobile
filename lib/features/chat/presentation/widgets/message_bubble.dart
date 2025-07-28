@@ -172,52 +172,11 @@ class MessageBubble extends StatelessWidget {
                         ),
                       ],
 
-                      // Reply preview (if this message is a reply)
-                      if (message.replyTo != null) ...[
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 4),
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: (isMe ? Colors.white : AppTheme.primaryColor)
-                                .withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                message.replyTo!.isFromMe ? 'You' : 'Them',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: isMe
-                                      ? AppTheme.primaryColor
-                                      : Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                message.replyTo!.displayContent,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: (isMe
-                                          ? AppTheme.textSecondary
-                                          : Colors.white)
-                                      .withValues(alpha: 0.8),
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-
-                      // Main message bubble
+                      // Unified message bubble (includes reply if present)
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.all(
+                            0), // No padding here, handled inside
                         decoration: BoxDecoration(
                           color: isSelected
                               ? (isMe
@@ -244,48 +203,144 @@ class MessageBubble extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Message content
-                            _buildMessageContent(),
-
-                            const SizedBox(height: 4),
-
-                            // Message metadata (time, status)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (message.isEdited)
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 4),
-                                    child: Text(
-                                      'edited',
+                            // Reply preview integrated at the top (if this message is a reply)
+                            if (message.replyTo != null) ...[
+                              Container(
+                                width: double.infinity,
+                                padding:
+                                    const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                                decoration: BoxDecoration(
+                                  color: isMe
+                                      ? Colors.white.withValues(alpha: 0.15)
+                                      : AppTheme.primaryColor
+                                          .withValues(alpha: 0.08),
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(16),
+                                    topRight: Radius.circular(16),
+                                  ),
+                                  border: Border(
+                                    left: BorderSide(
+                                      color: isMe
+                                          ? Colors.white.withValues(alpha: 0.8)
+                                          : AppTheme.primaryColor,
+                                      width: 3,
+                                    ),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Sender name of the replied message
+                                    Text(
+                                      message.replyTo!.isFromMe
+                                          ? 'You'
+                                          : (message.replyTo!.sender
+                                                  ?.displayName ??
+                                              'Unknown'),
                                       style: TextStyle(
-                                        fontSize: 10,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: isMe
+                                            ? Colors.white
+                                                .withValues(alpha: 0.9)
+                                            : AppTheme.primaryColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+
+                                    // Content of the replied message
+                                    Text(
+                                      message.replyTo!.displayContent,
+                                      style: TextStyle(
+                                        fontSize: 13,
                                         color: isMe
                                             ? Colors.white
                                                 .withValues(alpha: 0.7)
-                                            : AppTheme.textTertiary,
-                                        fontStyle: FontStyle.italic,
+                                            : AppTheme.textSecondary
+                                                .withValues(alpha: 0.8),
+                                        height: 1.2,
                                       ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                Text(
-                                  _formatTime(message.createdAt),
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: isMe
-                                        ? Colors.white.withValues(alpha: 0.7)
-                                        : AppTheme.textTertiary,
-                                  ),
+                                  ],
                                 ),
-                                if (isMe) ...[
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    _getStatusIcon(),
-                                    size: 14,
-                                    color: Colors.white.withValues(alpha: 0.7),
+                              ),
+
+                              // Subtle divider between reply and content
+                              Container(
+                                height: 1,
+                                margin:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                color: isMe
+                                    ? Colors.white.withValues(alpha: 0.2)
+                                    : AppTheme.borderColor
+                                        .withValues(alpha: 0.3),
+                              ),
+                            ],
+
+                            // Main message content
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.fromLTRB(
+                                  12,
+                                  message.replyTo != null
+                                      ? 8
+                                      : 12, // Less top padding if reply present
+                                  12,
+                                  8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Message content
+                                  _buildMessageContent(),
+
+                                  const SizedBox(height: 4),
+
+                                  // Message metadata (time, status)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (message.isEdited)
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(right: 4),
+                                          child: Text(
+                                            'edited',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: isMe
+                                                  ? Colors.white
+                                                      .withValues(alpha: 0.7)
+                                                  : AppTheme.textTertiary,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ),
+                                      Text(
+                                        _formatTime(message.createdAt),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: isMe
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.7)
+                                              : AppTheme.textTertiary,
+                                        ),
+                                      ),
+                                      if (isMe) ...[
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          _getStatusIcon(),
+                                          size: 14,
+                                          color: Colors.white
+                                              .withValues(alpha: 0.7),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ],
-                              ],
+                              ),
                             ),
                           ],
                         ),
@@ -358,8 +413,9 @@ class MessageBubble extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color:
-                isMe ? Colors.white.withOpacity(0.1) : AppTheme.backgroundColor,
+            color: isMe
+                ? Colors.white.withValues(alpha: 0.1)
+                : AppTheme.backgroundColor,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -386,7 +442,7 @@ class MessageBubble extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         color: isMe
-                            ? Colors.white.withOpacity(0.7)
+                            ? Colors.white.withValues(alpha: 0.7)
                             : AppTheme.textSecondary,
                       ),
                     ),
@@ -405,8 +461,9 @@ class MessageBubble extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color:
-                isMe ? Colors.white.withOpacity(0.1) : AppTheme.backgroundColor,
+            color: isMe
+                ? Colors.white.withValues(alpha: 0.1)
+                : AppTheme.backgroundColor,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -425,7 +482,7 @@ class MessageBubble extends StatelessWidget {
                       height: 3,
                       decoration: BoxDecoration(
                         color: isMe
-                            ? Colors.white.withOpacity(0.3)
+                            ? Colors.white.withValues(alpha: 0.3)
                             : AppTheme.borderColor,
                         borderRadius: BorderRadius.circular(2),
                       ),
@@ -446,7 +503,7 @@ class MessageBubble extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         color: isMe
-                            ? Colors.white.withOpacity(0.7)
+                            ? Colors.white.withValues(alpha: 0.7)
                             : AppTheme.textSecondary,
                       ),
                     ),
@@ -523,7 +580,13 @@ class MessageBubble extends StatelessWidget {
                 title: const Text('Copy'),
                 onTap: () {
                   Navigator.of(context).pop();
-                  // TODO: Implement copy to clipboard
+
+                  Clipboard.setData(ClipboardData(text: message.content ?? ''));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Message copied to clipboard'),
+                    ),
+                  );
                 },
               ),
               if (onEdit != null)

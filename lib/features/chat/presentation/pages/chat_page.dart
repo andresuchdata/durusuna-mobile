@@ -324,15 +324,44 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _sendMessage({String? content, MessageType? messageType}) async {
     if (content?.trim().isEmpty ?? true) return;
 
+    // Validate reply ID - ensure it's a proper UUID, not a temporary ID
+    String? validReplyToId;
+    if (_replyingToMessage != null) {
+      final replyId = _replyingToMessage!.id;
+      if (!replyId.startsWith('temp_') && !replyId.startsWith('last_')) {
+        validReplyToId = replyId;
+      } else {
+        // Clear invalid reply and show warning
+        setState(() {
+          _replyingToMessage = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot reply to message that is still sending'),
+            backgroundColor: AppTheme.warningColor,
+          ),
+        );
+      }
+    }
+
     try {
       await ref
           .read(chatMessagesProvider(widget.conversation.id).notifier)
           .sendMessage(
             content: content,
             messageType: messageType ?? MessageType.text,
+            replyToId: validReplyToId, // Only include if valid UUID
           );
 
       _messageController.clear();
+
+      // Clear reply state after sending
+      if (_replyingToMessage != null) {
+        setState(() {
+          _replyingToMessage = null;
+        });
+      }
+
       _scrollToBottom(animated: true);
 
       // Ensure conversation is marked as read when user sends a message
@@ -802,13 +831,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       appBar: _buildAppBar(),
       body: Column(
         children: [
-          // Reply preview
-          if (_replyingToMessage != null)
-            ReplyPreview(
-              replyToMessage: _replyingToMessage!,
-              onCancel: _cancelReply,
-            ),
-
           // Messages list
           Expanded(
             child: messagesState.isLoading && messagesState.messages.isEmpty
@@ -878,6 +900,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   ),
                 ],
               ),
+            ),
+
+          // Reply preview - positioned just above text input
+          if (_replyingToMessage != null)
+            ReplyPreview(
+              replyToMessage: _replyingToMessage!,
+              onCancel: _cancelReply,
             ),
 
           // Chat input
@@ -1026,6 +1055,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _replyToMessage(Message message) {
+    // Only allow replies to messages with proper server UUIDs (not temporary IDs)
+    if (message.id.startsWith('temp_') || message.id.startsWith('last_')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot reply to message that is still sending'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _replyingToMessage = message;
       _isSelectionMode = false;

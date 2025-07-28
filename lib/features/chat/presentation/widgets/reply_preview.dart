@@ -15,47 +15,69 @@ class ReplyPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.grey[50],
         border: Border(
           top: BorderSide(
-            color: AppTheme.borderColor.withOpacity(0.3),
+            color: AppTheme.borderColor.withValues(alpha: 0.5),
             width: 1,
-          ),
-          left: BorderSide(
-            color: AppTheme.primaryColor,
-            width: 4,
           ),
         ),
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.reply,
-            color: AppTheme.primaryColor,
-            size: 20,
+          // Reply icon with colored background
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              Icons.reply,
+              color: AppTheme.primaryColor,
+              size: 16,
+            ),
           ),
           const SizedBox(width: 12),
+
+          // Vertical line indicator
+          Container(
+            width: 3,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 12),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Sender name
                 Text(
-                  'Replying to ${replyToMessage.isFromMe ? 'yourself' : replyToMessage.sender?.displayName ?? 'Unknown'}',
+                  replyToMessage.isFromMe
+                      ? 'You'
+                      : replyToMessage.sender?.displayName ?? 'Unknown',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppTheme.primaryColor,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
+
+                // Message content
                 Text(
                   replyToMessage.displayContent,
                   style: const TextStyle(
                     fontSize: 14,
                     color: AppTheme.textSecondary,
+                    height: 1.2,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -63,18 +85,22 @@ class ReplyPreview extends StatelessWidget {
               ],
             ),
           ),
-          IconButton(
-            icon: Icon(
-              Icons.close,
-              color: AppTheme.textSecondary,
-              size: 20,
+
+          // Close button
+          GestureDetector(
+            onTap: onCancel,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppTheme.textSecondary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.close,
+                color: AppTheme.textSecondary,
+                size: 16,
+              ),
             ),
-            onPressed: onCancel,
-            constraints: const BoxConstraints(
-              minWidth: 32,
-              minHeight: 32,
-            ),
-            padding: const EdgeInsets.all(4),
           ),
         ],
       ),
