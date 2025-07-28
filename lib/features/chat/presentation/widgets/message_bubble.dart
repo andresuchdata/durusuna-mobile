@@ -179,10 +179,10 @@ class MessageBubble extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: isMe ? AppTheme.primaryColor : Colors.white,
                           borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(16),
-                            topRight: const Radius.circular(16),
-                            bottomLeft: Radius.circular(isMe ? 16 : 4),
-                            bottomRight: Radius.circular(isMe ? 4 : 16),
+                            topLeft: const Radius.circular(8),
+                            topRight: const Radius.circular(8),
+                            bottomLeft: Radius.circular(isMe ? 8 : 4),
+                            bottomRight: Radius.circular(isMe ? 4 : 8),
                           ),
                           border: isSelected
                               ? Border.all(
@@ -212,96 +212,64 @@ class MessageBubble extends StatelessWidget {
                           children: [
                             // Reply preview integrated at the top (if this message is a reply)
                             if (message.replyTo != null) ...[
-                              IntrinsicHeight(
-                                child: Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
+                              Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: isMe
+                                      ? Colors.white.withValues(alpha: 0.2)
+                                      : AppTheme.primaryColor
+                                          .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border(
+                                    left: BorderSide(
+                                      color: isMe
+                                          ? Colors.white.withValues(alpha: 0.9)
+                                          : AppTheme.primaryColor,
+                                      width: 4,
+                                    ),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    // Straight left border bar
-                                    Container(
-                                      width: 4.5,
-                                      margin: const EdgeInsets.only(
-                                          left: 12, top: 12, bottom: 8),
-                                      decoration: BoxDecoration(
+                                    // Sender name of the replied message
+                                    Text(
+                                      message.replyTo!.isFromMe
+                                          ? 'You'
+                                          : (message.replyTo!.sender
+                                                  ?.displayName ??
+                                              'Unknown'),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
                                         color: isMe
                                             ? Colors.white
                                                 .withValues(alpha: 0.9)
                                             : AppTheme.primaryColor,
-                                        borderRadius: BorderRadius.circular(1),
                                       ),
                                     ),
-                                    // Reply content
-                                    Expanded(
-                                      child: Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.fromLTRB(
-                                            8, 12, 12, 8),
-                                        decoration: BoxDecoration(
-                                          color: isMe
-                                              ? Colors.white
-                                                  .withValues(alpha: 0.15)
-                                              : AppTheme.primaryColor
-                                                  .withValues(alpha: 0.08),
-                                          borderRadius: const BorderRadius.only(
-                                            topLeft: Radius.circular(16),
-                                            topRight: Radius.circular(16),
-                                          ),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            // Sender name of the replied message
-                                            Text(
-                                              message.replyTo!.isFromMe
-                                                  ? 'You'
-                                                  : (message.replyTo!.sender
-                                                          ?.displayName ??
-                                                      'Unknown'),
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                                color: isMe
-                                                    ? Colors.white
-                                                        .withValues(alpha: 0.9)
-                                                    : AppTheme.primaryColor,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
+                                    const SizedBox(height: 4),
 
-                                            // Content of the replied message
-                                            Text(
-                                              message.replyTo!.displayContent,
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: isMe
-                                                    ? Colors.white
-                                                        .withValues(alpha: 0.7)
-                                                    : AppTheme.textSecondary
-                                                        .withValues(alpha: 0.8),
-                                                height: 1.2,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
-                                        ),
+                                    // Content of the replied message
+                                    Text(
+                                      message.replyTo!.displayContent,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: isMe
+                                            ? Colors.white
+                                                .withValues(alpha: 0.8)
+                                            : AppTheme.textSecondary
+                                                .withValues(alpha: 0.9),
+                                        height: 1.3,
                                       ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ],
                                 ),
-                              ),
-
-                              // Subtle divider between reply and content
-                              Container(
-                                height: 1,
-                                margin:
-                                    const EdgeInsets.symmetric(horizontal: 12),
-                                color: isMe
-                                    ? Colors.white.withValues(alpha: 0.2)
-                                    : AppTheme.borderColor
-                                        .withValues(alpha: 0.3),
                               ),
                             ],
 
