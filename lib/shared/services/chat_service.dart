@@ -25,8 +25,6 @@ class ChatService {
             return Conversation.fromJson(json);
           } catch (e) {
             // Enhanced error logging for debugging
-            print('❌ Error parsing conversation: $e');
-            print('📄 Conversation JSON: ${json.toString()}');
             rethrow;
           }
         }).toList();
@@ -441,6 +439,7 @@ class ConversationsState {
 class ConversationsNotifier extends StateNotifier<ConversationsState> {
   final ChatService _chatService;
   final Ref _ref;
+  final Set<String> _processedMessageIds = {}; // Track processed message IDs
 
   ConversationsNotifier(this._chatService, this._ref)
       : super(ConversationsState()) {
@@ -465,7 +464,24 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
   }
 
   void updateConversationLastMessage(String conversationId, Message message) {
+    // Check for duplicate processing
+    if (_processedMessageIds.contains(message.id)) {
+      return;
+    }
+
+    // Mark message as processed
+    _processedMessageIds.add(message.id);
+
+    // Cleanup: Keep only the last 100 processed message IDs to prevent memory issues
+    if (_processedMessageIds.length > 100) {
+      final messagesList = _processedMessageIds.toList();
+      _processedMessageIds.clear();
+      _processedMessageIds
+          .addAll(messagesList.skip(messagesList.length - 50)); // Keep last 50
+    }
+
     final index = state.conversations.indexWhere((c) => c.id == conversationId);
+
     if (index != -1) {
       final conversation = state.conversations[index];
 
@@ -518,8 +534,6 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
       updatedConversations.insert(0, updatedConversation);
 
       state = state.copyWith(conversations: updatedConversations);
-    } else {
-      // Conversation not found in list
     }
   }
 
@@ -556,8 +570,6 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
         .indexWhere((c) => c.type == 'direct' && c.otherUser?.id == userId);
 
     if (index != -1) {
-      final conversation = state.conversations[index];
-
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = updatedConversations[index].copyWith(
         isOnline: isOnline,
