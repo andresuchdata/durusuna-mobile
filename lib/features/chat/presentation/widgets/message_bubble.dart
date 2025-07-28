@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/message.dart';
@@ -6,171 +7,228 @@ import '../../../../shared/models/message.dart';
 class MessageBubble extends StatelessWidget {
   final Message message;
   final bool isMe;
+  final bool isSelected;
+  final bool isSelectionMode;
   final Function(Message)? onReply;
   final Function(Message)? onEdit;
   final Function(Message)? onDelete;
+  final Function(Message)? onForward;
+  final Function(Message)? onLongPress;
+  final Function(Message)? onTap;
 
   const MessageBubble({
     super.key,
     required this.message,
     required this.isMe,
+    this.isSelected = false,
+    this.isSelectionMode = false,
     this.onReply,
     this.onEdit,
     this.onDelete,
+    this.onForward,
+    this.onLongPress,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onLongPress: () => _showMessageOptions(context),
-      child: Row(
-        mainAxisAlignment:
-            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMe) ...[
-            CircleAvatar(
-              radius: 12,
-              backgroundColor: AppTheme.primaryColor,
-              child: Text(
-                message.sender?.firstName[0] ?? 'U',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.75,
-              ),
-              child: Column(
-                crossAxisAlignment:
-                    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                children: [
-                  // Reply-to message (if any)
-                  if (message.replyTo != null)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isMe
-                            ? Colors.white.withOpacity(0.2)
-                            : AppTheme.backgroundColor,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border(
-                          left: BorderSide(
-                            color: isMe ? Colors.white : AppTheme.primaryColor,
-                            width: 3,
-                          ),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            message.replyTo!.sender?.displayName ?? 'Unknown',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color:
-                                  isMe ? Colors.white : AppTheme.primaryColor,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            message.replyTo!.displayContent,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isMe
-                                  ? Colors.white.withOpacity(0.8)
-                                  : AppTheme.textSecondary,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+      onLongPress: () {
+        HapticFeedback.mediumImpact();
+        if (onLongPress != null) {
+          onLongPress!(message);
+        } else {
+          _showMessageOptions(context);
+        }
+      },
+      onTap: isSelectionMode && onTap != null ? () => onTap!(message) : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.primaryColor.withOpacity(0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment:
+                isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!isMe) const SizedBox(width: 20),
+
+              // Selection indicator for selection mode
+              if (isSelectionMode) ...[
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: isMe ? 0 : 8,
+                    right: isMe ? 8 : 0,
+                  ),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected
+                          ? AppTheme.primaryColor
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.primaryColor
+                            : AppTheme.textTertiary,
+                        width: 2,
                       ),
                     ),
+                    child: isSelected
+                        ? const Icon(
+                            Icons.check,
+                            size: 16,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                ),
+              ],
 
-                  // Main message bubble
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isMe ? AppTheme.primaryColor : Colors.white,
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(16),
-                        topRight: const Radius.circular(16),
-                        bottomLeft: Radius.circular(isMe ? 16 : 4),
-                        bottomRight: Radius.circular(isMe ? 4 : 16),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 5,
-                          offset: const Offset(0, 1),
+              // Message content container
+              Flexible(
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.75,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: isMe
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    children: [
+                      // Reply preview (if this message is a reply)
+                      if (message.replyTo != null) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 4),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: (isMe ? Colors.white : AppTheme.primaryColor)
+                                .withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                message.replyTo!.isFromMe ? 'You' : 'Them',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: isMe
+                                      ? AppTheme.primaryColor
+                                      : Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                message.replyTo!.displayContent,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: (isMe
+                                          ? AppTheme.textSecondary
+                                          : Colors.white)
+                                      .withOpacity(0.8),
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Message content
-                        _buildMessageContent(),
 
-                        const SizedBox(height: 4),
-
-                        // Message metadata (time, status)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
+                      // Main message bubble
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? (isMe
+                                  ? AppTheme.primaryColor.withOpacity(0.8)
+                                  : AppTheme.primaryColor.withOpacity(0.2))
+                              : (isMe ? AppTheme.primaryColor : Colors.white),
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(16),
+                            topRight: const Radius.circular(16),
+                            bottomLeft: Radius.circular(isMe ? 16 : 4),
+                            bottomRight: Radius.circular(isMe ? 4 : 16),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isSelected
+                                  ? AppTheme.primaryColor.withOpacity(0.3)
+                                  : Colors.black.withOpacity(0.05),
+                              blurRadius: isSelected ? 8 : 5,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (message.isEdited)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Text(
-                                  'edited',
+                            // Message content
+                            _buildMessageContent(),
+
+                            const SizedBox(height: 4),
+
+                            // Message metadata (time, status)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (message.isEdited)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 4),
+                                    child: Text(
+                                      'edited',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: isMe
+                                            ? Colors.white.withOpacity(0.7)
+                                            : AppTheme.textTertiary,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                Text(
+                                  _formatTime(message.createdAt),
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: isMe
                                         ? Colors.white.withOpacity(0.7)
                                         : AppTheme.textTertiary,
-                                    fontStyle: FontStyle.italic,
                                   ),
                                 ),
-                              ),
-                            Text(
-                              _formatTime(message.createdAt),
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: isMe
-                                    ? Colors.white.withOpacity(0.7)
-                                    : AppTheme.textTertiary,
-                              ),
+                                if (isMe) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    _getStatusIcon(),
+                                    size: 14,
+                                    color: Colors.white.withOpacity(0.7),
+                                  ),
+                                ],
+                              ],
                             ),
-                            if (isMe) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                _getStatusIcon(),
-                                size: 14,
-                                color: Colors.white.withOpacity(0.7),
-                              ),
-                            ],
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+              if (isMe) const SizedBox(width: 20),
+            ],
           ),
-          if (isMe) const SizedBox(width: 20),
-        ],
+        ),
       ),
     );
   }

@@ -295,28 +295,7 @@ class ConversationTile extends StatelessWidget {
                   )
                 : null,
           ),
-          if (conversation.type == 'direct' && conversation.isOnline) ...[
-            Positioned(
-              bottom: 0,
-              right: 0,
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: Colors.green, // Force bright green like chat page
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 2,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          // Removed online indicator for direct conversations - only show in actual chat page
           if (conversation.type == 'group')
             Positioned(
               bottom: 0,

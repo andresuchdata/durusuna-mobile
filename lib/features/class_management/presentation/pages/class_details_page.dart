@@ -7,6 +7,7 @@ import '../../../../shared/services/class_management_service.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
 import '../widgets/lesson_tile.dart';
+import 'subject_details_page.dart';
 
 // Providers for class details data
 final classSubjectsProvider =
@@ -73,14 +74,11 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 _buildClassHeader(subjects),
                 Expanded(
                   child: ListView.builder(
+                    padding: EdgeInsets.zero, // Remove default ListView padding
                     itemCount: subjects.length,
                     itemBuilder: (context, index) {
                       final subject = subjects[index];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        child: _buildSubjectCard(subject),
-                      );
+                      return _buildSubjectCard(subject);
                     },
                   ),
                 ),
@@ -110,7 +108,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
 
   Widget _buildClassHeader(List<Map<String, dynamic>> subjects) {
     return Container(
-      height: 120,
+      height: 100, // Reduced height since we removed class name
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -127,23 +125,16 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
           mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              widget.classModel.displayName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 4),
+            // Removed redundant class name - it's already in the navbar
             Text(
               '${widget.classModel.academicYear} • ${subjects.length} subjects',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 14,
+                fontSize: 16, // Slightly larger since it's now the main text
+                fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16), // Reduced bottom spacing
           ],
         ),
       ),
@@ -154,132 +145,126 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     final lessons = subject['lessons'] as List<dynamic>? ?? [];
     final teacher = subject['teacher'] as Map<String, dynamic>? ?? {};
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ExpansionTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
+    return Material(
+      color: Colors.white,
+      child: InkWell(
+        onTap: () => _navigateToSubjectDetails(subject),
+        child: Container(
+          width: double.infinity, // Full width
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: Color(0xFFE5E5E5),
+                width: 0.5,
+              ),
+            ),
           ),
-          child: Icon(
-            Icons.book,
-            color: AppTheme.primaryColor,
-            size: 24,
-          ),
-        ),
-        title: Text(
-          subject['subject_name'] ?? 'Subject',
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        subtitle: Text(
-          '${subject['hours_per_week'] ?? 0} hours/week • ${lessons.length} lessons',
-          style: const TextStyle(
-            fontSize: 14,
-            color: AppTheme.textSecondary,
-          ),
-        ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Subject info
-                if (subject['subject_description'] != null) ...[
-                  Text(
-                    subject['subject_description'],
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                Row(
+          child: Row(
+            children: [
+              // Subject icon - clean and minimal
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  _getSubjectIcon(subject['subject_name']),
+                  color: AppTheme.primaryColor,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // Subject content - expanded to take available space
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.person,
-                        size: 16, color: AppTheme.textSecondary),
-                    const SizedBox(width: 4),
+                    // Subject name - clean typography
                     Text(
-                      'Teacher: ${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}',
+                      subject['subject_name'] ?? 'Subject',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Stats row - hours and lessons
+                    Text(
+                      '${subject['hours_per_week'] ?? 0} hours/week • ${lessons.length} lessons',
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppTheme.textSecondary,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+
+                    // Teacher name - minimal design
+                    Text(
+                      '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'
+                          .trim(),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary.withOpacity(0.8),
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ],
                 ),
-                if (subject['classroom'] != null) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.room,
-                          size: 16, color: AppTheme.textSecondary),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Classroom: ${subject['classroom']}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 16),
+              ),
 
-                // Lessons section
-                if (lessons.isNotEmpty) ...[
-                  const Text(
-                    'Recent Lessons:',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...lessons.take(3).map((lesson) {
-                    final lessonMap = lesson as Map<String, dynamic>;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: LessonTile(
-                        lesson: lessonMap,
-                        onTap: () => _showLessonDetails(lessonMap),
-                      ),
-                    );
-                  }).toList(),
-                  if (lessons.length > 3) ...[
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () {
-                        // TODO: Navigate to full lessons list
-                      },
-                      child: Text('View all ${lessons.length} lessons'),
-                    ),
-                  ],
-                ] else ...[
-                  const Text(
-                    'No lessons yet for this subject',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.textSecondary,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+              // Clean arrow indicator
+              Icon(
+                Icons.chevron_right,
+                color: AppTheme.textSecondary.withOpacity(0.6),
+                size: 20,
+              ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  // Helper method to get appropriate icon for each subject
+  IconData _getSubjectIcon(String? subjectName) {
+    if (subjectName == null) return Icons.book;
+
+    final subject = subjectName.toLowerCase();
+    if (subject.contains('english') || subject.contains('language')) {
+      return Icons.translate;
+    } else if (subject.contains('math')) {
+      return Icons.calculate;
+    } else if (subject.contains('science')) {
+      return Icons.science;
+    } else if (subject.contains('history')) {
+      return Icons.history_edu;
+    } else if (subject.contains('art')) {
+      return Icons.palette;
+    } else if (subject.contains('music')) {
+      return Icons.music_note;
+    } else if (subject.contains('physical') || subject.contains('pe')) {
+      return Icons.sports;
+    } else {
+      return Icons.book;
+    }
+  }
+
+  void _navigateToSubjectDetails(Map<String, dynamic> subject) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SubjectDetailsPage(
+          subject: subject,
+          classModel: widget.classModel,
+        ),
       ),
     );
   }

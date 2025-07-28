@@ -12,6 +12,8 @@ import '../../../../shared/models/conversation.dart';
 import '../../../../shared/widgets/widgets.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
+import '../widgets/chat_action_bar.dart';
+import '../widgets/reply_preview.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   final Conversation conversation;
@@ -42,6 +44,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   // Key for tracking highlighted message
   final Map<String, GlobalKey> _messageKeys = {};
+
+  // Selection mode state
+  final Set<String> _selectedMessageIds = {};
+  bool _isSelectionMode = false;
+  bool _isForwardingMode = false;
+  Message? _replyingToMessage;
 
   @override
   void initState() {
@@ -791,152 +799,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            GestureDetector(
-              onTap: () => _showProfileCard(),
-              child: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppTheme.primaryColor,
-                    backgroundImage: _getAvatarUrl().isNotEmpty
-                        ? NetworkImage(_getAvatarUrl())
-                        : null,
-                    child: _getAvatarUrl().isEmpty
-                        ? Text(
-                            _getInitials(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          )
-                        : null,
-                  ),
-                  // Online indicator for direct conversations
-                  if (widget.conversation.type == 'direct' &&
-                      _isOtherUserOnline)
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: Colors.green, // Force bright green
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => _showProfileCard(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _getDisplayName(),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      _isOtherUserOnline
-                          ? 'Online'
-                          : messagesState.isTyping
-                              ? 'Typing...'
-                              : widget.conversation.lastActivity != null
-                                  ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
-                                  : 'Last seen recently',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: _isOtherUserOnline || messagesState.isTyping
-                            ? AppTheme.successColor
-                            : AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.call),
-            onPressed: () {
-              // TODO: Implement voice call
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Voice call coming soon')),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.videocam),
-            onPressed: () {
-              // TODO: Implement video call
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Video call coming soon')),
-              );
-            },
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'clear':
-                  _showClearChatDialog();
-                  break;
-                case 'block':
-                  _showBlockUserDialog();
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'clear',
-                child: Row(
-                  children: [
-                    Icon(Icons.clear_all, size: 20),
-                    SizedBox(width: 8),
-                    Text('Clear Chat'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'block',
-                child: Row(
-                  children: [
-                    Icon(Icons.block, size: 20, color: AppTheme.errorColor),
-                    SizedBox(width: 8),
-                    Text('Block User',
-                        style: TextStyle(color: AppTheme.errorColor)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      appBar: _buildAppBar(),
       body: Column(
         children: [
+          // Reply preview
+          if (_replyingToMessage != null)
+            ReplyPreview(
+              replyToMessage: _replyingToMessage!,
+              onCancel: _cancelReply,
+            ),
+
           // Messages list
           Expanded(
             child: messagesState.isLoading && messagesState.messages.isEmpty
@@ -1105,9 +977,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   : null,
               message: message,
               isMe: isMe,
+              isSelected: _selectedMessageIds.contains(message.id),
+              isSelectionMode: _isSelectionMode,
               onReply: (msg) => _replyToMessage(msg),
               onEdit: isMe ? (msg) => _editMessage(msg) : null,
               onDelete: isMe ? (msg) => _deleteMessage(msg) : null,
+              onLongPress: (msg) => _enterSelectionMode(msg),
+              onTap: (msg) => _toggleMessageSelection(msg),
             ),
             const SizedBox(height: 4),
           ],
@@ -1147,12 +1023,411 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
   }
+                    children: [
+                      GestureDetector(
+                        onTap: () => _showProfileCard(),
+                        child: Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 20,
+                              backgroundColor: AppTheme.primaryColor,
+                              backgroundImage: _getAvatarUrl().isNotEmpty
+                                  ? NetworkImage(_getAvatarUrl())
+                                  : null,
+                              child: _getAvatarUrl().isEmpty
+                                  ? Text(
+                                      _getInitials(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            // Online indicator for direct conversations
+                            if (widget.conversation.type == 'direct' &&
+                                _isOtherUserOnline)
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                  width: 16,
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    color: Colors.green, // Force bright green
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                        color: Colors.white, width: 3),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.3),
+                                        blurRadius: 2,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _showProfileCard(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _getDisplayName(),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                _isOtherUserOnline
+                                    ? 'Online'
+                                    : messagesState.isTyping
+                                        ? 'Typing...'
+                                        : widget.conversation.lastActivity !=
+                                                null
+                                            ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
+                                            : 'Last seen recently',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _isOtherUserOnline ||
+                                          messagesState.isTyping
+                                      ? AppTheme.successColor
+                                      : AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.call),
+                      onPressed: () {
+                        // TODO: Implement voice call
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Voice call coming soon')),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.videocam),
+                      onPressed: () {
+                        // TODO: Implement video call
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Video call coming soon')),
+                        );
+                      },
+                    ),
+                    PopupMenuButton<String>(
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'clear':
+                            _showClearChatDialog();
+                            break;
+                          case 'block':
+                            _showBlockUserDialog();
+                            break;
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'clear',
+                          child: Row(
+                            children: [
+                              Icon(Icons.clear_all, size: 20),
+                              SizedBox(width: 8),
+                              Text('Clear Chat'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'block',
+                          child: Row(
+                            children: [
+                              Icon(Icons.block,
+                                  size: 20, color: AppTheme.errorColor),
+                              SizedBox(width: 8),
+                              Text('Block User',
+                                  style: TextStyle(color: AppTheme.errorColor)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
 
   void _replyToMessage(Message message) {
-    // TODO: Implement reply functionality
+    setState(() {
+      _replyingToMessage = message;
+      _isSelectionMode = false;
+      _selectedMessageIds.clear();
+    });
+    _focusNode.requestFocus();
+  }
+
+  // Selection mode methods
+  void _enterSelectionMode(Message message) {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedMessageIds.clear();
+      _selectedMessageIds.add(message.id);
+      _replyingToMessage = null; // Cancel any ongoing reply
+    });
+  }
+
+  void _toggleMessageSelection(Message message) {
+    if (!_isSelectionMode) return;
+
+    setState(() {
+      if (_selectedMessageIds.contains(message.id)) {
+        _selectedMessageIds.remove(message.id);
+        if (_selectedMessageIds.isEmpty) {
+          _isSelectionMode = false;
+        }
+      } else {
+        if (_selectedMessageIds.length < 5) {
+          // Max 5 for forwarding
+          _selectedMessageIds.add(message.id);
+        }
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _isForwardingMode = false;
+      _selectedMessageIds.clear();
+    });
+  }
+
+  void _handleReplySelection() {
+    if (_selectedMessageIds.length == 1) {
+      final messagesState =
+          ref.read(chatMessagesProvider(widget.conversation.id));
+      final message = messagesState.messages.firstWhere(
+        (msg) => msg.id == _selectedMessageIds.first,
+      );
+      _replyToMessage(message);
+    }
+  }
+
+  void _handleForwardSelection() {
+    setState(() {
+      _isForwardingMode = true;
+    });
+    // TODO: Show contacts/conversations to forward to
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Reply feature coming soon')),
+      SnackBar(
+        content: Text(
+            'Forward ${_selectedMessageIds.length} message(s) - Select conversation'),
+        action: SnackBarAction(
+          label: 'Cancel',
+          onPressed: _exitSelectionMode,
+        ),
+      ),
     );
+  }
+
+  void _handleDeleteSelection() {
+    // TODO: Implement proper delete functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Delete ${_selectedMessageIds.length} message(s)'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {},
+        ),
+      ),
+    );
+    _exitSelectionMode();
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyingToMessage = null;
+    });
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    if (_isSelectionMode) {
+      return ChatActionBar(
+        selectedCount: _selectedMessageIds.length,
+        canReply: _selectedMessageIds.length == 1,
+        onReply: _handleReplySelection,
+        onForward: _handleForwardSelection,
+        onDelete: _handleDeleteSelection,
+        onCancel: _exitSelectionMode,
+      );
+    } else if (_isForwardingMode) {
+      return ForwardingHeader(
+        selectedCount: _selectedMessageIds.length,
+        onCancel: _exitSelectionMode,
+        onConfirm: () {
+          // TODO: Confirm forward
+          _exitSelectionMode();
+        },
+      );
+    } else {
+      return AppBar(
+        backgroundColor: Colors.white,
+        elevation: 1,
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            GestureDetector(
+              onTap: () => _showProfileCard(),
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppTheme.primaryColor,
+                    backgroundImage: _getAvatarUrl().isNotEmpty
+                        ? NetworkImage(_getAvatarUrl())
+                        : null,
+                    child: _getAvatarUrl().isEmpty
+                        ? Text(
+                            _getInitials(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
+                        : null,
+                  ),
+                  // Online indicator for direct conversations
+                  if (widget.conversation.type == 'direct' &&
+                      _isOtherUserOnline)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: Colors.green, // Force bright green
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 2,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => _showProfileCard(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _getDisplayName(),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      _isOtherUserOnline
+                          ? 'Online'
+                          : messagesState.isTyping
+                              ? 'Typing...'
+                              : widget.conversation.lastActivity != null
+                                  ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
+                                  : 'Last seen recently',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _isOtherUserOnline || messagesState.isTyping
+                            ? AppTheme.successColor
+                            : AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.call),
+            onPressed: () {
+              // TODO: Implement voice call
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Voice call coming soon')),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.videocam),
+            onPressed: () {
+              // TODO: Implement video call
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Video call coming soon')),
+              );
+            },
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              switch (value) {
+                case 'clear':
+                  _showClearChatDialog();
+                  break;
+                case 'block':
+                  _showBlockUserDialog();
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'clear',
+                child: Row(
+                  children: [
+                    Icon(Icons.clear_all, size: 20),
+                    SizedBox(width: 8),
+                    Text('Clear Chat'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'block',
+                child: Row(
+                  children: [
+                    Icon(Icons.block, size: 20, color: AppTheme.errorColor),
+                    SizedBox(width: 8),
+                    Text('Block User',
+                        style: TextStyle(color: AppTheme.errorColor)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
   }
 
   void _editMessage(Message message) {
