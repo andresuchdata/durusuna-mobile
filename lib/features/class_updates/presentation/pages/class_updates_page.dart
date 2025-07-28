@@ -226,6 +226,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
                                       update.authorId == authState.user?.id
                                   ? () => _confirmDeleteUpdate(update)
                                   : null,
+                              onPin: canPost ? () => _togglePin(update) : null,
                             );
                           },
                         ),
@@ -282,6 +283,23 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
           .read(classUpdatesProvider(widget.classId).notifier)
           .loadUpdates(refresh: true);
     }
+  }
+
+  void _togglePin(ClassUpdate update) {
+    ref
+        .read(classUpdatesProvider(widget.classId).notifier)
+        .togglePin(update.id);
+
+    // Show feedback
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          update.isPinned ? 'Update unpinned' : 'Update pinned',
+        ),
+        duration: const Duration(seconds: 2),
+        backgroundColor: AppTheme.successColor,
+      ),
+    );
   }
 
   void _confirmDeleteUpdate(ClassUpdate update) {

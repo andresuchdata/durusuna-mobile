@@ -952,7 +952,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         label: const Text('Leave Group'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.errorColor,
-                          side: BorderSide(color: AppTheme.errorColor),
+                          side: const BorderSide(color: AppTheme.errorColor),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -1040,7 +1040,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           ProfileCard.show(
             context,
             user: member,
-            isOnline: false, // TODO: Get real-time status for group members
+            isOnline: false,
             onStartChat: () {
               Navigator.of(context).pop();
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1136,6 +1136,36 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   /// Get or create a GlobalKey for a message
   GlobalKey _getMessageKey(String messageId) {
     return _messageKeys.putIfAbsent(messageId, () => GlobalKey());
+  }
+
+  /// Scroll to a specific message by ID
+  void _scrollToMessage(String messageId) {
+    final messageKey = _messageKeys[messageId];
+    if (messageKey?.currentContext != null) {
+      Scrollable.ensureVisible(
+        messageKey!.currentContext!,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+
+      // Add brief visual feedback
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Scrolled to original message'),
+          duration: Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      // Message not found in current view (might be outside loaded range)
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Original message not found in current view'),
+          duration: Duration(seconds: 2),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+    }
   }
 
   void _handleReactionTap(Message message, String emoji) async {
@@ -1805,9 +1835,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ),
               ),
             MessageBubble(
-              key: widget.highlightMessageId == message.id
-                  ? _getMessageKey(message.id)
-                  : null,
+              key: _getMessageKey(
+                  message.id), // Always assign key for scroll-to functionality
               message: message,
               isMe: isMe,
               conversationType: widget.conversation.type,
@@ -1821,6 +1850,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               onTap: (msg) => _toggleMessageSelection(msg),
               onReactionTap: (msg, emoji) => _handleReactionTap(msg, emoji),
               onAddReaction: (msg) => _showReactionPicker(msg),
+              onQuotedMessageTap: (msg) => _scrollToMessage(msg.id),
             ),
             const SizedBox(height: 4),
           ],

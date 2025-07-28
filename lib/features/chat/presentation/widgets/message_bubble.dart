@@ -20,6 +20,7 @@ class MessageBubble extends StatelessWidget {
   final Function(Message)? onTap;
   final Function(Message, String)? onReactionTap;
   final Function(Message)? onAddReaction;
+  final Function(Message)? onQuotedMessageTap;
 
   const MessageBubble({
     super.key,
@@ -37,6 +38,7 @@ class MessageBubble extends StatelessWidget {
     this.onTap,
     this.onReactionTap,
     this.onAddReaction,
+    this.onQuotedMessageTap,
   });
 
   bool get _shouldShowAvatar => conversationType == 'group' && !isMe;
@@ -219,63 +221,71 @@ class MessageBubble extends StatelessWidget {
                           children: [
                             // Reply preview integrated at the top (if this message is a reply)
                             if (message.replyTo != null) ...[
-                              Container(
-                                width: double.infinity,
-                                margin: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: isMe
-                                      ? Colors.white.withValues(alpha: 0.2)
-                                      : AppTheme.primaryColor
-                                          .withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border(
-                                    left: BorderSide(
-                                      color: isMe
-                                          ? Colors.white.withValues(alpha: 0.9)
-                                          : AppTheme.primaryColor,
-                                      width: 4,
-                                    ),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Sender name of the replied message
-                                    Text(
-                                      message.replyTo!.isFromMe
-                                          ? 'You'
-                                          : (message.replyTo!.sender
-                                                  ?.displayName ??
-                                              'Unknown'),
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
+                              GestureDetector(
+                                onTap: onQuotedMessageTap != null
+                                    ? () =>
+                                        onQuotedMessageTap!(message.replyTo!)
+                                    : null,
+                                child: Container(
+                                  width: double.infinity,
+                                  margin: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: isMe
+                                        ? Colors.white.withValues(alpha: 0.2)
+                                        : AppTheme.primaryColor
+                                            .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border(
+                                      left: BorderSide(
                                         color: isMe
                                             ? Colors.white
                                                 .withValues(alpha: 0.9)
                                             : AppTheme.primaryColor,
+                                        width: 4,
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Sender name of the replied message
+                                      Text(
+                                        message.replyTo!.isFromMe
+                                            ? 'You'
+                                            : (message.replyTo!.sender
+                                                    ?.displayName ??
+                                                'Unknown'),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: isMe
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.9)
+                                              : AppTheme.primaryColor,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
 
-                                    // Content of the replied message
-                                    Text(
-                                      message.replyTo!.displayContent,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: isMe
-                                            ? Colors.white
-                                                .withValues(alpha: 0.8)
-                                            : AppTheme.textSecondary
-                                                .withValues(alpha: 0.9),
-                                        height: 1.3,
+                                      // Content of the replied message
+                                      Text(
+                                        message.replyTo!.displayContent,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: isMe
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.8)
+                                              : AppTheme.textSecondary
+                                                  .withValues(alpha: 0.9),
+                                          height: 1.3,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],

@@ -65,7 +65,7 @@ class ReactionsWidget extends StatelessWidget {
             onTap: () => onReactionTap(emoji),
             child: Container(
               margin: const EdgeInsets.only(right: 4, bottom: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               decoration: BoxDecoration(
                 color: hasReacted
                     ? AppTheme.primaryColor.withValues(alpha: 0.1)

@@ -38,7 +38,7 @@ class ClassUpdateCommentCard extends StatelessWidget {
 
     // Check if content starts with @mention (for level 2+ replies)
     // Updated regex to capture full names with spaces (e.g., "@John Doe")
-    final mentionRegex = RegExp(r'^@([a-zA-Z\s]+?)\s+(.*)$', dotAll: true);
+    final mentionRegex = RegExp(r'^@([a-zA-Z\s]+)\s+(.*)$', dotAll: true);
     final match = mentionRegex.firstMatch(content);
 
     if (match != null) {
@@ -277,7 +277,7 @@ class ClassUpdateCommentCard extends StatelessWidget {
               const SizedBox(height: 8),
 
               // Reactions
-              if (comment.hasReactions || onAddReaction != null)
+              if (comment.hasReactions)
                 ReactionsWidget(
                   reactions: comment.reactions ?? {},
                   currentUserId: currentUserId,
@@ -286,9 +286,7 @@ class ClassUpdateCommentCard extends StatelessWidget {
                       onReactionTap!(comment, emoji);
                     }
                   },
-                  onAddReaction: onAddReaction != null
-                      ? () => onAddReaction!(comment)
-                      : null,
+                  onAddReaction: null, // Remove plus button for comments
                 ),
 
               // Action buttons

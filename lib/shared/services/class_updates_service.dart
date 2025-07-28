@@ -629,6 +629,40 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
     }
   }
 
+  Future<void> togglePin(String updateId) async {
+    // Find the update to potentially revert changes
+    final index = state.updates.indexWhere((u) => u.id == updateId);
+    if (index == -1) return;
+
+    final originalUpdate = state.updates[index];
+    final newPinnedStatus = !originalUpdate.isPinned;
+
+    try {
+      // Optimistic update: Update UI immediately
+      final optimisticUpdate = originalUpdate.copyWith(
+        isPinned: newPinnedStatus,
+      );
+
+      final newUpdates = [...state.updates];
+      newUpdates[index] = optimisticUpdate;
+      state = state.copyWith(updates: newUpdates);
+
+      // Call backend to persist the change
+      await _service.togglePin(updateId, newPinnedStatus);
+
+      // The backend call succeeded, state is already updated optimistically
+    } catch (e) {
+      // Revert to original state on error
+      final revertedUpdates = [...state.updates];
+      revertedUpdates[index] = originalUpdate;
+      state = state.copyWith(
+        updates: revertedUpdates,
+        error:
+            'Failed to ${newPinnedStatus ? 'pin' : 'unpin'} update: ${e.toString()}',
+      );
+    }
+  }
+
   String? _getCurrentUserIdSync() {
     try {
       final userData = StorageService.getUser();
