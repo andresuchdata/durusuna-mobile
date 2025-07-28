@@ -54,6 +54,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   // State for replying to a message
   Message? _replyingToMessage;
 
+  // State for highlighting a message when scrolled to
+  String? _highlightedMessageId;
+
   @override
   void initState() {
     super.initState();
@@ -1141,31 +1144,101 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   /// Scroll to a specific message by ID
   void _scrollToMessage(String messageId) {
     final messageKey = _messageKeys[messageId];
-    if (messageKey?.currentContext != null) {
-      Scrollable.ensureVisible(
-        messageKey!.currentContext!,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-      );
 
-      // Add brief visual feedback
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Scrolled to original message'),
-          duration: Duration(seconds: 1),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    // If message is currently visible, scroll to it directly
+    if (messageKey?.currentContext != null) {
+      _highlightAndScrollToMessage(messageId, messageKey!);
+      return;
+    }
+
+    // Check if message exists in loaded messages
+    final messagesState =
+        ref.read(chatMessagesProvider(widget.conversation.id));
+    final messageIndex =
+        messagesState.messages.indexWhere((msg) => msg.id == messageId);
+
+    if (messageIndex != -1) {
+      // Message exists in loaded data but not currently visible
+      // Calculate scroll position and scroll there first
+      _scrollToMessageIndex(messageIndex, messageId);
     } else {
-      // Message not found in current view (might be outside loaded range)
+      // Message not in loaded messages (needs fetching or doesn't exist)
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Original message not found in current view'),
+          content: Text('Original message not found in loaded messages'),
           duration: Duration(seconds: 2),
           backgroundColor: AppTheme.warningColor,
         ),
       );
     }
+  }
+
+  /// Highlight and scroll to a message that's already visible
+  void _highlightAndScrollToMessage(String messageId, GlobalKey messageKey) {
+    // Set highlight state
+    setState(() {
+      _highlightedMessageId = messageId;
+    });
+
+    // Scroll to message
+    Scrollable.ensureVisible(
+      messageKey.currentContext!,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+
+    // Clear highlight after animation
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      if (mounted && _highlightedMessageId == messageId) {
+        setState(() {
+          _highlightedMessageId = null;
+        });
+      }
+    });
+  }
+
+  /// Scroll to a message by its index in the loaded messages list
+  void _scrollToMessageIndex(int messageIndex, String messageId) {
+    if (!_scrollController.hasClients) return;
+
+    // Estimate item height (message + timestamp + spacing)
+    const double estimatedItemHeight = 80.0;
+
+    // Calculate approximate scroll position
+    // Account for loading indicator at top if present
+    final messagesState =
+        ref.read(chatMessagesProvider(widget.conversation.id));
+    final loadingOffset = messagesState.isLoadingMore ? 60.0 : 0.0;
+    final targetPosition = loadingOffset + (messageIndex * estimatedItemHeight);
+
+    // Scroll to estimated position
+    _scrollController
+        .animateTo(
+      targetPosition,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    )
+        .then((_) {
+      // Wait for ListView to render the message, then try to scroll to it precisely
+      Future.delayed(const Duration(milliseconds: 500), () {
+        final messageKey = _messageKeys[messageId];
+        if (messageKey?.currentContext != null) {
+          _highlightAndScrollToMessage(messageId, messageKey!);
+        } else {
+          // Still not visible, show feedback
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content:
+                    Text('Message found but could not scroll to it precisely'),
+                duration: Duration(seconds: 2),
+                backgroundColor: AppTheme.warningColor,
+              ),
+            );
+          }
+        }
+      });
+    });
   }
 
   void _handleReactionTap(Message message, String emoji) async {
@@ -1843,6 +1916,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               currentUserId: authState.user?.id,
               isSelected: _selectedMessageIds.contains(message.id),
               isSelectionMode: _isSelectionMode,
+              isHighlighted: _highlightedMessageId == message.id,
               onReply: (msg) => _replyToMessage(msg),
               onEdit: isMe ? (msg) => _editMessage(msg) : null,
               onDelete: isMe ? (msg) => _deleteMessage(msg) : null,

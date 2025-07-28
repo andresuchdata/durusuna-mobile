@@ -21,6 +21,7 @@ class MessageBubble extends StatelessWidget {
   final Function(Message, String)? onReactionTap;
   final Function(Message)? onAddReaction;
   final Function(Message)? onQuotedMessageTap;
+  final bool isHighlighted;
 
   const MessageBubble({
     super.key,
@@ -39,6 +40,7 @@ class MessageBubble extends StatelessWidget {
     this.onReactionTap,
     this.onAddReaction,
     this.onQuotedMessageTap,
+    this.isHighlighted = false,
   });
 
   bool get _shouldShowAvatar => conversationType == 'group' && !isMe;
@@ -212,6 +214,15 @@ class MessageBubble extends StatelessWidget {
                                     .withValues(alpha: 0.4),
                                 blurRadius: 12,
                                 spreadRadius: 2,
+                                offset: const Offset(0, 0),
+                              ),
+                            // Add highlight glow effect when highlighted
+                            if (isHighlighted)
+                              BoxShadow(
+                                color: AppTheme.warningColor
+                                    .withValues(alpha: 0.7),
+                                blurRadius: 15,
+                                spreadRadius: 3,
                                 offset: const Offset(0, 0),
                               ),
                           ],
