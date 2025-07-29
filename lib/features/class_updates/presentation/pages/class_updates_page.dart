@@ -1,14 +1,27 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_update.dart';
 import '../../../../shared/models/class_update_comment.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/services/auth_service.dart';
+import '../../../../shared/widgets/reactions_widget.dart';
 import '../widgets/class_update_card.dart';
+import '../widgets/class_update_comment_card.dart';
 import 'create_update_page.dart';
+
+// Helper class to represent comments with embedded replies
+class CommentDisplayItem {
+  final ClassUpdateComment comment;
+  final List<ClassUpdateComment> embeddedReplies;
+
+  CommentDisplayItem({
+    required this.comment,
+    required this.embeddedReplies,
+  });
+}
 
 class ClassUpdatesPage extends ConsumerStatefulWidget {
   final String classId;
@@ -213,6 +226,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
                                       update.authorId == authState.user?.id
                                   ? () => _confirmDeleteUpdate(update)
                                   : null,
+                              onPin: canPost ? () => _togglePin(update) : null,
                             );
                           },
                         ),
@@ -269,6 +283,23 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
           .read(classUpdatesProvider(widget.classId).notifier)
           .loadUpdates(refresh: true);
     }
+  }
+
+  void _togglePin(ClassUpdate update) {
+    ref
+        .read(classUpdatesProvider(widget.classId).notifier)
+        .togglePin(update.id);
+
+    // Show feedback
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          update.isPinned ? 'Update unpinned' : 'Update pinned',
+        ),
+        duration: const Duration(seconds: 2),
+        backgroundColor: AppTheme.successColor,
+      ),
+    );
   }
 
   void _confirmDeleteUpdate(ClassUpdate update) {
@@ -397,6 +428,17 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
   List<ClassUpdateComment> _comments = [];
   String? _error;
 
+  // Reply state management
+  ClassUpdateComment? _replyingToComment;
+  int _replyDepth = 0;
+  String? _mentionText;
+
+  // Cache organized comments to avoid recalculating on every build
+  List<CommentDisplayItem>? _organizedComments;
+
+  // Track optimistic comments (temp IDs that haven't been confirmed by server)
+  final Set<String> _optimisticCommentIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -424,6 +466,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
       if (mounted) {
         setState(() {
           _comments = comments;
+          _organizedComments = null; // Clear cache to force refresh
           _isLoading = false;
         });
       }
@@ -440,59 +483,402 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
   Future<void> _postComment() async {
     if (_commentController.text.trim().isEmpty) return;
 
-    setState(() => _isPosting = true);
+    final content = _commentController.text.trim();
+    final replyToId = _replyingToComment?.id;
+    final isReply = replyToId != null;
+
+    // Create optimistic comment immediately
+    final optimisticComment = _createOptimisticComment(content, replyToId);
+
+    // Add optimistic comment to local list immediately (no await)
+    setState(() {
+      _comments.add(optimisticComment);
+      _optimisticCommentIds.add(optimisticComment.id);
+      _organizedComments = null; // Clear cache to refresh display
+      _isPosting = true;
+    });
+
+    // Clear UI state immediately for better UX
+    _commentController.clear();
+    _cancelReply();
+
+    // Scroll to show new comment
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
 
     try {
+      // Send to server in background
       final service = ref.read(classUpdatesServiceProvider);
-      await service.addComment(
+      final serverComment = await service.addComment(
         updateId: widget.update.id,
-        content: _commentController.text.trim(),
+        content: content,
+        replyToId: replyToId,
       );
 
-      _commentController.clear();
-
-      // Refresh comments list
-      await _loadComments();
-
       if (mounted) {
+        // Replace optimistic comment with server response
+        setState(() {
+          final index =
+              _comments.indexWhere((c) => c.id == optimisticComment.id);
+          if (index != -1) {
+            _comments[index] = serverComment;
+          }
+          _optimisticCommentIds.remove(optimisticComment.id);
+          _organizedComments = null; // Clear cache
+          _isPosting = false;
+        });
+
+        // Success feedback (brief)
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Comment posted'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(isReply ? 'Reply posted' : 'Comment posted'),
+            duration: const Duration(seconds: 1),
+            backgroundColor: AppTheme.successColor,
           ),
         );
 
-        // Scroll to bottom to show new comment
-        Future.delayed(const Duration(milliseconds: 100), () {
+        // Keep focus for continued conversation
+        _focusNode.requestFocus();
+
+        // Scroll to the newly added reply (after server confirmation)
+        Future.delayed(const Duration(milliseconds: 200), () {
           if (_scrollController.hasClients) {
             _scrollController.animateTo(
               _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 300),
+              duration: const Duration(milliseconds: 400),
               curve: Curves.easeOut,
             );
           }
         });
-
-        // Keep focus on input for continued conversation
-        _focusNode.requestFocus();
 
         // Notify parent to refresh main feed
         widget.onCommentPosted?.call();
       }
     } catch (e) {
       if (mounted) {
+        // Remove optimistic comment on error
+        setState(() {
+          _comments.removeWhere((c) => c.id == optimisticComment.id);
+          _optimisticCommentIds.remove(optimisticComment.id);
+          _organizedComments = null; // Clear cache
+          _isPosting = false;
+        });
+
+        // Show error feedback
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to post comment: $e'),
+            content: Text('Failed to post comment. Tap to retry.'),
+            backgroundColor: AppTheme.errorColor,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () {
+                // Restore the content and retry
+                _commentController.text = content;
+                if (isReply) {
+                  // Find the comment we were replying to and restore reply state
+                  final parentComment = _comments.firstWhere(
+                    (c) => c.id == replyToId,
+                    orElse: () => optimisticComment.replyTo!,
+                  );
+                  _replyToComment(parentComment);
+                }
+                _postComment();
+              },
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleCommentReaction(ClassUpdateComment comment, String emoji) async {
+    // Skip reactions on optimistic comments (not yet confirmed by server)
+    if (_optimisticCommentIds.contains(comment.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please wait for comment to be posted'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final service = ref.read(classUpdatesServiceProvider);
+      await service.toggleCommentReaction(
+        commentId: comment.id,
+        emoji: emoji,
+      );
+
+      // Refresh comments to show updated reactions
+      await _loadComments();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reacted with $emoji'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add reaction: $e'),
             backgroundColor: AppTheme.errorColor,
           ),
         );
       }
-    } finally {
-      if (mounted) {
-        setState(() => _isPosting = false);
+    }
+  }
+
+  void _showCommentReactionPicker(ClassUpdateComment comment) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        margin: const EdgeInsets.all(16),
+        child: ReactionPicker(
+          onEmojiSelected: (emoji) {
+            _handleCommentReaction(comment, emoji);
+          },
+          onClose: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+
+  // Helper method to organize comments with embedded replies
+  List<CommentDisplayItem> _organizeCommentsWithReplies() {
+    // Return cached result if available
+    if (_organizedComments != null) {
+      return _organizedComments!;
+    }
+
+    final organized = <CommentDisplayItem>[];
+    final Map<String, List<ClassUpdateComment>> repliesMap = {};
+
+    // Group ALL replies by their root parent (traverse up reply chains)
+    for (final comment in _comments) {
+      if (comment.replyToId != null) {
+        String rootParentId = _findRootParent(comment, _comments);
+        repliesMap.putIfAbsent(rootParentId, () => []).add(comment);
       }
     }
+
+    // Find all top-level comments (no parent) and create display items
+    // Backend now sorts these newest-first, so maintain that order
+    final topLevelComments =
+        _comments.where((comment) => comment.replyToId == null).toList();
+
+    for (final parentComment in topLevelComments) {
+      // Get all replies for this parent (including nested ones flattened)
+      final allReplies = repliesMap[parentComment.id] ?? [];
+
+      // Sort replies by creation time
+      allReplies.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+      // Create display item with parent comment and embedded replies
+      organized.add(CommentDisplayItem(
+        comment: parentComment,
+        embeddedReplies: allReplies,
+      ));
+    }
+
+    // Cache the result
+    _organizedComments = organized;
+    return organized;
+  }
+
+  // Find the root parent of a comment (traverse up the reply chain)
+  String _findRootParent(
+      ClassUpdateComment comment, List<ClassUpdateComment> allComments) {
+    if (comment.replyToId == null) return comment.id;
+
+    final parent = allComments.firstWhere(
+      (c) => c.id == comment.replyToId,
+      orElse: () => comment, // Fallback if parent not found
+    );
+
+    if (parent.replyToId == null) {
+      return parent.id; // This is the root
+    } else {
+      return _findRootParent(parent, allComments); // Continue traversing up
+    }
+  }
+
+  // Build a comment with its embedded replies
+  Widget _buildCommentWithReplies(
+      CommentDisplayItem displayItem, String? currentUserId) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Parent comment
+        ClassUpdateCommentCard(
+          comment: displayItem.comment,
+          currentUserId: currentUserId,
+          level: 0, // Parent is always level 0
+          isOptimistic: _optimisticCommentIds.contains(displayItem.comment.id),
+          onReactionTap: (comment, emoji) =>
+              _handleCommentReaction(comment, emoji),
+          onAddReaction: (comment) => _showCommentReactionPicker(comment),
+          onReply: (comment) => _replyToComment(comment),
+          onEdit: currentUserId == displayItem.comment.authorId
+              ? (comment) => _editComment(comment)
+              : null,
+          onDelete: currentUserId == displayItem.comment.authorId
+              ? (comment) => _deleteComment(comment)
+              : null,
+        ),
+
+        // Embedded replies with indentation
+        if (displayItem.embeddedReplies.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 20), // Indent replies
+            child: Column(
+              children: displayItem.embeddedReplies.map((reply) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: ClassUpdateCommentCard(
+                    comment: reply,
+                    currentUserId: currentUserId,
+                    level: 1, // All replies are level 1 (max indentation)
+                    isOptimistic: _optimisticCommentIds.contains(reply.id),
+                    onReactionTap: (comment, emoji) =>
+                        _handleCommentReaction(comment, emoji),
+                    onAddReaction: (comment) =>
+                        _showCommentReactionPicker(comment),
+                    onReply: (comment) => _replyToComment(comment),
+                    onEdit: currentUserId == reply.authorId
+                        ? (comment) => _editComment(comment)
+                        : null,
+                    onDelete: currentUserId == reply.authorId
+                        ? (comment) => _deleteComment(comment)
+                        : null,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
+        const SizedBox(height: 12), // Space between comment groups
+      ],
+    );
+  }
+
+  void _replyToComment(ClassUpdateComment comment) {
+    // Find the root parent comment (level 0) to reply to
+    ClassUpdateComment parentComment = comment;
+    while (parentComment.replyTo != null) {
+      parentComment = parentComment.replyTo!;
+    }
+
+    final authorName = comment.author?.displayName ?? 'User';
+
+    setState(() {
+      _replyingToComment = parentComment; // Always reply to the root parent
+      _replyDepth = 1; // Always level 1 (max depth)
+
+      // Always use @mention for replies to show context
+      _mentionText = '@$authorName ';
+      _commentController.text = _mentionText!;
+      _commentController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _commentController.text.length),
+      );
+    });
+
+    _focusNode.requestFocus();
+
+    // Show visual feedback
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Replying to $authorName'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyingToComment = null;
+      _replyDepth = 0;
+      _mentionText = null;
+    });
+    _commentController.clear();
+  }
+
+  // Helper method to create an optimistic comment
+  ClassUpdateComment _createOptimisticComment(
+      String content, String? replyToId) {
+    final currentUser = ref.read(authStateProvider).user;
+    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+
+    return ClassUpdateComment(
+      id: tempId,
+      classUpdateId: widget.update.id,
+      authorId: currentUser?.id ?? '',
+      content: content,
+      replyToId: replyToId,
+      reactions: {},
+      isEdited: false,
+      editedAt: null,
+      isDeleted: false,
+      deletedAt: null,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      author: currentUser,
+      replyTo: _replyingToComment,
+      replies: null,
+      repliesCount: null,
+    );
+  }
+
+  void _editComment(ClassUpdateComment comment) {
+    // TODO: Implement edit functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Edit comment functionality coming soon'),
+      ),
+    );
+  }
+
+  void _deleteComment(ClassUpdateComment comment) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Comment'),
+        content: const Text('Are you sure you want to delete this comment?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              // TODO: Implement actual delete API call
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Delete comment functionality coming soon'),
+                ),
+              );
+            },
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -578,20 +964,73 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                           : ListView.builder(
                               controller: _scrollController,
                               padding: const EdgeInsets.all(16),
-                              itemCount: _comments.length,
+                              itemCount: _organizeCommentsWithReplies().length,
                               itemBuilder: (context, index) {
-                                final comment = _comments[index];
-                                return CommentWidget(comment: comment);
+                                final organizedComments =
+                                    _organizeCommentsWithReplies();
+                                final displayItem = organizedComments[index];
+                                final currentUserId =
+                                    ref.read(authStateProvider).user?.id;
+
+                                return _buildCommentWithReplies(
+                                  displayItem,
+                                  currentUserId,
+                                );
                               },
                             ),
             ),
+
+            // Reply indicator (shown when replying)
+            if (_replyingToComment != null)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: const BoxDecoration(
+                  color: AppTheme.backgroundColor,
+                  border: Border(top: BorderSide(color: AppTheme.borderColor)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.reply,
+                      size: 16,
+                      color: AppTheme.primaryColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Replying to ${_replyingToComment!.author?.displayName ?? "User"}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _cancelReply,
+                      icon: const Icon(Icons.close, size: 16),
+                      color: AppTheme.textSecondary,
+                      constraints: const BoxConstraints(
+                        minWidth: 24,
+                        minHeight: 24,
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+              ),
 
             // Comment input
             SafeArea(
               child: Container(
                 padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border(top: BorderSide(color: AppTheme.borderColor)),
+                  color: _replyingToComment != null
+                      ? AppTheme.backgroundColor
+                      : null,
                 ),
                 child: Row(
                   children: [
@@ -613,13 +1052,15 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                         controller: _commentController,
                         focusNode: _focusNode,
                         decoration: InputDecoration(
-                          hintText: 'Write a comment...',
+                          hintText: _replyingToComment != null
+                              ? 'Write your reply with @mention...'
+                              : 'Write a comment...',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(20),
                             borderSide: BorderSide.none,
                           ),
                           filled: true,
-                          fillColor: AppTheme.backgroundColor,
+                          fillColor: Colors.white,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 8,
@@ -649,71 +1090,6 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
           ],
         );
       },
-    );
-  }
-}
-
-// Individual comment widget
-class CommentWidget extends StatelessWidget {
-  final ClassUpdateComment comment;
-
-  const CommentWidget({super.key, required this.comment});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: AppTheme.primaryColor,
-            child: Text(
-              comment.author != null &&
-                      comment.author!.firstName.isNotEmpty &&
-                      comment.author!.lastName.isNotEmpty
-                  ? '${comment.author!.firstName[0]}${comment.author!.lastName[0]}'
-                  : 'U',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  comment.author != null
-                      ? '${comment.author!.firstName} ${comment.author!.lastName}'
-                      : 'Unknown User',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  comment.content,
-                  style: const TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  timeago.format(comment.createdAt),
-                  style: const TextStyle(
-                    color: AppTheme.textTertiary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

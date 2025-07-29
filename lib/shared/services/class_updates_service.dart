@@ -349,6 +349,34 @@ class ClassUpdatesService {
     }
   }
 
+  /// Toggle reaction on a class update comment
+  Future<void> toggleCommentReaction({
+    required String commentId,
+    required String emoji,
+  }) async {
+    try {
+      final response = await _apiService.post(
+        ApiConstants.addCommentReaction(commentId),
+        data: {
+          'emoji': emoji,
+        },
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw ApiException(
+          message: 'Failed to toggle comment reaction',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to toggle comment reaction: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
   /// Pin/unpin a class update
   Future<ClassUpdate> togglePin(String updateId, bool isPinned) async {
     try {
@@ -597,6 +625,40 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
       state = state.copyWith(
         updates: revertedUpdates,
         error: 'Failed to update reaction: ${e.toString()}',
+      );
+    }
+  }
+
+  Future<void> togglePin(String updateId) async {
+    // Find the update to potentially revert changes
+    final index = state.updates.indexWhere((u) => u.id == updateId);
+    if (index == -1) return;
+
+    final originalUpdate = state.updates[index];
+    final newPinnedStatus = !originalUpdate.isPinned;
+
+    try {
+      // Optimistic update: Update UI immediately
+      final optimisticUpdate = originalUpdate.copyWith(
+        isPinned: newPinnedStatus,
+      );
+
+      final newUpdates = [...state.updates];
+      newUpdates[index] = optimisticUpdate;
+      state = state.copyWith(updates: newUpdates);
+
+      // Call backend to persist the change
+      await _service.togglePin(updateId, newPinnedStatus);
+
+      // The backend call succeeded, state is already updated optimistically
+    } catch (e) {
+      // Revert to original state on error
+      final revertedUpdates = [...state.updates];
+      revertedUpdates[index] = originalUpdate;
+      state = state.copyWith(
+        updates: revertedUpdates,
+        error:
+            'Failed to ${newPinnedStatus ? 'pin' : 'unpin'} update: ${e.toString()}',
       );
     }
   }

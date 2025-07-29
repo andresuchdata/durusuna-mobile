@@ -13,6 +13,7 @@ class ClassUpdateCard extends StatelessWidget {
   final VoidCallback onComment;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final VoidCallback? onPin;
 
   const ClassUpdateCard({
     super.key,
@@ -22,6 +23,7 @@ class ClassUpdateCard extends StatelessWidget {
     required this.onComment,
     this.onEdit,
     this.onDelete,
+    this.onPin,
   });
 
   @override
@@ -91,12 +93,34 @@ class ClassUpdateCard extends StatelessWidget {
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),
-                          if (update.isPinned) ...[
+                          // Pin button (for teachers) or pin indicator (for others)
+                          if (onPin != null || update.isPinned) ...[
                             const SizedBox(width: 8),
-                            const Icon(
-                              Icons.push_pin,
-                              size: 16,
-                              color: AppTheme.primaryColor,
+                            GestureDetector(
+                              onTap: onPin,
+                              child: Container(
+                                padding: onPin != null
+                                    ? const EdgeInsets.all(4)
+                                    : EdgeInsets.zero,
+                                decoration: onPin != null
+                                    ? BoxDecoration(
+                                        borderRadius: BorderRadius.circular(4),
+                                        color: update.isPinned
+                                            ? AppTheme.primaryColor
+                                                .withValues(alpha: 0.1)
+                                            : Colors.transparent,
+                                      )
+                                    : null,
+                                child: Icon(
+                                  update.isPinned
+                                      ? Icons.push_pin
+                                      : Icons.push_pin_outlined,
+                                  size: 18,
+                                  color: update.isPinned
+                                      ? AppTheme.primaryColor
+                                      : AppTheme.textSecondary,
+                                ),
+                              ),
                             ),
                           ],
                         ],

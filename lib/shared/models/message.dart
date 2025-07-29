@@ -109,6 +109,23 @@ class Message {
   bool get hasAttachments => attachments != null && attachments!.isNotEmpty;
   bool get isReply => replyToId != null;
   bool get wasRead => readAt != null;
+  bool get hasReactions => reactions.isNotEmpty;
+
+  int get totalReactions {
+    if (reactions.isEmpty) return 0;
+    int total = 0;
+    for (var reaction in reactions.values) {
+      if (reaction is int) {
+        total += reaction;
+      } else if (reaction is Map<String, dynamic>) {
+        final users = reaction['users'] as List<dynamic>? ?? [];
+        total += users.length;
+      } else if (reaction is List) {
+        total += reaction.length;
+      }
+    }
+    return total;
+  }
 
   String get displayContent {
     if (isDeleted) return 'This message was deleted';
