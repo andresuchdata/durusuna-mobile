@@ -159,7 +159,7 @@ class MessageBubble extends StatelessWidget {
                       children: [
                         // Sender name of the replied message
                         Text(
-                          message.replyTo!.isFromMe
+                          message.replyTo!.senderId == currentUserId
                               ? 'You'
                               : (message.replyTo!.sender?.displayName ??
                                   'Unknown'),
