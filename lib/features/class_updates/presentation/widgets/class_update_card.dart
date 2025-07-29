@@ -306,24 +306,49 @@ class ClassUpdateCard extends StatelessWidget {
     // Safely convert attachment JSON to Attachment objects
     final attachments = <Attachment>[];
 
+    print('🔍 _buildAttachments called for update ${update.id}');
+    print('📎 Raw attachments data: ${update.attachments}');
+    print('📎 Attachments type: ${update.attachments.runtimeType}');
+    print('📎 Has attachments: ${update.hasAttachments}');
+
     try {
       if (update.attachments != null && update.attachments is List) {
         final attachmentList = update.attachments as List;
-        for (final item in attachmentList) {
+        print('📝 Processing ${attachmentList.length} attachment items');
+
+        for (int i = 0; i < attachmentList.length; i++) {
+          final item = attachmentList[i];
+          print('📄 Item $i: $item (type: ${item.runtimeType})');
+
           try {
             if (item != null && item is Map<String, dynamic>) {
               final attachment = Attachment.fromJson(item);
+              print(
+                  '✅ Parsed attachment: ${attachment.fileName} (URL: ${attachment.url})');
               attachments.add(attachment);
+            } else {
+              print('❌ Invalid attachment item: $item');
             }
           } catch (e) {
             // Skip invalid attachment data
+            print('❌ Error parsing attachment item $i: $e');
             debugPrint('Error parsing attachment: $e');
           }
         }
+      } else {
+        print('❌ No valid attachments list found');
       }
     } catch (e) {
       // Skip all attachments if there's a parsing error
+      print('❌ Error parsing attachments: $e');
       debugPrint('Error parsing attachments: $e');
+    }
+
+    print('📊 Final attachments count: ${attachments.length}');
+    for (int i = 0; i < attachments.length; i++) {
+      final att = attachments[i];
+      print(
+          '📎 Attachment $i: ${att.fileName} | URL: ${att.url} | Type: ${att.fileType}');
     }
 
     return Container(

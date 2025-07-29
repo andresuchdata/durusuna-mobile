@@ -278,35 +278,15 @@ class ClassUpdateCommentCard extends StatelessWidget {
 
               // Reactions
               if (comment.hasReactions) ...[
-                Builder(
-                  builder: (context) {
-                    print(
-                        '🎨 Building ReactionsWidget for comment ${comment.id}');
-                    print('📊 Reactions data: ${comment.reactions}');
-                    print('✅ hasReactions: ${comment.hasReactions}');
-                    print('🔢 Total reactions: ${comment.totalReactions}');
-                    return ReactionsWidget(
-                      reactions: comment.reactions ?? {},
-                      currentUserId: currentUserId,
-                      onReactionTap: (emoji) {
-                        print(
-                            '👆 Reaction tapped: $emoji on comment ${comment.id}');
-                        if (onReactionTap != null) {
-                          onReactionTap!(comment, emoji);
-                        }
-                      },
-                      onAddReaction: null, // Remove plus button for comments
-                    );
+                ReactionsWidget(
+                  reactions: comment.reactions ?? {},
+                  currentUserId: currentUserId,
+                  onReactionTap: (emoji) {
+                    if (onReactionTap != null) {
+                      onReactionTap!(comment, emoji);
+                    }
                   },
-                ),
-              ] else ...[
-                Builder(
-                  builder: (context) {
-                    print('❌ No reactions to show for comment ${comment.id}');
-                    print('📊 Reactions: ${comment.reactions}');
-                    print('❓ hasReactions: ${comment.hasReactions}');
-                    return const SizedBox.shrink();
-                  },
+                  onAddReaction: null, // Remove plus button for comments
                 ),
               ],
 

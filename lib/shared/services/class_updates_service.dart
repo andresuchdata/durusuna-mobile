@@ -355,9 +355,6 @@ class ClassUpdatesService {
     required String emoji,
   }) async {
     try {
-      print('🌐 API Call: POST ${ApiConstants.addCommentReaction(commentId)}');
-      print('📤 Request data: {"emoji": "$emoji"}');
-
       final response = await _apiService.post(
         ApiConstants.addCommentReaction(commentId),
         data: {
@@ -365,18 +362,13 @@ class ClassUpdatesService {
         },
       );
 
-      print('📥 Response: ${response.statusCode} ${response.data}');
-
       if (response.statusCode != 200 && response.statusCode != 201) {
         throw ApiException(
           message: 'Failed to toggle comment reaction',
           statusCode: response.statusCode ?? 0,
         );
       }
-
-      print('✅ Comment reaction API completed successfully');
     } catch (e) {
-      print('❌ Comment reaction API error: $e');
       if (e is ApiException) rethrow;
       throw ApiException(
         message: 'Failed to toggle comment reaction: ${e.toString()}',

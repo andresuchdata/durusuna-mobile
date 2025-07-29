@@ -22,7 +22,21 @@ class AttachmentPreviewWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (attachments.isEmpty) return const SizedBox.shrink();
+    print('🎨 AttachmentPreviewWidget.build()');
+    print('📎 Attachments count: ${attachments.length}');
+    print('📎 Is compact: $isCompact');
+    print('📎 Show title: $showTitle');
+
+    if (attachments.isEmpty) {
+      print('❌ No attachments to display, returning empty widget');
+      return const SizedBox.shrink();
+    }
+
+    for (int i = 0; i < attachments.length; i++) {
+      final att = attachments[i];
+      print(
+          '📎 Attachment $i in widget: ${att.fileName} | URL: ${att.url} | Type: ${att.fileType} | isImage: ${att.isImage}');
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,9 +68,32 @@ class AttachmentPreviewWidget extends StatelessWidget {
   }
 
   Widget _buildCompactView(BuildContext context) {
+    print('🎨 _buildCompactView called');
+
     // Group attachments by type for better presentation
     final imageAttachments = attachments.where((a) => a.isImage).toList();
     final otherAttachments = attachments.where((a) => !a.isImage).toList();
+
+    print('🖼️ Image attachments: ${imageAttachments.length}');
+    print('📄 Other attachments: ${otherAttachments.length}');
+
+    for (final img in imageAttachments) {
+      print('🖼️ Image: ${img.fileName} | URL: ${img.url}');
+    }
+
+    for (final other in otherAttachments) {
+      print(
+          '📄 Other: ${other.fileName} | Type: ${other.fileType} | URL: ${other.url}');
+    }
+
+    if (imageAttachments.isNotEmpty) {
+      print('🎨 Building image preview for ${imageAttachments.length} images');
+    }
+
+    if (otherAttachments.isNotEmpty) {
+      print(
+          '🎨 Building other attachments preview for ${otherAttachments.length} files');
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
