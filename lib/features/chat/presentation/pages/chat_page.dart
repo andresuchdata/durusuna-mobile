@@ -1736,95 +1736,100 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          // Messages list
-          Expanded(
-            child: messagesState.isLoading && messagesState.messages.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : messagesState.messages.isEmpty
-                    ? SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        child: SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.6,
-                          child: _buildEmptyState(),
-                        ),
-                      )
-                    : _buildMessagesList(messagesState, authState),
-          ),
+      body: Padding(
+        // Add keyboard padding to push content up when keyboard appears
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: Column(
+          children: [
+            // Messages list
+            Expanded(
+              child: messagesState.isLoading && messagesState.messages.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : messagesState.messages.isEmpty
+                      ? SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.6,
+                            child: _buildEmptyState(),
+                          ),
+                        )
+                      : _buildMessagesList(messagesState, authState),
+            ),
 
-          // Typing indicator
-          if (messagesState.isTyping)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 12,
-                    backgroundColor: AppTheme.primaryColor,
-                    child: Text(
-                      _getInitials().isNotEmpty ? _getInitials()[0] : 'U',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+            // Typing indicator
+            if (messagesState.isTyping)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: AppTheme.primaryColor,
+                      child: Text(
+                        _getInitials().isNotEmpty ? _getInitials()[0] : 'U',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 8,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: List.generate(3, (index) {
-                              return AnimatedContainer(
-                                duration:
-                                    Duration(milliseconds: 600 + (index * 200)),
-                                curve: Curves.easeInOut,
-                                width: 4,
-                                height: 4,
-                                decoration: const BoxDecoration(
-                                  color: AppTheme.textSecondary,
-                                  shape: BoxShape.circle,
-                                ),
-                              );
-                            }),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 8,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: List.generate(3, (index) {
+                                return AnimatedContainer(
+                                  duration: Duration(
+                                      milliseconds: 600 + (index * 200)),
+                                  curve: Curves.easeInOut,
+                                  width: 4,
+                                  height: 4,
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.textSecondary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                );
+                              }),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
 
-          // Reply preview - positioned just above text input
-          if (_replyingToMessage != null)
-            ReplyPreview(
-              replyToMessage: _replyingToMessage!,
-              onCancel: _cancelReply,
-            ),
+            // Reply preview - positioned just above text input
+            if (_replyingToMessage != null)
+              ReplyPreview(
+                replyToMessage: _replyingToMessage!,
+                onCancel: _cancelReply,
+              ),
 
-          // Chat input
-          ChatInput(
-            controller: _messageController,
-            focusNode: _focusNode,
-            onSend: (content) => _sendMessage(content: content),
-            onTyping: _handleTyping,
-            onAttachment: () => _showAttachmentOptions(),
-          ),
-        ],
+            // Chat input
+            ChatInput(
+              controller: _messageController,
+              focusNode: _focusNode,
+              onSend: (content) => _sendMessage(content: content),
+              onTyping: _handleTyping,
+              onAttachment: () => _showAttachmentOptions(),
+            ),
+          ],
+        ),
       ),
     );
   }

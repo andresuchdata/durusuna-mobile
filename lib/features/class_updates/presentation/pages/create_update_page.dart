@@ -88,7 +88,8 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
     setState(() {
       _attachments = attachments;
       _hasUnsavedChanges = true;
-      // Reset upload state when attachments change (upload completed)
+      // IMPORTANT: Only re-enable button when attachments are successfully added
+      // This happens after upload completion and before success snackbar
       _isUploadingAttachments = false;
     });
   }
@@ -402,9 +403,15 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
                           print('📤 Upload has error: ${progress.hasError}');
 
                           setState(() {
-                            // Track upload state - uploading if progress < 1.0 and no error
-                            _isUploadingAttachments =
-                                !progress.isCompleted && !progress.hasError;
+                            // Disable button immediately when upload starts (progress > 0)
+                            // Keep disabled until onAttachmentsChanged is called (successful completion)
+                            if (progress.progress > 0.0 && !progress.hasError) {
+                              _isUploadingAttachments = true;
+                            }
+                            // Only re-enable on error (will be handled by onAttachmentsChanged for success)
+                            if (progress.hasError) {
+                              _isUploadingAttachments = false;
+                            }
                             print(
                                 '🔒 Button disabled: $_isUploadingAttachments');
                           });
