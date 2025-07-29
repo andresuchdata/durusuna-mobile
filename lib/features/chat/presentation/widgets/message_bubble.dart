@@ -62,6 +62,227 @@ class MessageBubble extends StatelessWidget {
     return 'U';
   }
 
+  Widget _buildMessageContainer(BuildContext context) {
+    final messageContent = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment:
+          isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        // Sender name for group chats (other participants only)
+        if (_shouldShowAvatar) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              message.sender?.displayName ?? 'Unknown',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+        ],
+
+        // Unified message bubble (includes reply if present)
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(0), // No padding here, handled inside
+          decoration: BoxDecoration(
+            color: isMe ? AppTheme.primaryColor : Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(8),
+              topRight: const Radius.circular(8),
+              bottomLeft: Radius.circular(isMe ? 8 : 4),
+              bottomRight: Radius.circular(isMe ? 4 : 8),
+            ),
+            border: isSelected
+                ? Border.all(
+                    color: AppTheme.primaryColor,
+                    width: 2.5,
+                  )
+                : null,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 5,
+                offset: const Offset(0, 1),
+              ),
+              // Add selection glow effect when selected
+              if (isSelected)
+                BoxShadow(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.4),
+                  blurRadius: 12,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 0),
+                ),
+              // Add highlight glow effect when highlighted
+              if (isHighlighted)
+                BoxShadow(
+                  color: AppTheme.warningColor.withValues(alpha: 0.7),
+                  blurRadius: 15,
+                  spreadRadius: 3,
+                  offset: const Offset(0, 0),
+                ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Reply preview integrated at the top (if this message is a reply)
+              if (message.replyTo != null) ...[
+                GestureDetector(
+                  onTap: onQuotedMessageTap != null
+                      ? () => onQuotedMessageTap!(message.replyTo!)
+                      : null,
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isMe
+                          ? Colors.white.withValues(alpha: 0.2)
+                          : AppTheme.primaryColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border(
+                        left: BorderSide(
+                          color: isMe
+                              ? Colors.white.withValues(alpha: 0.9)
+                              : AppTheme.primaryColor,
+                          width: 4,
+                        ),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Sender name of the replied message
+                        Text(
+                          message.replyTo!.isFromMe
+                              ? 'You'
+                              : (message.replyTo!.sender?.displayName ??
+                                  'Unknown'),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isMe
+                                ? Colors.white.withValues(alpha: 0.9)
+                                : AppTheme.primaryColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+
+                        // Content of the replied message
+                        Text(
+                          message.replyTo!.displayContent,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isMe
+                                ? Colors.white.withValues(alpha: 0.8)
+                                : AppTheme.textSecondary.withValues(alpha: 0.9),
+                            height: 1.3,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
+              // Main message content
+              Container(
+                padding: EdgeInsets.fromLTRB(
+                    12,
+                    message.replyTo != null
+                        ? 8
+                        : 12, // Less top padding if reply present
+                    12,
+                    8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Message content
+                    _buildMessageContent(),
+
+                    const SizedBox(height: 4),
+
+                    // Message metadata (time, status)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (message.isEdited)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Text(
+                              'edited',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isMe
+                                    ? Colors.white.withValues(alpha: 0.7)
+                                    : AppTheme.textTertiary,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                        Text(
+                          _formatTime(message.createdAt),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isMe
+                                ? Colors.white.withValues(alpha: 0.7)
+                                : AppTheme.textTertiary,
+                          ),
+                        ),
+                        if (isMe) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            _getStatusIcon(),
+                            size: 14,
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Reactions (positioned below the message bubble)
+        if (message.hasReactions || onAddReaction != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: ReactionsWidget(
+              reactions: message.reactions,
+              currentUserId: currentUserId,
+              onReactionTap: (emoji) {
+                if (onReactionTap != null) {
+                  onReactionTap!(message, emoji);
+                }
+              },
+              onAddReaction:
+                  onAddReaction != null ? () => onAddReaction!(message) : null,
+              isMyMessage: isMe,
+            ),
+          ),
+      ],
+    );
+
+    // Use IntrinsicWidth for all messages to get true content-based width
+    return IntrinsicWidth(
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+        ),
+        child: messageContent,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Use smaller horizontal padding for both direct and group chats
@@ -158,236 +379,7 @@ class MessageBubble extends StatelessWidget {
 
               // Message content container
               Flexible(
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.75,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: isMe
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    children: [
-                      // Sender name for group chats (other participants only)
-                      if (_shouldShowAvatar) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            message.sender?.displayName ?? 'Unknown',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ],
-
-                      // Unified message bubble (includes reply if present)
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.all(
-                            0), // No padding here, handled inside
-                        decoration: BoxDecoration(
-                          color: isMe ? AppTheme.primaryColor : Colors.white,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(8),
-                            topRight: const Radius.circular(8),
-                            bottomLeft: Radius.circular(isMe ? 8 : 4),
-                            bottomRight: Radius.circular(isMe ? 4 : 8),
-                          ),
-                          border: isSelected
-                              ? Border.all(
-                                  color: AppTheme.primaryColor,
-                                  width: 2.5,
-                                )
-                              : null,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 5,
-                              offset: const Offset(0, 1),
-                            ),
-                            // Add selection glow effect when selected
-                            if (isSelected)
-                              BoxShadow(
-                                color: AppTheme.primaryColor
-                                    .withValues(alpha: 0.4),
-                                blurRadius: 12,
-                                spreadRadius: 2,
-                                offset: const Offset(0, 0),
-                              ),
-                            // Add highlight glow effect when highlighted
-                            if (isHighlighted)
-                              BoxShadow(
-                                color: AppTheme.warningColor
-                                    .withValues(alpha: 0.7),
-                                blurRadius: 15,
-                                spreadRadius: 3,
-                                offset: const Offset(0, 0),
-                              ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Reply preview integrated at the top (if this message is a reply)
-                            if (message.replyTo != null) ...[
-                              GestureDetector(
-                                onTap: onQuotedMessageTap != null
-                                    ? () =>
-                                        onQuotedMessageTap!(message.replyTo!)
-                                    : null,
-                                child: Container(
-                                  width: double.infinity,
-                                  margin: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: isMe
-                                        ? Colors.white.withValues(alpha: 0.2)
-                                        : AppTheme.primaryColor
-                                            .withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border(
-                                      left: BorderSide(
-                                        color: isMe
-                                            ? Colors.white
-                                                .withValues(alpha: 0.9)
-                                            : AppTheme.primaryColor,
-                                        width: 4,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // Sender name of the replied message
-                                      Text(
-                                        message.replyTo!.isFromMe
-                                            ? 'You'
-                                            : (message.replyTo!.sender
-                                                    ?.displayName ??
-                                                'Unknown'),
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: isMe
-                                              ? Colors.white
-                                                  .withValues(alpha: 0.9)
-                                              : AppTheme.primaryColor,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-
-                                      // Content of the replied message
-                                      Text(
-                                        message.replyTo!.displayContent,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: isMe
-                                              ? Colors.white
-                                                  .withValues(alpha: 0.8)
-                                              : AppTheme.textSecondary
-                                                  .withValues(alpha: 0.9),
-                                          height: 1.3,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-
-                            // Main message content
-                            Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.fromLTRB(
-                                  12,
-                                  message.replyTo != null
-                                      ? 8
-                                      : 12, // Less top padding if reply present
-                                  12,
-                                  8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Message content
-                                  _buildMessageContent(),
-
-                                  const SizedBox(height: 4),
-
-                                  // Message metadata (time, status)
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (message.isEdited)
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(right: 4),
-                                          child: Text(
-                                            'edited',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: isMe
-                                                  ? Colors.white
-                                                      .withValues(alpha: 0.7)
-                                                  : AppTheme.textTertiary,
-                                              fontStyle: FontStyle.italic,
-                                            ),
-                                          ),
-                                        ),
-                                      Text(
-                                        _formatTime(message.createdAt),
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: isMe
-                                              ? Colors.white
-                                                  .withValues(alpha: 0.7)
-                                              : AppTheme.textTertiary,
-                                        ),
-                                      ),
-                                      if (isMe) ...[
-                                        const SizedBox(width: 4),
-                                        Icon(
-                                          _getStatusIcon(),
-                                          size: 14,
-                                          color: Colors.white
-                                              .withValues(alpha: 0.7),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Reactions (positioned below the message bubble)
-                      if (message.hasReactions || onAddReaction != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: ReactionsWidget(
-                            reactions: message.reactions,
-                            currentUserId: currentUserId,
-                            onReactionTap: (emoji) {
-                              if (onReactionTap != null) {
-                                onReactionTap!(message, emoji);
-                              }
-                            },
-                            onAddReaction: onAddReaction != null
-                                ? () => onAddReaction!(message)
-                                : null,
-                            isMyMessage: isMe,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+                child: _buildMessageContainer(context),
               ),
 
               // Right side spacing for current user messages
@@ -409,6 +401,7 @@ class MessageBubble extends StatelessWidget {
             color: isMe ? Colors.white : AppTheme.textPrimary,
             height: 1.3,
           ),
+          softWrap: true,
         );
 
       case MessageType.image:
