@@ -784,14 +784,28 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
   }) async {
     // Create optimistic message immediately with temporary ID
     final currentUser = StorageService.getUser();
+
+    // Find the reply-to message if replyToId is provided
+    Message? replyToMessage;
+    if (replyToId != null) {
+      try {
+        replyToMessage = state.messages.firstWhere((m) => m.id == replyToId);
+      } catch (e) {
+        // Reply message not found in current state, will be handled by server
+      }
+    }
+
     final optimisticMessage = Message(
       id: 'temp_${DateTime.now().millisecondsSinceEpoch}', // Temporary ID
       conversationId: _conversationWithId,
       senderId: currentUser?['id']?.toString() ?? '',
       content: content,
       messageType: messageType,
+      replyToId: replyToId,
+      replyTo: replyToMessage, // Include reply-to message for immediate preview
       isFromMe: true,
       createdAt: DateTime.now(),
+      metadata: metadata,
     );
 
     // Add optimistic message immediately for instant UI feedback
