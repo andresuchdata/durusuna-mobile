@@ -51,8 +51,8 @@ class _BuiltInAttachmentViewerState extends State<BuiltInAttachmentViewer> {
       } else if (!downloadUrl.startsWith('http')) {
         downloadUrl = '${ApiConstants.baseUrl}/uploads/serve/$downloadUrl';
       }
-      // Rewrite URL for platform compatibility (mainly for local development)
-      downloadUrl = UrlUtils.rewriteUrl(downloadUrl);
+      // Rewrite URL for platform compatibility and production environment
+      downloadUrl = UrlUtils.rewriteAttachmentUrl(downloadUrl);
     }
   }
 
