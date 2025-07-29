@@ -135,6 +135,8 @@ class MessageBubble extends StatelessWidget {
                       ? () => onQuotedMessageTap!(message.replyTo!)
                       : null,
                   child: Container(
+                    width:
+                        double.infinity, // Expand to match parent bubble width
                     margin: const EdgeInsets.fromLTRB(4, 4, 4, 0),
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
