@@ -32,6 +32,7 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
   UpdateType _selectedType = UpdateType.announcement;
   bool _isLoading = false;
   bool _hasUnsavedChanges = false;
+  bool _isUploadingAttachments = false;
   List<Attachment> _attachments = [];
 
   @override
@@ -87,6 +88,8 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
     setState(() {
       _attachments = attachments;
       _hasUnsavedChanges = true;
+      // Reset upload state when attachments change (upload completed)
+      _isUploadingAttachments = false;
     });
   }
 
@@ -124,6 +127,17 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Double-check that no uploads are in progress
+    if (_isUploadingAttachments) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please wait for all attachments to finish uploading'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -382,6 +396,19 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
                         currentAttachments: _attachments,
                         onAttachmentsChanged: _onAttachmentsChanged,
                         onUploadProgress: (progress) {
+                          print('📤 Upload progress: ${progress.progress}');
+                          print('📤 Upload status: ${progress.status}');
+                          print('📤 Upload completed: ${progress.isCompleted}');
+                          print('📤 Upload has error: ${progress.hasError}');
+
+                          setState(() {
+                            // Track upload state - uploading if progress < 1.0 and no error
+                            _isUploadingAttachments =
+                                !progress.isCompleted && !progress.hasError;
+                            print(
+                                '🔒 Button disabled: $_isUploadingAttachments');
+                          });
+
                           // Handle upload progress if needed
                           if (progress.hasError) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -446,10 +473,13 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
                       Expanded(
                         flex: 2,
                         child: LoadingButton(
-                          onPressed: _handleSubmit,
+                          onPressed:
+                              _isUploadingAttachments ? null : _handleSubmit,
                           isLoading: _isLoading,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryColor,
+                            backgroundColor: _isUploadingAttachments
+                                ? AppTheme.textTertiary
+                                : AppTheme.primaryColor,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -458,7 +488,11 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
                             elevation: 0,
                           ),
                           child: Text(
-                            widget.editingUpdate != null ? 'Update' : 'Post',
+                            _isUploadingAttachments
+                                ? 'Uploading...'
+                                : (widget.editingUpdate != null
+                                    ? 'Update'
+                                    : 'Post'),
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
