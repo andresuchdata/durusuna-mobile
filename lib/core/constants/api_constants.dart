@@ -25,7 +25,7 @@ class ApiConstants {
 
   static const String _productionBackendUrl = String.fromEnvironment(
     'PRODUCTION_BACKEND_URL',
-    defaultValue: 'https://durusuna-backend-hr9m0.sevalla.app',
+    defaultValue: '',
   );
 
   // Development configuration - SECURE: No hardcoded IPs in source code
@@ -93,7 +93,7 @@ class ApiConstants {
       print('🌐 API Configuration:');
       print('   Environment: $_environment');
       print('   Base URL: $baseUrl');
-      print('   Socket URL: $socketUrl'); 
+      print('   Socket URL: $socketUrl');
       print('   Platform: ${Platform.operatingSystem}');
       print('   Use Physical Device: $_usePhysicalDevice');
     }

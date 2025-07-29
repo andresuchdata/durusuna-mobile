@@ -277,17 +277,38 @@ class ClassUpdateCommentCard extends StatelessWidget {
               const SizedBox(height: 8),
 
               // Reactions
-              if (comment.hasReactions)
-                ReactionsWidget(
-                  reactions: comment.reactions ?? {},
-                  currentUserId: currentUserId,
-                  onReactionTap: (emoji) {
-                    if (onReactionTap != null) {
-                      onReactionTap!(comment, emoji);
-                    }
+              if (comment.hasReactions) ...[
+                Builder(
+                  builder: (context) {
+                    print(
+                        '🎨 Building ReactionsWidget for comment ${comment.id}');
+                    print('📊 Reactions data: ${comment.reactions}');
+                    print('✅ hasReactions: ${comment.hasReactions}');
+                    print('🔢 Total reactions: ${comment.totalReactions}');
+                    return ReactionsWidget(
+                      reactions: comment.reactions ?? {},
+                      currentUserId: currentUserId,
+                      onReactionTap: (emoji) {
+                        print(
+                            '👆 Reaction tapped: $emoji on comment ${comment.id}');
+                        if (onReactionTap != null) {
+                          onReactionTap!(comment, emoji);
+                        }
+                      },
+                      onAddReaction: null, // Remove plus button for comments
+                    );
                   },
-                  onAddReaction: null, // Remove plus button for comments
                 ),
+              ] else ...[
+                Builder(
+                  builder: (context) {
+                    print('❌ No reactions to show for comment ${comment.id}');
+                    print('📊 Reactions: ${comment.reactions}');
+                    print('❓ hasReactions: ${comment.hasReactions}');
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
 
               // Action buttons
               Row(

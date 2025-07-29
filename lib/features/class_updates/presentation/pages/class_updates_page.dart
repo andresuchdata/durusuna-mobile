@@ -612,16 +612,47 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
       return;
     }
 
+    // Get current user ID for optimistic update
+    final currentUser =
+        ref.read(authServiceProvider).getCurrentUserFromStorage();
+    if (currentUser == null) return;
+    final currentUserId = currentUser.id;
+
+    // Find comment in current state
+    final commentIndex = _comments.indexWhere((c) => c.id == comment.id);
+    if (commentIndex == -1) return;
+
+    // Store original comment for potential rollback
+    final originalComment = _comments[commentIndex];
+
+    // Optimistic update: Update UI immediately
+    final updatedComment =
+        _updateCommentReaction(originalComment, emoji, currentUserId);
+
+    // Update local state optimistically
+    print('🔄 Updating UI state optimistically');
+    print('📝 Comment index: $commentIndex');
+    print('🔄 Before setState - comments count: ${_comments.length}');
+    setState(() {
+      _comments[commentIndex] = updatedComment;
+      _organizedComments =
+          null; // Clear cache to force refresh with new reaction
+      print('✅ setState executed - comment updated at index $commentIndex');
+      print('🗑️ Cleared _organizedComments cache to force refresh');
+    });
+    print('🔄 After setState - comments count: ${_comments.length}');
+
     try {
+      print(
+          '🔄 Calling comment reaction API for comment ${comment.id} with emoji $emoji');
       final service = ref.read(classUpdatesServiceProvider);
       await service.toggleCommentReaction(
         commentId: comment.id,
         emoji: emoji,
       );
 
-      // Refresh comments to show updated reactions
-      await _loadComments();
-
+      print('✅ Comment reaction API call successful');
+      // Success - show feedback
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -631,7 +662,18 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
         );
       }
     } catch (e) {
+      print('❌ Comment reaction API call failed: $e');
+      // Rollback optimistic update on failure
       if (mounted) {
+        print('🔄 Rolling back optimistic update due to API failure');
+        setState(() {
+          _comments[commentIndex] = originalComment;
+          _organizedComments =
+              null; // Clear cache to force refresh with rollback
+          print('↩️ Rollback setState executed');
+          print('🗑️ Cleared _organizedComments cache for rollback');
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to add reaction: $e'),
@@ -640,6 +682,72 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
         );
       }
     }
+  }
+
+  ClassUpdateComment _updateCommentReaction(
+      ClassUpdateComment comment, String emoji, String currentUserId) {
+    print('🔧 Updating comment reaction optimistically');
+    print('📊 Current reactions: ${comment.reactions}');
+    print('👤 Current user ID: $currentUserId');
+    print('🎭 Emoji: $emoji');
+
+    final reactions = Map<String, dynamic>.from(comment.reactions ?? {});
+
+    if (reactions.containsKey(emoji)) {
+      final reactionData = reactions[emoji];
+      print('📝 Existing reaction data: $reactionData');
+
+      // Handle different reaction data formats
+      if (reactionData is Map<String, dynamic>) {
+        final users = List<String>.from(reactionData['users'] ?? []);
+        print('👥 Current users: $users');
+
+        if (users.contains(currentUserId)) {
+          // Remove user's reaction
+          users.remove(currentUserId);
+          print('➖ Removing user reaction');
+          if (users.isEmpty) {
+            reactions.remove(emoji);
+            print('🗑️ Removing empty reaction');
+          } else {
+            reactions[emoji] = {
+              'count': users.length,
+              'users': users,
+            };
+            print('📊 Updated reaction: ${reactions[emoji]}');
+          }
+        } else {
+          // Add user's reaction
+          users.add(currentUserId);
+          print('➕ Adding user reaction');
+          reactions[emoji] = {
+            'count': users.length,
+            'users': users,
+          };
+          print('📊 Updated reaction: ${reactions[emoji]}');
+        }
+      } else {
+        // Legacy format - convert to new format
+        print('🔄 Converting legacy format');
+        reactions[emoji] = {
+          'count': 1,
+          'users': [currentUserId],
+        };
+      }
+    } else {
+      // Add new reaction
+      print('🆕 Adding new reaction');
+      reactions[emoji] = {
+        'count': 1,
+        'users': [currentUserId],
+      };
+      print('📊 New reaction: ${reactions[emoji]}');
+    }
+
+    print('✅ Final reactions: $reactions');
+    final updatedComment = comment.copyWith(reactions: reactions);
+    print('🔄 Comment updated with new reactions');
+    return updatedComment;
   }
 
   void _showCommentReactionPicker(ClassUpdateComment comment) {

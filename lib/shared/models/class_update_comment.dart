@@ -87,7 +87,7 @@ class ClassUpdateComment {
     String? authorId,
     String? content,
     String? replyToId,
-    Map<String, int>? reactions,
+    Map<String, dynamic>? reactions,
     bool? isEdited,
     DateTime? editedAt,
     bool? isDeleted,
