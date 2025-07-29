@@ -27,7 +27,7 @@ class UrlUtils {
 
   /// Rewrite attachment URL for platform compatibility and production environment
   /// This handles the case where attachment URLs stored in DB still use localhost
-  /// but the app is running against production backend
+  /// or emulator IPs but the app is running against production backend
   static String rewriteAttachmentUrl(String? url) {
     if (url == null || url.isEmpty) return '';
 
@@ -36,15 +36,15 @@ class UrlUtils {
     print('🏭 Is production: ${ApiConstants.isProduction}');
     print('📡 Current base URL: ${ApiConstants.baseUrl}');
 
-    // If we're in production and the URL contains localhost, replace it with production URL
-    if (ApiConstants.isProduction && url.contains('localhost')) {
-      // Extract the path from localhost URL
+    // If we're in production and the URL contains development URLs, replace with production URL
+    if (ApiConstants.isProduction && _isDevelopmentUrl(url)) {
+      // Extract the path from development URL
       final uri = Uri.parse(url);
       final path = uri.path;
 
       // Replace with production backend URL
       final productionUrl = '${ApiConstants.socketUrl}$path';
-      print('🔄 Rewriting localhost to production: $productionUrl');
+      print('🔄 Rewriting development URL to production: $productionUrl');
       return productionUrl;
     }
 
@@ -52,6 +52,13 @@ class UrlUtils {
     final rewrittenUrl = rewriteUrl(url);
     print('🔄 Platform rewritten URL: $rewrittenUrl');
     return rewrittenUrl;
+  }
+
+  /// Check if URL is a development URL (localhost or emulator IPs)
+  static bool _isDevelopmentUrl(String url) {
+    return url.contains('localhost') ||
+        url.contains('10.0.2.2') || // Android emulator
+        url.contains('127.0.0.1'); // Local IP
   }
 
   /// Get platform-appropriate base URL
