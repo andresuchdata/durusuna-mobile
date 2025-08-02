@@ -328,6 +328,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                 case 'settings':
                   // TODO: Navigate to settings
                   break;
+                case 'test_401':
+                  // Test 401 handling and navigation
+                  GlobalAuthHandler.test401Handler();
+                  break;
+                case 'force_logout':
+                  // Test force immediate logout
+                  GlobalAuthHandler.forceImmediateLogout();
+                  break;
                 case 'logout':
                   _showLogoutDialog();
                   break;
@@ -341,6 +349,28 @@ class _HomePageState extends ConsumerState<HomePage> {
                     Icon(Icons.settings, size: 20),
                     SizedBox(width: 8),
                     Text('Settings'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'test_401',
+                child: Row(
+                  children: [
+                    Icon(Icons.bug_report, size: 20, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Test 401 Handler',
+                        style: TextStyle(color: Colors.orange)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'force_logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.exit_to_app, size: 20, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Force Logout (Test)',
+                        style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),

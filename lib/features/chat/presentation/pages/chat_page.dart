@@ -6,6 +6,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
+import '../../../../shared/services/mark_read_service.dart';
 import '../../../../shared/models/message.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/models/conversation.dart';
@@ -113,8 +114,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         });
       }
 
-      // REAL-TIME READ STATUS: Mark messages as read when opening chat page
-      _markAllUnreadMessagesAsReadOnOpen();
+      // REQUIREMENT #1: Auto-mark as read when entering chat page
+      _markOnChatPageEnter();
     });
   }
 
@@ -130,6 +131,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       final realtimeService = ref.read(realtimeServiceProvider);
       realtimeService.leaveConversation(widget.conversation.id);
       ref.read(currentConversationProvider.notifier).state = null;
+
+      // Cancel any pending mark-read operations
+      final markReadService = ref.read(markReadServiceProvider);
+      markReadService.cancelPendingOperations(widget.conversation.id);
     } catch (e) {
       // Error in dispose
     }
@@ -222,13 +227,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     _hasMarkedAsReadAtBottom = true;
 
-    // Mark conversation as read since user has scrolled to see latest messages
-    ref
-        .read(conversationsProvider.notifier)
-        .markConversationAsRead(widget.conversation.id);
-
-    // REAL-TIME READ STATUS: Mark individual messages as read via realtime service
-    _markIndividualMessagesAsRead();
+    // Use centralized mark-read service
+    final markReadService = ref.read(markReadServiceProvider);
+    markReadService.markOnScrollToBottom(widget.conversation.id);
 
     // Reset flag after a delay to allow for future mark-as-read calls
     Future.delayed(const Duration(seconds: 2), () {
@@ -236,54 +237,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
   }
 
-  /// Mark individual unread messages as read and emit to realtime service
-  void _markIndividualMessagesAsRead() {
-    final messagesState =
-        ref.read(chatMessagesProvider(widget.conversation.id));
-    final currentUserId = ref.read(authStateProvider).user?.id;
-
-    if (currentUserId == null) return;
-
-    // Find unread messages from other users
-    final unreadMessages = messagesState.messages
-        .where((message) =>
-            message.senderId != currentUserId &&
-            message.readStatus != ReadStatus.read &&
-            message.readAt == null)
-        .toList();
-
-    if (unreadMessages.isNotEmpty) {
-      final messageIds = unreadMessages.map((m) => m.id).toList();
-
-      // Emit to realtime service for immediate updates
-      final realtimeService = ref.read(realtimeServiceProvider);
-      realtimeService.markAsRead(messageIds, widget.conversation.id);
-
-      // Also call API for persistence
-      _markMessagesAsReadViaAPI(messageIds);
-    }
-  }
-
-  /// Mark messages as read via API for persistence
-  Future<void> _markMessagesAsReadViaAPI(List<String> messageIds) async {
-    try {
-      final chatService = ref.read(chatServiceProvider);
-      // Use conversation-level marking instead of individual messages
-      // This endpoint is working (returns 200) unlike the message-level one (404)
-      await chatService.markConversationAsRead(widget.conversation.id);
-    } catch (e) {
-      // Error in API call
-    }
-  }
-
-  /// Mark all unread messages as read when opening chat page
-  void _markAllUnreadMessagesAsReadOnOpen() {
-    // Wait a bit for messages to load
-    Future.delayed(const Duration(milliseconds: 1000), () {
-      if (mounted) {
-        _markIndividualMessagesAsRead();
-      }
-    });
+  /// REQUIREMENT #1: Mark as read when user opens chat page after fetching messages
+  void _markOnChatPageEnter() {
+    final markReadService = ref.read(markReadServiceProvider);
+    markReadService.markOnChatPageEnter(widget.conversation.id);
   }
 
   /// Show profile card for the conversation (user profile for direct, group profile for group)
@@ -1330,11 +1287,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       _scrollToBottom(animated: true);
 
-      // Ensure conversation is marked as read when user sends a message
-      // This handles any edge cases where unread count might be wrong
-      await ref
-          .read(conversationsProvider.notifier)
-          .markConversationAsRead(widget.conversation.id);
+      // Mark as read when user sends a message (implicit read)
+      final markReadService = ref.read(markReadServiceProvider);
+      markReadService.markOnMessageSent(widget.conversation.id);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1644,6 +1599,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ref
                   .read(chatMessagesProvider(widget.conversation.id).notifier)
                   .addMessage(realtimeMessage.message);
+
+              // Since user is currently viewing this chat, auto-mark new messages as read immediately
+              final markReadService = ref.read(markReadServiceProvider);
+              markReadService.markMessagesRead(
+                widget.conversation.id,
+                [realtimeMessage.message.id],
+                immediate: true, // User is actively viewing, mark immediately
+              );
             }
 
             // Auto-scroll to bottom for any new message

@@ -186,17 +186,26 @@ class ChatService {
   /// Mark conversation as read
   Future<void> markConversationAsRead(String conversationId) async {
     try {
+      print(
+          '🌐 ChatService: Calling mark-read API for conversation: $conversationId');
       final response = await _apiService.put(
         ApiConstants.markConversationAsRead(conversationId),
       );
 
-      if (response.statusCode != 200) {
+      if (response.statusCode == 200) {
+        print(
+            '✅ ChatService: Mark-read API succeeded for conversation: $conversationId');
+      } else {
+        print(
+            '❌ ChatService: Mark-read API failed with status ${response.statusCode} for conversation: $conversationId');
         throw ApiException(
           message: 'Failed to mark conversation as read',
           statusCode: response.statusCode ?? 0,
         );
       }
     } catch (e) {
+      print(
+          '❌ ChatService: Mark-read API exception for conversation $conversationId: $e');
       if (e is ApiException) rethrow;
       throw ApiException(
         message: 'Failed to mark conversation as read: ${e.toString()}',
@@ -506,9 +515,13 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
         // If user is viewing this conversation, always set unread count to 0
         // regardless of who sent the message
         newUnreadCount = 0;
+        print(
+            '📖 ConversationsProvider: Setting unread count to 0 for viewed conversation: $conversationId');
       } else if (isFromOtherUser && message.senderId?.isNotEmpty == true) {
         // Only increment if message is from another user and user is not viewing
         newUnreadCount = conversation.unreadCount + 1;
+        print(
+            '📖 ConversationsProvider: Incrementing unread count to $newUnreadCount for conversation: $conversationId');
       } else {
         // Keep existing unread count for own messages when not viewing
         newUnreadCount = conversation.unreadCount;
@@ -537,12 +550,19 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
     }
   }
 
+  /// Mark conversation as read with optimistic updates
+  /// This is now primarily called by MarkReadService for centralized handling
   Future<void> markConversationAsRead(String conversationId) async {
     final index = state.conversations.indexWhere((c) => c.id == conversationId);
     if (index != -1) {
       final conversation = state.conversations[index];
 
-      // Update local state immediately
+      // Skip if already marked as read
+      if (conversation.unreadCount == 0) {
+        return;
+      }
+
+      // Update local state immediately (optimistic update)
       final updatedConversations = [...state.conversations];
       updatedConversations[index] = updatedConversations[index].copyWith(
         unreadCount: 0,
@@ -559,9 +579,8 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
           unreadCount: conversation.unreadCount, // Restore original count
         );
         state = state.copyWith(conversations: revertedConversations);
+        rethrow; // Let MarkReadService handle the error
       }
-    } else {
-      // Conversation not found in local state
     }
   }
 

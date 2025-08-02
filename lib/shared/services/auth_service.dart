@@ -23,9 +23,18 @@ class AuthService {
       if (response.statusCode == 200) {
         final authResponse = AuthResponse.fromJson(response.data);
 
-        // Store user data and token
+        print('🔐 AuthService: Login response tokens:');
+        print(
+            '🔐 AuthService: Access token: ${authResponse.accessToken.substring(0, 20)}...');
+        print(
+            '🔐 AuthService: Refresh token: ${authResponse.refreshToken.substring(0, 20)}...');
+        print(
+            '🔐 AuthService: Tokens are same? ${authResponse.accessToken == authResponse.refreshToken}');
+
+        // Store user data and tokens
         await StorageService.saveUser(authResponse.user.toJson());
         await StorageService.saveToken(authResponse.accessToken);
+        await StorageService.saveRefreshToken(authResponse.refreshToken);
 
         // Real-time service will auto-connect via auth state listener
         print('✅ AuthService: Login successful - real-time will auto-connect');
@@ -81,9 +90,10 @@ class AuthService {
       if (response.statusCode == 201) {
         final authResponse = AuthResponse.fromJson(response.data);
 
-        // Store user data and token
+        // Store user data and tokens
         await StorageService.saveUser(authResponse.user.toJson());
         await StorageService.saveToken(authResponse.accessToken);
+        await StorageService.saveRefreshToken(authResponse.refreshToken);
 
         return authResponse;
       } else {
@@ -206,22 +216,29 @@ class AuthService {
   /// Refresh authentication token
   Future<String?> refreshToken() async {
     try {
-      final refreshToken = StorageService
-          .getToken(); // In production, use separate refresh token
+      final refreshToken = StorageService.getRefreshToken();
       if (refreshToken == null) return null;
 
       final response = await _apiService.post(
         ApiConstants.refresh,
-        data: {'refreshToken': refreshToken},
+        data: {
+          'refresh_token': refreshToken
+        }, // Use snake_case as backend expects
       );
 
       if (response.statusCode == 200) {
-        final newToken = response.data['accessToken'] as String;
-        await StorageService.saveToken(newToken);
-        return newToken;
+        final newAccessToken = response.data['accessToken'] as String;
+        final newRefreshToken = response.data['refreshToken'] as String;
+
+        // Save both new tokens
+        await StorageService.saveToken(newAccessToken);
+        await StorageService.saveRefreshToken(newRefreshToken);
+
+        return newAccessToken;
       }
     } catch (e) {
       // Token refresh failed
+      print('⚠️ AuthService: Token refresh failed: $e');
     }
     return null;
   }
@@ -233,9 +250,14 @@ class AuthService {
       await _apiService.post(ApiConstants.logout);
     } catch (e) {
       // Continue with local logout even if server call fails
+      print(
+          '⚠️ AuthService: Server logout failed, continuing with local logout: $e');
     } finally {
       // Clear local storage (real-time service will auto-disconnect via auth state listener)
       await StorageService.clearUser();
+      // Clear any cached data that might be stale
+      await StorageService.clearCache();
+      print('✅ AuthService: Logout completed - cleared user data and cache');
     }
   }
 

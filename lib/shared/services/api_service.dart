@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/constants/api_constants.dart';
@@ -40,13 +41,24 @@ class ApiService {
       onError: (error, handler) async {
         // Handle unauthorized responses (401)
         if (error.response?.statusCode == 401) {
+          debugPrint(
+              '🚫 ApiService: 401 Unauthorized detected for ${error.requestOptions.path}');
           // Check if this is already a logout/login request to avoid loops
           final isAuthRequest = error.requestOptions.path.contains('/auth/');
 
           if (!isAuthRequest && GlobalAuthHandler.isInitialized) {
-            final refreshToken = StorageService.getToken();
+            final refreshToken = StorageService.getRefreshToken();
 
             if (refreshToken != null) {
+              final accessToken = StorageService.getToken();
+              debugPrint(
+                  '🔑 ApiService: Found refresh token, attempting refresh');
+              debugPrint(
+                  '🔑 ApiService: Access token: ${accessToken?.substring(0, 20)}...');
+              debugPrint(
+                  '🔑 ApiService: Refresh token: ${refreshToken.substring(0, 20)}...');
+              debugPrint(
+                  '🔑 ApiService: Tokens are same? ${accessToken == refreshToken}');
               try {
                 // Attempt to refresh the token
                 final refreshResponse = await _refreshToken(refreshToken);
@@ -70,17 +82,77 @@ class ApiService {
                 }
               } catch (refreshError) {
                 // Refresh failed, logout user
-                await GlobalAuthHandler.tokenRefreshFailed();
+                debugPrint(
+                    '🚨 ApiService: Refresh failed with error: $refreshError');
+
+                // Check if refresh token is completely invalid (401 on refresh endpoint)
+                if (refreshError is DioException &&
+                    refreshError.response?.statusCode == 401) {
+                  debugPrint(
+                      '🔥 ApiService: Refresh token is invalid (401), forcing immediate logout');
+                  try {
+                    await GlobalAuthHandler.forceImmediateLogout();
+                    debugPrint(
+                        '✅ ApiService: Force immediate logout completed');
+                  } catch (handlerError) {
+                    debugPrint(
+                        '❌ ApiService: Force immediate logout failed: $handlerError');
+                  }
+                } else {
+                  debugPrint(
+                      '🚨 ApiService: Calling standard tokenRefreshFailed()');
+                  debugPrint(
+                      '🚨 ApiService: GlobalAuthHandler.isInitialized = ${GlobalAuthHandler.isInitialized}');
+
+                  try {
+                    await GlobalAuthHandler.tokenRefreshFailed();
+                    debugPrint(
+                        '✅ ApiService: GlobalAuthHandler.tokenRefreshFailed() completed successfully');
+                  } catch (handlerError) {
+                    debugPrint(
+                        '❌ ApiService: GlobalAuthHandler.tokenRefreshFailed() failed: $handlerError');
+                    // Force fallback logout
+                    await _handleLogout();
+                  }
+                }
+                // Return a custom error response to prevent further propagation
+                return handler.resolve(Response(
+                  requestOptions: error.requestOptions,
+                  statusCode: 401,
+                  data: {
+                    'error': 'Session expired',
+                    'message': 'Please log in again'
+                  },
+                ));
               }
             } else {
               // No refresh token available
+              debugPrint('❌ ApiService: No refresh token found, logging out');
               await GlobalAuthHandler.handleUnauthorized(
                 customMessage: 'Your session has expired. Please log in again.',
               );
+              // Return a custom error response to prevent further propagation
+              return handler.resolve(Response(
+                requestOptions: error.requestOptions,
+                statusCode: 401,
+                data: {
+                  'error': 'Session expired',
+                  'message': 'Please log in again'
+                },
+              ));
             }
           } else if (!isAuthRequest) {
             // GlobalAuthHandler not initialized - use fallback
             await _handleLogout();
+            // Return a custom error response to prevent further propagation
+            return handler.resolve(Response(
+              requestOptions: error.requestOptions,
+              statusCode: 401,
+              data: {
+                'error': 'Session expired',
+                'message': 'Please log in again'
+              },
+            ));
           }
           // If it's an auth request (login/logout), let it fail normally
         }
@@ -103,19 +175,36 @@ class ApiService {
 
   Future<Map<String, dynamic>?> _refreshToken(String refreshToken) async {
     try {
+      debugPrint('🔄 ApiService: Attempting token refresh');
       final response = await _dio.post('/auth/refresh', data: {
-        'refreshToken': refreshToken,
+        'refresh_token': refreshToken, // Use snake_case as backend expects
       });
 
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
+        // Save both new tokens
         await StorageService.saveToken(data['accessToken']);
+        await StorageService.saveRefreshToken(data['refreshToken']);
+        debugPrint('✅ ApiService: Token refresh successful');
         return data;
+      } else {
+        debugPrint(
+            '❌ ApiService: Token refresh failed with status: ${response.statusCode}');
+        return null;
       }
     } catch (e) {
-      // Refresh token failed
+      debugPrint('❌ ApiService: Token refresh failed with exception: $e');
+
+      // If it's a 401 on refresh, the refresh token is invalid
+      if (e is DioException && e.response?.statusCode == 401) {
+        debugPrint(
+            '🚨 ApiService: Refresh token is invalid (401), forcing logout');
+        // Don't return null, throw to trigger immediate logout
+        throw e;
+      }
+
+      return null;
     }
-    return null;
   }
 
   Future<void> _handleLogout() async {
