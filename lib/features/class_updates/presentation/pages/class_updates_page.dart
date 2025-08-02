@@ -97,6 +97,27 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
     final updatesState = ref.watch(classUpdatesProvider(widget.classId));
     final canPost = authState.user?.userType == UserType.teacher;
 
+    // Listen for errors and show error feedback
+    ref.listen<ClassUpdatesState>(
+      classUpdatesProvider(widget.classId),
+      (previous, next) {
+        // Show error message if there's a new error
+        if (next.error != null &&
+            (previous?.error != next.error) &&
+            next.error!.contains('pin')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(next.error!),
+              duration: const Duration(seconds: 3),
+              backgroundColor: AppTheme.errorColor,
+            ),
+          );
+          // Clear the error after showing it
+          ref.read(classUpdatesProvider(widget.classId).notifier).clearError();
+        }
+      },
+    );
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -286,15 +307,19 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
   }
 
   void _togglePin(ClassUpdate update) {
+    // Determine the new pin status (what it will become)
+    final willBePinned = !update.isPinned;
+
+    // Trigger optimistic update (UI updates immediately)
     ref
         .read(classUpdatesProvider(widget.classId).notifier)
         .togglePin(update.id);
 
-    // Show feedback
+    // Show immediate optimistic feedback
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          update.isPinned ? 'Update unpinned' : 'Update pinned',
+          willBePinned ? 'Update pinned' : 'Update unpinned',
         ),
         duration: const Duration(seconds: 2),
         backgroundColor: AppTheme.successColor,

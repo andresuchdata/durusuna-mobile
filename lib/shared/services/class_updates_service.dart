@@ -378,7 +378,7 @@ class ClassUpdatesService {
   }
 
   /// Pin/unpin a class update
-  Future<ClassUpdate> togglePin(String updateId, bool isPinned) async {
+  Future<void> togglePin(String updateId, bool isPinned) async {
     try {
       final response = await _apiService.put(
         ApiConstants.pinClassUpdate(updateId),
@@ -386,8 +386,10 @@ class ClassUpdatesService {
       );
 
       if (response.statusCode == 200) {
-        final updateData = response.data['update'] as Map<String, dynamic>;
-        return ClassUpdate.fromJson(updateData);
+        // Backend returns: { message: string, is_pinned: boolean }
+        // We don't need the response data since we're doing optimistic updates
+        // Just need to know the request succeeded
+        return;
       } else {
         throw ApiException(
           message: 'Failed to toggle pin',
@@ -513,8 +515,10 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
         attachments: attachments,
       );
 
+      // Add new update and sort properly
+      final updatedList = [newUpdate, ...state.updates];
       state = state.copyWith(
-        updates: [newUpdate, ...state.updates],
+        updates: _sortUpdates(updatedList),
       );
     } catch (e) {
       state = state.copyWith(error: e.toString());
@@ -536,7 +540,9 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
       if (index != -1) {
         final newUpdates = [...state.updates];
         newUpdates[index] = updatedUpdate;
-        state = state.copyWith(updates: newUpdates);
+
+        // Resort the list since the updated_at timestamp may have changed
+        state = state.copyWith(updates: _sortUpdates(newUpdates));
       }
     } catch (e) {
       state = state.copyWith(error: e.toString());
@@ -645,7 +651,9 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
 
       final newUpdates = [...state.updates];
       newUpdates[index] = optimisticUpdate;
-      state = state.copyWith(updates: newUpdates);
+
+      // Resort the list to maintain correct order (pinned first)
+      state = state.copyWith(updates: _sortUpdates(newUpdates));
 
       // Call backend to persist the change
       await _service.togglePin(updateId, newPinnedStatus);
@@ -655,8 +663,10 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
       // Revert to original state on error
       final revertedUpdates = [...state.updates];
       revertedUpdates[index] = originalUpdate;
+
+      // Resort the list after reverting the change
       state = state.copyWith(
-        updates: revertedUpdates,
+        updates: _sortUpdates(revertedUpdates),
         error:
             'Failed to ${newPinnedStatus ? 'pin' : 'unpin'} update: ${e.toString()}',
       );
@@ -673,6 +683,28 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
     } catch (e) {
       return null;
     }
+  }
+
+  /// Sort updates with proper order: pinned first, then by updated_at DESC, then created_at DESC
+  List<ClassUpdate> _sortUpdates(List<ClassUpdate> updates) {
+    final sortedUpdates = [...updates];
+    sortedUpdates.sort((a, b) {
+      // First, sort by pinned status (pinned items first)
+      if (a.isPinned != b.isPinned) {
+        return a.isPinned ? -1 : 1; // pinned items come first
+      }
+
+      // Then sort by updated_at (newest first)
+      final updatedAtComparison = b.updatedAt.compareTo(a.updatedAt);
+      if (updatedAtComparison != 0) {
+        return updatedAtComparison;
+      }
+
+      // Finally sort by created_at (newest first)
+      return b.createdAt.compareTo(a.createdAt);
+    });
+
+    return sortedUpdates;
   }
 
   void clearError() {
