@@ -13,6 +13,7 @@ import 'shared/services/realtime_service.dart';
 import 'shared/services/chat_service.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
+import 'features/home/presentation/pages/enhanced_home_page_concept.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -107,6 +108,7 @@ class DurusunaMobileApp extends ConsumerWidget {
       routes: {
         '/login': (context) => const LoginPage(),
         '/splash': (context) => const SplashPage(),
+        '/home': (context) => const EnhancedHomePage(),
       },
       builder: (context, child) {
         return MediaQuery(

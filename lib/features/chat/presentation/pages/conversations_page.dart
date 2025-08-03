@@ -6,6 +6,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/conversation.dart';
+import '../../../../shared/widgets/global_app_scaffold.dart';
 import 'chat_page.dart';
 import 'contacts_page.dart';
 
@@ -129,105 +130,119 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       );
     });
 
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: _isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Search conversations...',
-                  border: InputBorder.none,
-                ),
-                onChanged: (value) {
-                  // TODO: Implement search
+    return GlobalAppScaffold(
+      title: _isSearching ? null : 'Messages',
+      showNotifications: !_isSearching,
+      actions: _isSearching
+          ? [
+              IconButton(
+                onPressed: () {
+                  setState(() {
+                    _isSearching = false;
+                    _searchController.clear();
+                  });
                 },
-              )
-            : const Text('Messages'),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        actions: [
-          if (_isSearching)
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: _stopSearch,
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.search),
-              onPressed: _startSearch,
-            ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const ContactsPage(),
+                icon: const Icon(Icons.close),
+              ),
+            ]
+          : [
+              IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: _startSearch,
+              ),
+              IconButton(
+                icon: const Icon(Icons.add),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const ContactsPage(),
+                    ),
+                  );
+                },
+              ),
+            ],
+      child: _isSearching
+          ? Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  child: TextField(
+                    controller: _searchController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Search conversations...',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (value) {
+                      // TODO: Implement search
+                    },
+                  ),
                 ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await ref.read(conversationsProvider.notifier).loadConversations();
-        },
-        child: conversationsState.isLoading &&
-                conversationsState.conversations.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : conversationsState.error != null
-                ? _buildErrorState(conversationsState.error!)
-                : conversationsState.conversations.isEmpty
-                    ? _buildEmptyState()
-                    : ListView.separated(
-                        itemCount: conversationsState.conversations.length,
-                        separatorBuilder: (context, index) => const Divider(
-                          height: 0.5, // Reduced from 1 for tighter spacing
-                          indent:
-                              64, // Reduced from 72 to match smaller avatar (24*2 + 16 padding)
-                        ),
-                        itemBuilder: (context, index) {
-                          final conversation =
-                              conversationsState.conversations[index];
-                          return ConversationTile(
-                            conversation: conversation,
-                            onTap: () {
-                              // Clear any currently viewed conversation before navigating
-                              ref
-                                  .read(currentConversationProvider.notifier)
-                                  .state = null;
+                Expanded(
+                  child: _buildConversationsList(conversationsState),
+                ),
+              ],
+            )
+          : _buildConversationsList(conversationsState),
+    );
+  }
 
-                              Navigator.of(context)
-                                  .push(
-                                MaterialPageRoute(
-                                  builder: (context) => ChatPage(
-                                    conversation: conversation,
-                                  ),
-                                ),
-                              )
-                                  .then((_) {
-                                // When returning from chat page, ensure current conversation is cleared
-                                // Add small delay to ensure dispose methods have completed
-                                Future.delayed(
-                                    const Duration(milliseconds: 100), () {
-                                  ref
-                                      .read(
-                                          currentConversationProvider.notifier)
-                                      .state = null;
-
-                                  // Refresh conversations to get latest unread counts
-                                  ref
-                                      .read(conversationsProvider.notifier)
-                                      .loadConversations();
-                                });
-                              });
-                            },
-                          );
-                        },
+  Widget _buildConversationsList(ConversationsState conversationsState) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        await ref.read(conversationsProvider.notifier).loadConversations();
+      },
+      child: conversationsState.isLoading &&
+              conversationsState.conversations.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : conversationsState.error != null
+              ? _buildErrorState(conversationsState.error!)
+              : conversationsState.conversations.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.separated(
+                      itemCount: conversationsState.conversations.length,
+                      separatorBuilder: (context, index) => const Divider(
+                        height: 0.5,
+                        indent: 64,
                       ),
-      ),
+                      itemBuilder: (context, index) {
+                        final conversation =
+                            conversationsState.conversations[index];
+                        return ConversationTile(
+                          conversation: conversation,
+                          onTap: () {
+                            ref
+                                .read(currentConversationProvider.notifier)
+                                .state = null;
+                            Navigator.of(context)
+                                .push(
+                              MaterialPageRoute(
+                                builder: (context) => ChatPage(
+                                  conversation: conversation,
+                                ),
+                              ),
+                            )
+                                .then((_) {
+                              // When returning from chat page, ensure current conversation is cleared
+                              // Add small delay to ensure dispose methods have completed
+                              Future.delayed(const Duration(milliseconds: 100),
+                                  () {
+                                ref
+                                    .read(currentConversationProvider.notifier)
+                                    .state = null;
+
+                                // Refresh conversations to get latest unread counts
+                                ref
+                                    .read(conversationsProvider.notifier)
+                                    .loadConversations();
+                              });
+                            });
+                          },
+                        );
+                      },
+                    ),
     );
   }
 

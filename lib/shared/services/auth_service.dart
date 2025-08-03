@@ -436,4 +436,9 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
   void clearError() {
     state = state.copyWith(error: null);
   }
+
+  // Public method to force re-check of auth status from storage
+  void checkAuthStatus() {
+    _checkAuthStatus();
+  }
 }

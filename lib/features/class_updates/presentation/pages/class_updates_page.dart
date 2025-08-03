@@ -1101,7 +1101,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.reply,
                         size: 16,
                         color: AppTheme.primaryColor,

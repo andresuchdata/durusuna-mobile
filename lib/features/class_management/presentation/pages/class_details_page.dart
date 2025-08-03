@@ -3,11 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
+import '../../../../shared/models/class_update.dart';
 import '../../../../shared/services/class_management_service.dart';
+import '../../../../shared/services/class_updates_service.dart'
+    show ClassUpdatesService, classUpdatesServiceProvider;
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
+import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import '../widgets/lesson_tile.dart';
 import 'subject_details_page.dart';
+import '../../../class_updates/presentation/pages/class_updates_page.dart';
 
 // Providers for class details data
 final classSubjectsProvider =
@@ -19,6 +24,57 @@ final classSubjectsProvider =
 
 final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
   return ClassManagementService();
+});
+
+// Using the existing provider from the service file
+
+// Provider for recent class updates (preview - limited to 2 most recent)
+final recentClassUpdatesProvider =
+    FutureProvider.family<List<ClassUpdate>, String>((ref, classId) async {
+  final service = ref.read(classUpdatesServiceProvider);
+  final allUpdates = await service.getClassUpdates(classId);
+  // Return only the 2 most recent updates for preview
+  return allUpdates.take(2).toList();
+});
+
+// Provider for class students (preview - limited to first 5)
+final classStudentsProvider =
+    FutureProvider.family<List<User>, String>((ref, classId) async {
+  final service = ref.read(classManagementServiceProvider);
+  // This would fetch students from your backend
+  // For now, return mock data or empty list
+  return [];
+});
+
+// Provider for class assignments (preview - limited to 3 most recent)
+final classAssignmentsProvider =
+    FutureProvider.family<List<Map<String, dynamic>>, String>(
+        (ref, classId) async {
+  // Mock assignments data - replace with actual API call
+  await Future.delayed(const Duration(milliseconds: 300));
+  return [
+    {
+      'id': '1',
+      'title': 'Math Homework Chapter 5',
+      'subject': 'Mathematics',
+      'dueDate': DateTime.now().add(const Duration(days: 2)),
+      'isSubmitted': false,
+    },
+    {
+      'id': '2',
+      'title': 'Science Lab Report',
+      'subject': 'Science',
+      'dueDate': DateTime.now().add(const Duration(days: 5)),
+      'isSubmitted': true,
+    },
+    {
+      'id': '3',
+      'title': 'English Essay',
+      'subject': 'English',
+      'dueDate': DateTime.now().add(const Duration(days: 7)),
+      'isSubmitted': false,
+    },
+  ];
 });
 
 class ClassDetailsPage extends ConsumerStatefulWidget {
@@ -43,55 +99,59 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
 
     return GlobalAppScaffold(
       title: widget.classModel.name,
-      child: Container(
-        color: AppTheme.backgroundColor,
-        child: subjectsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error, size: 64, color: AppTheme.errorColor),
-                const SizedBox(height: 16),
-                const Text('Failed to load subjects'),
-                Text(error.toString()),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () =>
-                      ref.refresh(classSubjectsProvider(widget.classModel.id)),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-          data: (subjects) {
-            if (subjects.isEmpty) {
-              return _buildEmptySubjects();
-            }
-
-            return Column(
-              children: [
-                _buildClassHeader(subjects),
-                Expanded(
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero, // Remove default ListView padding
-                    itemCount: subjects.length,
-                    itemBuilder: (context, index) {
-                      final subject = subjects[index];
-                      return _buildSubjectCard(subject);
-                    },
+      child: SafeArea(
+        child: Container(
+          color: AppTheme.backgroundColor,
+          child: subjectsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stack) => Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error, size: 64, color: AppTheme.errorColor),
+                  const SizedBox(height: 16),
+                  const Text('Failed to load subjects'),
+                  Text(error.toString()),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => ref
+                        .refresh(classSubjectsProvider(widget.classModel.id)),
+                    child: const Text('Retry'),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              ),
+            ),
+            data: (subjects) {
+              if (subjects.isEmpty) {
+                return _buildEmptySubjects();
+              }
+
+              return Column(
+                children: [
+                  _buildClassHeader(subjects),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          _buildClassUpdatesPreview(),
+                          _buildStudentListPreview(),
+                          _buildSubjectsPreview(subjects),
+                          _buildAssignmentsPreview(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
   Widget _buildEmptySubjects() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -125,9 +185,9 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
           mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Removed redundant class name - it's already in the navbar
+            // Class summary with academic year, subjects and students
             Text(
-              '${widget.classModel.academicYear} • ${subjects.length} subjects',
+              '${widget.classModel.academicYear} • ${subjects.length} subjects • ${widget.classModel.studentsCount ?? 0} students',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.9),
                 fontSize: 16, // Slightly larger since it's now the main text
@@ -137,6 +197,584 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
             const SizedBox(height: 16), // Reduced bottom spacing
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildClassUpdatesPreview() {
+    final updatesAsync =
+        ref.watch(recentClassUpdatesProvider(widget.classModel.id));
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Recent Updates',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _navigateToClassUpdates(),
+                  child: const Text('See all'),
+                ),
+              ],
+            ),
+          ),
+          updatesAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, stack) => const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Unable to load updates',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            data: (updates) {
+              if (updates.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.announcement_outlined,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'No updates yet',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                children: updates
+                    .map((update) => _buildUpdatePreviewTile(update))
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUpdatePreviewTile(ClassUpdate update) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: Color(0xFFE5E5E5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  update.title ?? 'Update',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textPrimary,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (update.content.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    update.content,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  app_date_utils.DateUtils.formatRelativeTime(update.createdAt),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToClassUpdates() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ClassUpdatesPage(
+          classId: widget.classModel.id,
+          className: widget.classModel.name,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStudentListPreview() {
+    final studentsAsync =
+        ref.watch(classStudentsProvider(widget.classModel.id));
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Students (${widget.classModel.studentsCount ?? 0})',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    // Navigate to full student list
+                  },
+                  child: const Text('View all'),
+                ),
+              ],
+            ),
+          ),
+          studentsAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, stack) => const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Unable to load students',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            data: (students) {
+              if (students.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.people_outline,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'No students enrolled yet',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                children: students
+                    .take(5)
+                    .map((student) => _buildStudentTile(student))
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudentTile(User student) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: Color(0xFFE5E5E5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+            backgroundImage: student.avatarUrl != null
+                ? NetworkImage(student.avatarUrl!)
+                : null,
+            child: student.avatarUrl == null
+                ? Text(
+                    '${student.firstName[0]}${student.lastName[0]}',
+                    style: const TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  student.displayName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                if (student.email.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    student.email,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubjectsPreview(List<Map<String, dynamic>> subjects) {
+    final limitedSubjects = subjects.take(3).toList();
+    final hasMore = subjects.length > 3;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Subjects (${subjects.length})',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                if (hasMore)
+                  TextButton(
+                    onPressed: () {
+                      // Show all subjects
+                    },
+                    child: const Text('See more'),
+                  ),
+              ],
+            ),
+          ),
+          ...limitedSubjects.map((subject) => _buildSubjectCard(subject)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignmentsPreview() {
+    final assignmentsAsync =
+        ref.watch(classAssignmentsProvider(widget.classModel.id));
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Recent Assignments',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    // Navigate to assignments page
+                  },
+                  child: const Text('View all'),
+                ),
+              ],
+            ),
+          ),
+          assignmentsAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, stack) => const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Unable to load assignments',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            data: (assignments) {
+              if (assignments.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.assignment_outlined,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'No assignments yet',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                children: assignments
+                    .map((assignment) => _buildAssignmentTile(assignment))
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignmentTile(Map<String, dynamic> assignment) {
+    final dueDate = assignment['dueDate'] as DateTime;
+    final isSubmitted = assignment['isSubmitted'] as bool;
+    final isOverdue = dueDate.isBefore(DateTime.now()) && !isSubmitted;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: Color(0xFFE5E5E5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(
+              color: isSubmitted
+                  ? AppTheme.successColor
+                  : isOverdue
+                      ? AppTheme.errorColor
+                      : AppTheme.warningColor,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  assignment['title'] ?? 'Assignment',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textPrimary,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      assignment['subject'] ?? '',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const Text(' • '),
+                    Text(
+                      app_date_utils.DateUtils.formatDueDate(dueDate),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isOverdue
+                            ? AppTheme.errorColor
+                            : AppTheme.textSecondary,
+                        fontWeight:
+                            isOverdue ? FontWeight.w500 : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isSubmitted
+                        ? AppTheme.successColor.withValues(alpha: 0.1)
+                        : isOverdue
+                            ? AppTheme.errorColor.withValues(alpha: 0.1)
+                            : AppTheme.warningColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    isSubmitted
+                        ? 'Submitted'
+                        : isOverdue
+                            ? 'Overdue'
+                            : 'Pending',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: isSubmitted
+                          ? AppTheme.successColor
+                          : isOverdue
+                              ? AppTheme.errorColor
+                              : AppTheme.warningColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -167,7 +805,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.08),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
@@ -212,7 +850,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                           .trim(),
                       style: TextStyle(
                         fontSize: 13,
-                        color: AppTheme.textSecondary.withOpacity(0.8),
+                        color: AppTheme.textSecondary.withValues(alpha: 0.8),
                         fontWeight: FontWeight.w400,
                       ),
                     ),
@@ -223,7 +861,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
               // Clean arrow indicator
               Icon(
                 Icons.chevron_right,
-                color: AppTheme.textSecondary.withOpacity(0.6),
+                color: AppTheme.textSecondary.withValues(alpha: 0.6),
                 size: 20,
               ),
             ],
