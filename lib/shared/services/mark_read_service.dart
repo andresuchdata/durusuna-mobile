@@ -64,8 +64,6 @@ class MarkReadService {
     String conversationId, {
     bool immediate = false,
   }) async {
-    print('📖 MarkReadService: Conversation viewed: $conversationId');
-
     if (immediate) {
       await _executeMarkConversationRead(conversationId);
     } else {
@@ -77,9 +75,6 @@ class MarkReadService {
   void markMessagesRead(String conversationId, List<String> messageIds,
       {bool immediate = false}) {
     if (messageIds.isEmpty) return;
-
-    print(
-        '📖 MarkReadService: Marking ${messageIds.length} messages as read in conversation: $conversationId (immediate: $immediate)');
 
     // Add to pending batch
     _pendingMessageIds.putIfAbsent(conversationId, () => <String>{});
@@ -99,10 +94,6 @@ class MarkReadService {
 
   /// Auto-mark when user enters chat page (your requirement #1)
   Future<void> markOnChatPageEnter(String conversationId) async {
-    print(
-        '📖 MarkReadService: Auto-marking on chat page enter: $conversationId');
-
-    // Immediate optimistic update for better UX
     _updateConversationStateOptimistically(conversationId);
 
     // Schedule the actual API call with debouncing
@@ -111,14 +102,11 @@ class MarkReadService {
 
   /// Mark when user scrolls to bottom and views messages
   void markOnScrollToBottom(String conversationId) {
-    print(
-        '📖 MarkReadService: Auto-marking on scroll to bottom: $conversationId');
     _scheduleMarkConversationRead(conversationId);
   }
 
   /// Mark when user sends a message (implicit read)
   void markOnMessageSent(String conversationId) {
-    print('📖 MarkReadService: Auto-marking on message sent: $conversationId');
     _scheduleMarkConversationRead(conversationId);
   }
 
@@ -129,8 +117,6 @@ class MarkReadService {
 
     // Skip if already pending
     if (_pendingConversations.contains(conversationId)) {
-      print(
-          '📖 MarkReadService: Already pending for conversation: $conversationId');
       return;
     }
 
@@ -138,16 +124,11 @@ class MarkReadService {
     _conversationTimers[conversationId] = Timer(_debounceDelay, () {
       _executeMarkConversationRead(conversationId);
     });
-
-    print(
-        '📖 MarkReadService: Scheduled mark-read for conversation: $conversationId');
   }
 
   /// Execute the actual mark-read operation
   Future<void> _executeMarkConversationRead(String conversationId) async {
     if (_pendingConversations.contains(conversationId)) {
-      print(
-          '📖 MarkReadService: Operation already in progress for: $conversationId');
       return;
     }
 
@@ -162,17 +143,12 @@ class MarkReadService {
           .firstOrNull;
 
       if (conversation == null) {
-        print('❌ MarkReadService: Conversation not found: $conversationId');
         return;
       }
 
       if (conversation.unreadCount == 0) {
-        print('📖 MarkReadService: Conversation already read: $conversationId');
         return;
       }
-
-      print(
-          '📖 MarkReadService: Executing mark-read for conversation: $conversationId (unread: ${conversation.unreadCount})');
 
       // Update local state immediately (optimistic)
       await conversationsNotifier.markConversationAsRead(conversationId);
@@ -184,12 +160,7 @@ class MarkReadService {
             conversationId, pendingMessages.toList());
         _pendingMessageIds.remove(conversationId);
       }
-
-      print(
-          '✅ MarkReadService: Successfully marked conversation as read: $conversationId');
     } catch (e) {
-      print(
-          '❌ MarkReadService: Failed to mark conversation as read: $conversationId - $e');
       // The conversation provider will handle rollback on API failure
     } finally {
       _pendingConversations.remove(conversationId);
@@ -204,7 +175,7 @@ class MarkReadService {
       // This will update the UI immediately while API call happens in background
       conversationsNotifier.markConversationAsRead(conversationId);
     } catch (e) {
-      print('❌ MarkReadService: Failed to update conversation state: $e');
+      // Failed to update conversation state
     }
   }
 
@@ -219,11 +190,8 @@ class MarkReadService {
       for (final messageId in messageIds) {
         messagesNotifier.updateMessageStatus(messageId, 'read', now);
       }
-
-      print(
-          '📖 MarkReadService: Updated ${messageIds.length} messages optimistically');
     } catch (e) {
-      print('❌ MarkReadService: Failed to update message states: $e');
+      // Failed to update message states
     }
   }
 
@@ -233,9 +201,6 @@ class MarkReadService {
     _conversationTimers.remove(conversationId);
     _pendingConversations.remove(conversationId);
     _pendingMessageIds.remove(conversationId);
-
-    print(
-        '📖 MarkReadService: Cancelled pending operations for: $conversationId');
   }
 
   /// Clean up all timers

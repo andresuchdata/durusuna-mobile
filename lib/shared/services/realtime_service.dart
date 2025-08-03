@@ -223,59 +223,41 @@ class RealtimeService with WidgetsBindingObserver {
 
   void _setupEventListeners() {
     _socket!.onConnect((_) {
-      print('🔌 Realtime service connected successfully');
       _isConnected = true;
       _connectionController.add(true);
       _setupUserPresence();
     });
 
     _socket!.onDisconnect((reason) {
-      print('🔌 Realtime service disconnected: $reason');
       _isConnected = false;
       _connectionController.add(false);
     });
 
     _socket!.onReconnect((attempt) {
-      print('🔌 Realtime service reconnected (attempt $attempt)');
       _setupUserPresence();
     });
 
-    _socket!.onReconnectAttempt((attempt) {
-      print('🔌 Realtime service reconnection attempt $attempt');
-    });
+    _socket!.onReconnectAttempt((attempt) {});
 
-    _socket!.onReconnectError((error) {
-      print('🔌 Realtime service reconnection error: $error');
-    });
+    _socket!.onReconnectError((error) {});
 
     _socket!.onConnectError((error) {
-      print('🔌 Realtime service connection error: $error');
       _isConnected = false;
       _connectionController.add(false);
     });
 
-    _socket!.onError((error) {
-      print('🔌 Realtime service error: $error');
-    });
+    _socket!.onError((error) {});
 
     // Additional debugging events
-    _socket!.on('connect', (_) {
-      print('🔌 Socket connected event fired');
-    });
+    _socket!.on('connect', (_) {});
 
-    _socket!.on('disconnect', (reason) {
-      print('🔌 Socket disconnected event fired: $reason');
-    });
+    _socket!.on('disconnect', (reason) {});
 
     // Test event for iOS debugging
-    _socket!.on('test', (data) {
-      print('🔌 Test event received: $data');
-    });
+    _socket!.on('test', (data) {});
 
     // Engine.IO debugging events
-    _socket!.on('connect_error', (error) {
-      print('🔌 Engine.IO connect_error: $error');
-    });
+    _socket!.on('connect_error', (error) {});
 
     // Message events
     _socket!.on('message:new', (data) {
@@ -401,38 +383,8 @@ class RealtimeService with WidgetsBindingObserver {
 
   /// Join a conversation room for real-time updates
   void joinConversation(String conversationId) {
-    if (Platform.isAndroid) {
-      print(
-          '🤖 ANDROID RealtimeService: joinConversation called for: $conversationId');
-      print('🤖 ANDROID - Socket exists: ${_socket != null}');
-      print('🤖 ANDROID - Socket connected: ${_socket?.connected}');
-      print('🤖 ANDROID - Is connected flag: $_isConnected');
-    }
-
     if (_socket?.connected == true) {
-      if (Platform.isAndroid) {
-        print(
-            '🤖 ANDROID RealtimeService: Emitting conversation:join for: $conversationId');
-      } else {
-        print('🏠 RealtimeService: Joining conversation room: $conversationId');
-      }
       _socket!.emit('conversation:join', {'conversationId': conversationId});
-      if (Platform.isAndroid) {
-        print(
-            '🤖 ANDROID RealtimeService: conversation:join emitted successfully');
-      } else {
-        print('🏠 RealtimeService: Emitted conversation:join event');
-      }
-    } else {
-      if (Platform.isAndroid) {
-        print(
-            '🤖 ANDROID RealtimeService: Cannot join conversation - socket not connected');
-        print('🤖 ANDROID - Socket null: ${_socket == null}');
-        print('🤖 ANDROID - Socket connected: ${_socket?.connected}');
-      } else {
-        print(
-            '❌ RealtimeService: Cannot join conversation - socket not connected');
-      }
     }
   }
 

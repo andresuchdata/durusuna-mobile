@@ -397,11 +397,6 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
                         currentAttachments: _attachments,
                         onAttachmentsChanged: _onAttachmentsChanged,
                         onUploadProgress: (progress) {
-                          print('📤 Upload progress: ${progress.progress}');
-                          print('📤 Upload status: ${progress.status}');
-                          print('📤 Upload completed: ${progress.isCompleted}');
-                          print('📤 Upload has error: ${progress.hasError}');
-
                           setState(() {
                             // Disable button immediately when upload starts (progress > 0)
                             // Keep disabled until onAttachmentsChanged is called (successful completion)
@@ -412,8 +407,6 @@ class _CreateUpdatePageState extends ConsumerState<CreateUpdatePage> {
                             if (progress.hasError) {
                               _isUploadingAttachments = false;
                             }
-                            print(
-                                '🔒 Button disabled: $_isUploadingAttachments');
                           });
 
                           // Handle upload progress if needed

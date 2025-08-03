@@ -23,21 +23,10 @@ class AuthService {
       if (response.statusCode == 200) {
         final authResponse = AuthResponse.fromJson(response.data);
 
-        print('🔐 AuthService: Login response tokens:');
-        print(
-            '🔐 AuthService: Access token: ${authResponse.accessToken.substring(0, 20)}...');
-        print(
-            '🔐 AuthService: Refresh token: ${authResponse.refreshToken.substring(0, 20)}...');
-        print(
-            '🔐 AuthService: Tokens are same? ${authResponse.accessToken == authResponse.refreshToken}');
-
         // Store user data and tokens
         await StorageService.saveUser(authResponse.user.toJson());
         await StorageService.saveToken(authResponse.accessToken);
         await StorageService.saveRefreshToken(authResponse.refreshToken);
-
-        // Real-time service will auto-connect via auth state listener
-        print('✅ AuthService: Login successful - real-time will auto-connect');
 
         return authResponse;
       } else {
@@ -238,7 +227,6 @@ class AuthService {
       }
     } catch (e) {
       // Token refresh failed
-      print('⚠️ AuthService: Token refresh failed: $e');
     }
     return null;
   }
@@ -250,14 +238,11 @@ class AuthService {
       await _apiService.post(ApiConstants.logout);
     } catch (e) {
       // Continue with local logout even if server call fails
-      print(
-          '⚠️ AuthService: Server logout failed, continuing with local logout: $e');
     } finally {
       // Clear local storage (real-time service will auto-disconnect via auth state listener)
       await StorageService.clearUser();
       // Clear any cached data that might be stale
       await StorageService.clearCache();
-      print('✅ AuthService: Logout completed - cleared user data and cache');
     }
   }
 

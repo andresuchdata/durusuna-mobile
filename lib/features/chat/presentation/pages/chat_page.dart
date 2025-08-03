@@ -1247,14 +1247,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Future<void> _sendMessage({String? content, MessageType? messageType}) async {
     if (content?.trim().isEmpty ?? true) return;
 
-    // Validate reply ID - ensure it's a proper UUID, not a temporary ID
+    // Validate reply ID - ensure it's not a temporary sending message
     String? validReplyToId;
     if (_replyingToMessage != null) {
       final replyId = _replyingToMessage!.id;
-      if (!replyId.startsWith('temp_') && !replyId.startsWith('last_')) {
+
+      if (!replyId.startsWith('temp_')) {
+        // Allow replies to proper UUIDs (temp and last messages should now be rare due to improved optimistic updates)
         validReplyToId = replyId;
       } else {
-        // Clear invalid reply and show warning
+        // Clear invalid reply and show warning - only for temp messages (still sending)
         setState(() {
           _replyingToMessage = null;
         });
@@ -1268,6 +1270,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     try {
+      // Log final message parameters being sent to backend
       await ref
           .read(chatMessagesProvider(widget.conversation.id).notifier)
           .sendMessage(

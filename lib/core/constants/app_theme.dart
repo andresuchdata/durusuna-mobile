@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // Letter Spacing Constant
-  static const double LETTER_SPACING = -0.1;
+  static const double LETTER_SPACING = -0.05;
 
   // Color Palette
   static const Color primaryColor = Color(0xFF1E3A8A); // Deep Blue

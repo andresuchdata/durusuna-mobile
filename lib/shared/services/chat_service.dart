@@ -186,26 +186,17 @@ class ChatService {
   /// Mark conversation as read
   Future<void> markConversationAsRead(String conversationId) async {
     try {
-      print(
-          '🌐 ChatService: Calling mark-read API for conversation: $conversationId');
       final response = await _apiService.put(
         ApiConstants.markConversationAsRead(conversationId),
       );
 
-      if (response.statusCode == 200) {
-        print(
-            '✅ ChatService: Mark-read API succeeded for conversation: $conversationId');
-      } else {
-        print(
-            '❌ ChatService: Mark-read API failed with status ${response.statusCode} for conversation: $conversationId');
+      if (response.statusCode != 200) {
         throw ApiException(
           message: 'Failed to mark conversation as read',
           statusCode: response.statusCode ?? 0,
         );
       }
     } catch (e) {
-      print(
-          '❌ ChatService: Mark-read API exception for conversation $conversationId: $e');
       if (e is ApiException) rethrow;
       throw ApiException(
         message: 'Failed to mark conversation as read: ${e.toString()}',
@@ -515,13 +506,9 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
         // If user is viewing this conversation, always set unread count to 0
         // regardless of who sent the message
         newUnreadCount = 0;
-        print(
-            '📖 ConversationsProvider: Setting unread count to 0 for viewed conversation: $conversationId');
       } else if (isFromOtherUser && message.senderId?.isNotEmpty == true) {
         // Only increment if message is from another user and user is not viewing
         newUnreadCount = conversation.unreadCount + 1;
-        print(
-            '📖 ConversationsProvider: Incrementing unread count to $newUnreadCount for conversation: $conversationId');
       } else {
         // Keep existing unread count for own messages when not viewing
         newUnreadCount = conversation.unreadCount;
@@ -724,8 +711,12 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
           // Populate replyTo fields for initial load
           final messagesWithReplies = _populateAllReplyMessages(messages);
 
+          // Clean up any redundant last_ messages after loading real messages
+          final cleanedMessages =
+              _cleanupRedundantLastMessages(messagesWithReplies);
+
           state = state.copyWith(
-            messages: messagesWithReplies,
+            messages: cleanedMessages,
             isLoading: false,
             hasMore: messages.length == 50,
             currentPage: 1,
@@ -757,17 +748,28 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
       if (conversation?.lastMessage != null) {
         final lastMessage = conversation!.lastMessage!;
 
-        // Check by content and recent time since LastMessage doesn't have ID
-        final recentThreshold =
-            DateTime.now().subtract(const Duration(minutes: 5));
-        final isRecentlyIncluded = loadedMessages.any((m) =>
-            m.content == lastMessage.content &&
-            m.createdAt.isAfter(recentThreshold) &&
-            m.messageType == lastMessage.messageType);
+        // Use more robust matching logic to check if the last message is already included
+        final isAlreadyIncluded = loadedMessages.any((m) {
+          // Match by content and message type (ignore timestamps which can vary)
+          final contentMatch = m.content?.trim() == lastMessage.content?.trim();
+          final typeMatch = m.messageType == lastMessage.messageType;
 
-        if (!isRecentlyIncluded) {
+          // Also check if timestamps are close (within 1 minute)
+          final timeDiff =
+              (m.createdAt.difference(lastMessage.createdAt)).abs();
+          final timeMatch = timeDiff.inMinutes <= 1;
+
+          return contentMatch && typeMatch && (timeMatch || contentMatch);
+        });
+
+        if (!isAlreadyIncluded) {
+          // Only create a last_ message if we're sure the real one isn't loaded
+          // But first, clean up any existing last_ messages for this conversation
+          loadedMessages.removeWhere((m) =>
+              m.id.startsWith('last_') &&
+              m.conversationId == _conversationWithId);
+
           // Create a basic message from the conversation's lastMessage
-          // Note: LastMessage has limited data, so we'll create a minimal Message
           final missingMessage = Message(
             id: 'last_${DateTime.now().millisecondsSinceEpoch}',
             conversationId: _conversationWithId,
@@ -877,6 +879,18 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         }).toList();
 
         state = state.copyWith(messages: updatedMessages);
+      } else {
+        // If not mounted, still try to update state for consistency
+        // This handles edge cases where the response comes after dispose
+        try {
+          final updatedMessages = state.messages.map((msg) {
+            return msg.id == optimisticMessage.id ? serverMessage : msg;
+          }).toList();
+
+          state = state.copyWith(messages: updatedMessages);
+        } catch (e) {
+          // Ignore errors if state is disposed
+        }
       }
     } catch (e) {
       // Remove optimistic message on error
@@ -927,6 +941,37 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
         .toList();
   }
 
+  /// Clean up redundant last_ messages when real messages are available
+  List<Message> _cleanupRedundantLastMessages(List<Message> messages) {
+    final lastMessages =
+        messages.where((m) => m.id.startsWith('last_')).toList();
+    final realMessages = messages
+        .where((m) => !m.id.startsWith('last_') && !m.id.startsWith('temp_'))
+        .toList();
+
+    // Remove last_ messages that have corresponding real messages
+    final redundantLastIds = <String>[];
+
+    for (final lastMsg in lastMessages) {
+      final hasRealEquivalent = realMessages.any((realMsg) {
+        final contentMatch = realMsg.content?.trim() == lastMsg.content?.trim();
+        final typeMatch = realMsg.messageType == lastMsg.messageType;
+        final timeDiff =
+            (realMsg.createdAt.difference(lastMsg.createdAt)).abs();
+        final timeMatch = timeDiff.inMinutes <= 2; // Allow 2 minute variance
+
+        return contentMatch && typeMatch && timeMatch;
+      });
+
+      if (hasRealEquivalent) {
+        redundantLastIds.add(lastMsg.id);
+      }
+    }
+
+    // Remove redundant last_ messages
+    return messages.where((m) => !redundantLastIds.contains(m.id)).toList();
+  }
+
   void addMessage(Message message) {
     // Check if message already exists
     if (mounted && !state.messages.any((m) => m.id == message.id)) {
@@ -955,16 +1000,51 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     // Populate replyTo field if needed
     final messageWithReply = _populateReplyToMessage(serverMessage);
 
-    // Try to find optimistic message by content and timestamp (since it has temp ID)
+    // Try multiple strategies to find the optimistic message to replace
+    int optimisticIndex = -1;
     final now = DateTime.now();
     final recentThreshold =
-        now.subtract(const Duration(seconds: 5)); // Recent messages only
+        now.subtract(const Duration(seconds: 30)); // Extended window
 
-    final optimisticIndex = state.messages.indexWhere((m) =>
-            m.content == messageWithReply.content &&
-            m.createdAt.isAfter(recentThreshold) &&
-            m.id.startsWith('temp_') // Is a temporary message
-        );
+    // Strategy 1: Find by exact content match and recent timestamp for temp_ messages
+    optimisticIndex = state.messages.indexWhere((m) =>
+        m.content == messageWithReply.content &&
+        m.createdAt.isAfter(recentThreshold) &&
+        m.id.startsWith('temp_'));
+
+    // Strategy 2: If not found, try matching by content and sender for temp_ messages (even with different timestamps)
+    if (optimisticIndex == -1) {
+      optimisticIndex = state.messages.indexWhere((m) =>
+          m.content == messageWithReply.content &&
+          m.senderId == messageWithReply.senderId &&
+          m.id.startsWith('temp_'));
+    }
+
+    // Strategy 3: Replace last_ messages if they match content and sender
+    if (optimisticIndex == -1) {
+      optimisticIndex = state.messages.indexWhere((m) =>
+          m.content == messageWithReply.content &&
+          m.senderId == messageWithReply.senderId &&
+          m.id.startsWith('last_'));
+    }
+
+    // Strategy 4: Find the most recent temp_ message from the same sender (fallback)
+    if (optimisticIndex == -1) {
+      final tempMessages = state.messages
+          .asMap()
+          .entries
+          .where((entry) =>
+              entry.value.senderId == messageWithReply.senderId &&
+              entry.value.id.startsWith('temp_'))
+          .toList();
+
+      if (tempMessages.isNotEmpty) {
+        // Get the most recent temp message
+        tempMessages
+            .sort((a, b) => b.value.createdAt.compareTo(a.value.createdAt));
+        optimisticIndex = tempMessages.first.key;
+      }
+    }
 
     if (optimisticIndex != -1) {
       final updatedMessages = [...state.messages];
