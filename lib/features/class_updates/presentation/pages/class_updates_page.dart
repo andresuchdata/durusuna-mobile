@@ -97,6 +97,27 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
     final updatesState = ref.watch(classUpdatesProvider(widget.classId));
     final canPost = authState.user?.userType == UserType.teacher;
 
+    // Listen for errors and show error feedback
+    ref.listen<ClassUpdatesState>(
+      classUpdatesProvider(widget.classId),
+      (previous, next) {
+        // Show error message if there's a new error
+        if (next.error != null &&
+            (previous?.error != next.error) &&
+            next.error!.contains('pin')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(next.error!),
+              duration: const Duration(seconds: 3),
+              backgroundColor: AppTheme.errorColor,
+            ),
+          );
+          // Clear the error after showing it
+          ref.read(classUpdatesProvider(widget.classId).notifier).clearError();
+        }
+      },
+    );
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -286,15 +307,19 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
   }
 
   void _togglePin(ClassUpdate update) {
+    // Determine the new pin status (what it will become)
+    final willBePinned = !update.isPinned;
+
+    // Trigger optimistic update (UI updates immediately)
     ref
         .read(classUpdatesProvider(widget.classId).notifier)
         .togglePin(update.id);
 
-    // Show feedback
+    // Show immediate optimistic feedback
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          update.isPinned ? 'Update unpinned' : 'Update pinned',
+          willBePinned ? 'Update pinned' : 'Update unpinned',
         ),
         duration: const Duration(seconds: 2),
         backgroundColor: AppTheme.successColor,
@@ -969,203 +994,222 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
       maxChildSize: 0.9,
       expand: false,
       builder: (context, scrollController) {
-        return Column(
-          children: [
-            // Handle
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.textTertiary,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Text(
-                    'Comments',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${_comments.length}',
-                    style: const TextStyle(
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const Divider(height: 1),
-
-            // Comments list
-            Expanded(
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(),
-                    )
-                  : _error != null
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Failed to load comments',
-                                style: TextStyle(color: AppTheme.errorColor),
-                              ),
-                              const SizedBox(height: 8),
-                              TextButton(
-                                onPressed: _loadComments,
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        )
-                      : _comments.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'No comments yet.\nBe the first to comment!',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: AppTheme.textSecondary,
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _organizeCommentsWithReplies().length,
-                              itemBuilder: (context, index) {
-                                final organizedComments =
-                                    _organizeCommentsWithReplies();
-                                final displayItem = organizedComments[index];
-                                final currentUserId =
-                                    ref.read(authStateProvider).user?.id;
-
-                                return _buildCommentWithReplies(
-                                  displayItem,
-                                  currentUserId,
-                                );
-                              },
-                            ),
-            ),
-
-            // Reply indicator (shown when replying)
-            if (_replyingToComment != null)
+        return Padding(
+          // Add keyboard padding to push content up when keyboard appears
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Column(
+            children: [
+              // Handle
               Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.textTertiary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Header
+              Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: const BoxDecoration(
-                  color: AppTheme.backgroundColor,
-                  border: Border(top: BorderSide(color: AppTheme.borderColor)),
-                ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.reply,
-                      size: 16,
-                      color: AppTheme.primaryColor,
+                    Text(
+                      'Comments',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Replying to ${_replyingToComment!.author?.displayName ?? "User"}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    const Spacer(),
+                    Text(
+                      '${_comments.length}',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
                       ),
-                    ),
-                    IconButton(
-                      onPressed: _cancelReply,
-                      icon: const Icon(Icons.close, size: 16),
-                      color: AppTheme.textSecondary,
-                      constraints: const BoxConstraints(
-                        minWidth: 24,
-                        minHeight: 24,
-                      ),
-                      padding: EdgeInsets.zero,
                     ),
                   ],
                 ),
               ),
 
-            // Comment input
-            SafeArea(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: AppTheme.borderColor)),
-                  color: _replyingToComment != null
-                      ? AppTheme.backgroundColor
-                      : null,
+              const Divider(height: 1),
+
+              // Comments list
+              Expanded(
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(),
+                      )
+                    : _error != null
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Failed to load comments',
+                                  style: TextStyle(color: AppTheme.errorColor),
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton(
+                                  onPressed: _loadComments,
+                                  child: const Text('Retry'),
+                                ),
+                              ],
+                            ),
+                          )
+                        : _comments.isEmpty
+                            ? const Center(
+                                child: Text(
+                                  'No comments yet.\nBe the first to comment!',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.all(16),
+                                itemCount:
+                                    _organizeCommentsWithReplies().length,
+                                itemBuilder: (context, index) {
+                                  final organizedComments =
+                                      _organizeCommentsWithReplies();
+                                  final displayItem = organizedComments[index];
+                                  final currentUserId =
+                                      ref.read(authStateProvider).user?.id;
+
+                                  return _buildCommentWithReplies(
+                                    displayItem,
+                                    currentUserId,
+                                  );
+                                },
+                              ),
+              ),
+
+              // Reply indicator (shown when replying)
+              if (_replyingToComment != null)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: const BoxDecoration(
+                    color: AppTheme.backgroundColor,
+                    border:
+                        Border(top: BorderSide(color: AppTheme.borderColor)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.reply,
+                        size: 16,
+                        color: AppTheme.primaryColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Replying to ${_replyingToComment!.author?.displayName ?? "User"}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _cancelReply,
+                        icon: const Icon(Icons.close, size: 16),
+                        color: AppTheme.textSecondary,
+                        constraints: const BoxConstraints(
+                          minWidth: 24,
+                          minHeight: 24,
+                        ),
+                        padding: EdgeInsets.zero,
+                      ),
+                    ],
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: AppTheme.primaryColor,
-                      child: Text(
-                        '${authState.user?.firstName[0]}${authState.user?.lastName[0]}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+
+              // Comment input area
+              Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: AppTheme.borderColor)),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        // User avatar
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: AppTheme.primaryColor,
+                          backgroundImage:
+                              authState.user?.avatarUrl?.isNotEmpty == true
+                                  ? NetworkImage(authState.user!.avatarUrl!)
+                                  : null,
+                          child: authState.user?.avatarUrl?.isEmpty != false
+                              ? Text(
+                                  authState.user?.firstName.isNotEmpty == true
+                                      ? authState.user!.firstName[0]
+                                          .toUpperCase()
+                                      : 'U',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                )
+                              : null,
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: _commentController,
-                        focusNode: _focusNode,
-                        decoration: InputDecoration(
-                          hintText: _replyingToComment != null
-                              ? 'Write your reply with @mention...'
-                              : 'Write a comment...',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _commentController,
+                            focusNode: _focusNode,
+                            decoration: InputDecoration(
+                              hintText: _replyingToComment != null
+                                  ? 'Write your reply with @mention...'
+                                  : 'Write a comment...',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              filled: true,
+                              fillColor: Colors.white,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                            ),
+                            maxLines: null,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _postComment(),
                           ),
                         ),
-                        maxLines: null,
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) => _postComment(),
-                      ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: _isPosting ? null : _postComment,
+                          icon: _isPosting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.send),
+                          color: AppTheme.primaryColor,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: _isPosting ? null : _postComment,
-                      icon: _isPosting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.send),
-                      color: AppTheme.primaryColor,
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

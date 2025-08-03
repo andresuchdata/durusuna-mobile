@@ -262,7 +262,7 @@ class _MediaViewerState extends State<MediaViewer> {
       } else if (!downloadUrl.startsWith('http')) {
         downloadUrl = '${ApiConstants.baseUrl}/uploads/serve/$downloadUrl';
       }
-      downloadUrl = UrlUtils.rewriteUrl(downloadUrl);
+      downloadUrl = UrlUtils.rewriteAttachmentUrl(downloadUrl);
     }
 
     return downloadUrl;

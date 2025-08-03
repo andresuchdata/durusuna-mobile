@@ -141,13 +141,17 @@ class MessageBubble extends StatelessWidget {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: isMe
-                          ? Colors.white.withValues(alpha: 0.2)
+                          ? Colors.white.withValues(
+                              alpha:
+                                  0.7) // Improved: More opaque white background for better contrast
                           : AppTheme.primaryColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                       border: Border(
                         left: BorderSide(
                           color: isMe
-                              ? Colors.white.withValues(alpha: 0.9)
+                              ? AppTheme.primaryColor.withValues(
+                                  alpha:
+                                      0.8) // Improved: Use primary color for better distinction
                               : AppTheme.primaryColor,
                           width: 4,
                         ),
@@ -167,7 +171,8 @@ class MessageBubble extends StatelessWidget {
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: isMe
-                                ? Colors.white.withValues(alpha: 0.9)
+                                ? AppTheme
+                                    .primaryColor // Improved: Use primary color instead of white for better readability
                                 : AppTheme.primaryColor,
                           ),
                         ),
@@ -179,7 +184,9 @@ class MessageBubble extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 14,
                             color: isMe
-                                ? Colors.white.withValues(alpha: 0.8)
+                                ? AppTheme.textPrimary.withValues(
+                                    alpha:
+                                        0.8) // Improved: Use darker text for better readability
                                 : AppTheme.textSecondary.withValues(alpha: 0.9),
                             height: 1.3,
                           ),

@@ -184,8 +184,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                     : ListView.separated(
                         itemCount: conversationsState.conversations.length,
                         separatorBuilder: (context, index) => const Divider(
-                          height: 1,
-                          indent: 72,
+                          height: 0.5, // Reduced from 1 for tighter spacing
+                          indent:
+                              64, // Reduced from 72 to match smaller avatar (24*2 + 16 padding)
                         ),
                         itemBuilder: (context, index) {
                           final conversation =
@@ -359,11 +360,12 @@ class ConversationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16, vertical: 4), // Reduced vertical padding from 8 to 4
       leading: Stack(
         children: [
           CircleAvatar(
-            radius: 28,
+            radius: 24, // Reduced from 28 to 24 for more compact look
             backgroundColor: AppTheme.primaryColor,
             backgroundImage:
                 avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
@@ -373,7 +375,8 @@ class ConversationTile extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
-                      fontSize: 18,
+                      fontSize:
+                          16, // Reduced from 18 to 16 to match smaller avatar
                     ),
                   )
                 : null,

@@ -25,9 +25,10 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
-  
+
   UpdateType _selectedType = UpdateType.announcement;
   bool _isLoading = false;
+  bool _isUploadingAttachments = false; // Track upload state - make it mutable
 
   @override
   void initState() {
@@ -49,17 +50,28 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Check if uploads are in progress
+    if (_isUploadingAttachments) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please wait for all attachments to finish uploading'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
       final service = ref.read(classUpdatesServiceProvider);
-      
+
       if (widget.editingUpdate != null) {
         // Update existing
         await service.updateClassUpdate(
           updateId: widget.editingUpdate!.id,
-          title: _titleController.text.trim().isNotEmpty 
-              ? _titleController.text.trim() 
+          title: _titleController.text.trim().isNotEmpty
+              ? _titleController.text.trim()
               : null,
           content: _contentController.text.trim(),
           updateType: _selectedType,
@@ -68,8 +80,8 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
         // Create new
         await service.createClassUpdate(
           classId: widget.classId,
-          title: _titleController.text.trim().isNotEmpty 
-              ? _titleController.text.trim() 
+          title: _titleController.text.trim().isNotEmpty
+              ? _titleController.text.trim()
               : null,
           content: _contentController.text.trim(),
           updateType: _selectedType,
@@ -77,13 +89,13 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
       }
 
       widget.onUpdateCreated();
-      
+
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.editingUpdate != null 
-                ? 'Update edited successfully' 
+            content: Text(widget.editingUpdate != null
+                ? 'Update edited successfully'
                 : 'Update created successfully'),
           ),
         );
@@ -92,7 +104,8 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to ${widget.editingUpdate != null ? 'edit' : 'create'} update: $e'),
+            content: Text(
+                'Failed to ${widget.editingUpdate != null ? 'edit' : 'create'} update: $e'),
             backgroundColor: AppTheme.errorColor,
           ),
         );
@@ -124,10 +137,12 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
               Row(
                 children: [
                   Text(
-                    widget.editingUpdate != null ? 'Edit Update' : 'Create Update',
+                    widget.editingUpdate != null
+                        ? 'Edit Update'
+                        : 'Create Update',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                   const Spacer(),
                   IconButton(
@@ -136,9 +151,9 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 24),
-              
+
               // Update Type Selector
               const Text(
                 'Update Type',
@@ -186,9 +201,9 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
                   );
                 }).toList(),
               ),
-              
+
               const SizedBox(height: 24),
-              
+
               // Title Field
               TextFormField(
                 controller: _titleController,
@@ -198,9 +213,9 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
                 ),
                 maxLength: 100,
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // Content Field
               Expanded(
                 child: TextFormField(
@@ -221,9 +236,9 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
                   },
                 ),
               ),
-              
+
               const SizedBox(height: 24),
-              
+
               // Attachment Section (Placeholder)
               Container(
                 width: double.infinity,
@@ -251,9 +266,9 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
                   ],
                 ),
               ),
-              
+
               const SizedBox(height: 24),
-              
+
               // Action Buttons
               Row(
                 children: [
@@ -266,9 +281,23 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: LoadingButton(
-                      onPressed: _handleSubmit,
+                      onPressed: _isUploadingAttachments
+                          ? null
+                          : _handleSubmit, // Disable when uploading
                       isLoading: _isLoading,
-                      child: Text(widget.editingUpdate != null ? 'Update' : 'Post'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _isUploadingAttachments
+                            ? AppTheme.textTertiary // Gray when disabled
+                            : AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(
+                        _isUploadingAttachments
+                            ? 'Uploading...' // Show upload status
+                            : (widget.editingUpdate != null
+                                ? 'Update'
+                                : 'Post'),
+                      ),
                     ),
                   ),
                 ],
@@ -292,4 +321,4 @@ class _CreateUpdateDialogState extends ConsumerState<CreateUpdateDialog> {
         return '📅 Event';
     }
   }
-} 
+}
