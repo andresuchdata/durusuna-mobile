@@ -1789,21 +1789,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ),
 
               // Chat input area - same structure as class updates
-              Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  border: Border(top: BorderSide(color: AppTheme.borderColor)),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  child: ChatInput(
-                    controller: _messageController,
-                    focusNode: _focusNode,
-                    onSend: (content) => _sendMessage(content: content),
-                    onTyping: _handleTyping,
-                    onAttachment: () => _showAttachmentOptions(),
-                  ),
-                ),
+              ChatInput(
+                controller: _messageController,
+                focusNode: _focusNode,
+                onSend: (content) => _sendMessage(content: content),
+                onTyping: _handleTyping,
+                onAttachment: () => _showAttachmentOptions(),
               ),
             ],
           ),

@@ -4,6 +4,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../core/utils/global_auth_handler.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
+import '../../../../shared/models/notification.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/notification_service.dart';
 import '../../../../shared/widgets/global_app_drawer.dart';
@@ -139,6 +140,12 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
           }
         });
       }
+
+      // Initialize notifications unread count and load recent notifications
+      if (authState.isAuthenticated && authState.user != null) {
+        debugPrint('🔔 Initializing notifications...');
+        ref.read(notificationsProvider.notifier).initializeWithData();
+      }
     });
   }
 
@@ -162,7 +169,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
             children: [
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
-              Text(
+              const Text(
                 'Loading user data...',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
@@ -214,7 +221,9 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
         // Refresh classes data
         ref.invalidate(userClassesProvider);
         // Refresh notifications
-        ref.invalidate(unreadNotificationsCountProvider);
+        ref
+            .read(notificationsProvider.notifier)
+            .loadNotifications(refresh: true);
         // Wait for the refresh to complete
         await ref.read(userClassesProvider.future);
       },
@@ -382,30 +391,22 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
       return _buildEmptyClassesCard();
     }
 
-    // Show maximum 4 classes in home tab, with "View All" for more
-    final displayClasses = classes.take(4).toList();
+    // Show maximum 3 classes in home tab as full-width cards
+    final displayClasses = classes.take(3).toList();
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.1,
-      ),
-      itemCount: displayClasses.length,
-      itemBuilder: (context, index) {
-        final classModel = displayClasses[index];
-        return _buildEnhancedClassCard(classModel);
-      },
+    return Column(
+      children: displayClasses
+          .map(
+            (classModel) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildEnhancedClassCard(classModel),
+            ),
+          )
+          .toList(),
     );
   }
 
   Widget _buildEnhancedClassCard(ClassModel classModel) {
-    // Use keepAlive to prevent unnecessary rebuilds
-    final activityAsync = ref.watch(classActivityProvider(classModel.id));
-
     return Card(
       key: ValueKey('class_card_${classModel.id}'),
       elevation: 3,
@@ -414,106 +415,87 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
         onTap: () => _navigateToClassDetails(classModel),
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          width: double.infinity,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
               colors: [
-                AppTheme.primaryColor.withValues(alpha: 0.08),
-                AppTheme.primaryColor.withValues(alpha: 0.02),
+                AppTheme.primaryColor,
+                AppTheme.primaryColor.withValues(alpha: 0.8),
               ],
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.class_,
-                      color: AppTheme.primaryColor,
-                      size: 20,
-                    ),
-                  ),
-                  const Spacer(),
-                  activityAsync.when(
-                    data: (activity) => activity.totalUnread > 0
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              activity.totalUnread > 99
-                                  ? '99+'
-                                  : activity.totalUnread.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                classModel.name,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (classModel.displayName != classModel.name) ...[
-                const SizedBox(height: 2),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Class name
                 Text(
-                  classModel.displayName,
+                  classModel.name,
                   style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.textSecondary,
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
-              const Spacer(),
-              activityAsync.when(
-                data: (activity) => activity.recentActivity != null
-                    ? Text(
-                        activity.recentActivity!,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: AppTheme.textSecondary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                    : Text(
-                        '${classModel.studentsCount ?? 0} students',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: AppTheme.textSecondary,
+                const SizedBox(height: 8),
+
+                // Class details
+                Text(
+                  '${classModel.academicYear} • ${classModel.studentsCount ?? 0} students',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+
+                // Teacher info
+                if (classModel.teachers != null &&
+                    classModel.teachers!.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: Colors.white.withValues(alpha: 0.2),
+                        child: Icon(
+                          Icons.person,
+                          color: Colors.white.withValues(alpha: 0.9),
+                          size: 20,
                         ),
                       ),
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
-            ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${classModel.teachers!.first.firstName} ${classModel.teachers!.first.lastName}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              'Class Teacher',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
@@ -521,98 +503,137 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
   }
 
   Widget _buildRecentActivitySection() {
+    final notificationsState = ref.watch(notificationsProvider);
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Recent Activity',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Recent Notifications',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationsPage(),
+                    ),
+                  );
+                },
+                child: const Text('View All'),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
-          _buildRecentActivityList(),
+          _buildRecentNotificationsList(notificationsState),
         ],
       ),
     );
   }
 
-  Widget _buildRecentActivityList() {
-    // Mock data - in real app, this would come from a provider
-    final activities = [
-      RecentActivity(
-        title: 'New assignment posted',
-        subtitle: 'Mathematics 5A',
-        time: '2 hours ago',
-        type: ActivityType.assignment,
-        classId: 'math-5a',
-      ),
-      RecentActivity(
-        title: 'Message from John Doe',
-        subtitle: 'English Literature',
-        time: '4 hours ago',
-        type: ActivityType.message,
-        classId: 'english-lit',
-      ),
-      RecentActivity(
-        title: 'Class update posted',
-        subtitle: 'Science 6B',
-        time: '1 day ago',
-        type: ActivityType.update,
-        classId: 'science-6b',
-      ),
-    ];
+  Widget _buildRecentNotificationsList(NotificationsState notificationsState) {
+    if (notificationsState.isLoading &&
+        notificationsState.notifications.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (notificationsState.notifications.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Icon(Icons.notifications_outlined,
+                  size: 48, color: Colors.grey[400]),
+              const SizedBox(height: 8),
+              const Text(
+                'No recent notifications',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show only the 3 most recent notifications
+    final recentNotifications =
+        notificationsState.notifications.take(3).toList();
 
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: activities.length,
+      itemCount: recentNotifications.length,
       separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        return _buildActivityTile(activities[index]);
+        return _buildNotificationTile(recentNotifications[index]);
       },
     );
   }
 
-  Widget _buildActivityTile(RecentActivity activity) {
+  Widget _buildNotificationTile(NotificationModel notification) {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor:
-              _getActivityColor(activity.type).withValues(alpha: 0.1),
+          backgroundColor: _getNotificationTypeColor(notification.type)
+              .withValues(alpha: 0.1),
           child: Icon(
-            _getActivityIcon(activity.type),
-            color: _getActivityColor(activity.type),
+            _getNotificationTypeIcon(notification.type),
+            color: _getNotificationTypeColor(notification.type),
             size: 20,
           ),
         ),
         title: Text(
-          activity.title,
-          style: const TextStyle(
+          notification.title,
+          style: TextStyle(
             fontSize: 14,
-            fontWeight: FontWeight.w600,
+            fontWeight: notification.isRead ? FontWeight.w400 : FontWeight.w600,
             color: AppTheme.textPrimary,
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          '${activity.subtitle} • ${activity.time}',
+          '${notification.content} • ${_formatNotificationTime(notification.createdAt)}',
           style: const TextStyle(
             fontSize: 12,
             color: AppTheme.textSecondary,
           ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: AppTheme.textSecondary,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!notification.isRead)
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppTheme.primaryColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: AppTheme.textSecondary,
+            ),
+          ],
         ),
-        onTap: () => _handleActivityTap(activity),
+        onTap: () => _handleNotificationTap(notification),
       ),
     );
   }
@@ -977,15 +998,72 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     );
   }
 
-  void _handleActivityTap(RecentActivity activity) {
-    switch (activity.type) {
-      case ActivityType.message:
+  void _handleNotificationTap(NotificationModel notification) {
+    // Mark notification as read when tapped
+    if (!notification.isRead) {
+      ref.read(notificationsProvider.notifier).markAsRead(notification.id);
+    }
+
+    // Navigate based on notification type
+    switch (notification.type) {
+      case NotificationType.message:
         setState(() => _currentIndex = 1);
         break;
-      case ActivityType.assignment:
-      case ActivityType.update:
+      case NotificationType.assignment:
         setState(() => _currentIndex = 2);
         break;
+      case NotificationType.announcement:
+      case NotificationType.event:
+      case NotificationType.system:
+        // Stay on current page
+        break;
+    }
+  }
+
+  Color _getNotificationTypeColor(NotificationType type) {
+    switch (type) {
+      case NotificationType.message:
+        return AppTheme.successColor;
+      case NotificationType.assignment:
+        return AppTheme.warningColor;
+      case NotificationType.announcement:
+        return AppTheme.primaryColor;
+      case NotificationType.event:
+        return AppTheme.infoColor;
+      case NotificationType.system:
+        return AppTheme.textSecondary;
+    }
+  }
+
+  IconData _getNotificationTypeIcon(NotificationType type) {
+    switch (type) {
+      case NotificationType.message:
+        return Icons.message;
+      case NotificationType.assignment:
+        return Icons.assignment;
+      case NotificationType.announcement:
+        return Icons.campaign;
+      case NotificationType.event:
+        return Icons.event;
+      case NotificationType.system:
+        return Icons.settings;
+    }
+  }
+
+  String _formatNotificationTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inDays < 1) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
   }
 

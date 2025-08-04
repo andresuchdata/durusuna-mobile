@@ -4,6 +4,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
 import '../widgets/lesson_tile.dart';
+import 'class_details_page.dart';
 
 class SubjectDetailsPage extends ConsumerStatefulWidget {
   final Map<String, dynamic> subject;
@@ -78,12 +79,24 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            widget.classModel.name,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9),
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ClassDetailsPage(
+                    classModel: widget.classModel,
+                  ),
+                ),
+              );
+            },
+            child: Text(
+              widget.classModel.name,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+              ),
             ),
           ),
         ],

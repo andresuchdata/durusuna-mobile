@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/class_management/presentation/pages/class_management_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
+import '../../features/chat/presentation/pages/conversations_page.dart';
 
 class GlobalAppDrawer extends ConsumerWidget {
   const GlobalAppDrawer({super.key});
@@ -35,6 +36,12 @@ class GlobalAppDrawer extends ConsumerWidget {
                   ),
                   _buildDrawerItem(
                     context,
+                    icon: Icons.message,
+                    title: 'Messages',
+                    onTap: () => _navigateToMessages(context),
+                  ),
+                  _buildDrawerItem(
+                    context,
                     icon: Icons.class_,
                     title: 'Classes',
                     onTap: () => _navigateToClasses(context),
@@ -44,12 +51,6 @@ class GlobalAppDrawer extends ConsumerWidget {
                     icon: Icons.assignment,
                     title: 'Assignments',
                     onTap: () => _navigateToAssignments(context),
-                  ),
-                  _buildDrawerItem(
-                    context,
-                    icon: Icons.message,
-                    title: 'Messages',
-                    onTap: () => _navigateToMessages(context),
                   ),
                   const Divider(height: 32),
                   _buildDrawerItem(
@@ -263,10 +264,11 @@ class GlobalAppDrawer extends ConsumerWidget {
 
   void _navigateToMessages(BuildContext context) {
     Navigator.of(context).pop(); // Close drawer
-    // Navigate back to home and switch to messages tab
-    Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
-    // Note: This is a simplified approach. In a real app, you might want to
-    // pass parameters or use a more sophisticated navigation system
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const ConversationsPage(),
+      ),
+    );
   }
 
   void _showAboutDialog(BuildContext context) {

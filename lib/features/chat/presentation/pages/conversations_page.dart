@@ -40,47 +40,17 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     final conversationsState = ref.read(conversationsProvider);
     final realtimeService = ref.read(realtimeServiceProvider);
 
-    if (Platform.isAndroid) {
-      print('🤖 ANDROID ConversationsPage: Starting room join process');
-      print(
-          '🤖 ANDROID - Conversations count: ${conversationsState.conversations.length}');
-      print('🤖 ANDROID - Socket connected: ${realtimeService.isConnected}');
-    }
-
     if (conversationsState.conversations.isEmpty) {
-      print('🏠 ConversationsPage: No conversations to join rooms for');
       return;
     }
 
     if (!realtimeService.isConnected) {
-      print(
-          '🏠 ConversationsPage: Realtime service not connected, skipping room joins');
       return;
     }
 
-    print(
-        '🏠 ConversationsPage: Joining ${conversationsState.conversations.length} conversation rooms');
-
     for (final conversation in conversationsState.conversations) {
-      if (Platform.isAndroid) {
-        print('🤖 ANDROID - Joining room for conversation: ${conversation.id}');
-        print('🤖 ANDROID - Conversation type: ${conversation.type}');
-        print(
-            '🤖 ANDROID - Conversation name: ${conversation.name ?? "No name"}');
-      }
+      if (Platform.isAndroid) {}
       realtimeService.joinConversation(conversation.id);
-      if (Platform.isAndroid) {
-        print('🤖 ANDROID - Join request sent for: ${conversation.id}');
-      } else {
-        print(
-            '🏠 ConversationsPage: Joined room for conversation ${conversation.id}');
-      }
-    }
-
-    if (Platform.isAndroid) {
-      print('🤖 ANDROID ConversationsPage: Completed room join process');
-    } else {
-      print('🏠 ConversationsPage: Successfully joined all conversation rooms');
     }
   }
 

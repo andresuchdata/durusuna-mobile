@@ -9,6 +9,7 @@ import '../../../../shared/services/class_updates_service.dart'
     show ClassUpdatesService, classUpdatesServiceProvider;
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
+import '../../../../shared/widgets/global_app_drawer.dart';
 import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import '../widgets/lesson_tile.dart';
 import 'subject_details_page.dart';
@@ -97,54 +98,52 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     final subjectsAsync =
         ref.watch(classSubjectsProvider(widget.classModel.id));
 
-    return GlobalAppScaffold(
-      title: widget.classModel.name,
-      child: SafeArea(
-        child: Container(
-          color: AppTheme.backgroundColor,
-          child: subjectsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error, size: 64, color: AppTheme.errorColor),
-                  const SizedBox(height: 16),
-                  const Text('Failed to load subjects'),
-                  Text(error.toString()),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => ref
-                        .refresh(classSubjectsProvider(widget.classModel.id)),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      drawer: const GlobalAppDrawer(),
+      body: SafeArea(
+        child: subjectsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) => Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error, size: 64, color: AppTheme.errorColor),
+                const SizedBox(height: 16),
+                const Text('Failed to load subjects'),
+                Text(error.toString()),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () =>
+                      ref.refresh(classSubjectsProvider(widget.classModel.id)),
+                  child: const Text('Retry'),
+                ),
+              ],
             ),
-            data: (subjects) {
-              if (subjects.isEmpty) {
-                return _buildEmptySubjects();
-              }
-
-              return Column(
-                children: [
-                  _buildClassHeader(subjects),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          _buildClassUpdatesPreview(),
-                          _buildStudentListPreview(),
-                          _buildSubjectsPreview(subjects),
-                          _buildAssignmentsPreview(),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
           ),
+          data: (subjects) {
+            if (subjects.isEmpty) {
+              return _buildEmptySubjects();
+            }
+
+            return CustomScrollView(
+              slivers: [
+                _buildSliverAppBar(subjects),
+                SliverToBoxAdapter(
+                  child: _buildClassUpdatesPreview(),
+                ),
+                SliverToBoxAdapter(
+                  child: _buildAssignmentsPreview(),
+                ),
+                SliverToBoxAdapter(
+                  child: _buildStudentListPreview(),
+                ),
+                SliverToBoxAdapter(
+                  child: _buildSubjectsPreview(subjects),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -166,36 +165,212 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
-  Widget _buildClassHeader(List<Map<String, dynamic>> subjects) {
-    return Container(
-      height: 100, // Reduced height since we removed class name
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            AppTheme.primaryColor,
-            AppTheme.primaryColor.withValues(alpha: 0.8),
-          ],
+  Widget _buildSliverAppBar(List<Map<String, dynamic>> subjects) {
+    final teacher = widget.classModel.teachers?.isNotEmpty == true
+        ? widget.classModel.teachers!.first
+        : null;
+
+    return SliverAppBar(
+      expandedHeight: teacher != null ? 250 : 180,
+      floating: false,
+      pinned: true,
+      elevation: 0,
+      backgroundColor: AppTheme.primaryColor,
+      iconTheme: const IconThemeData(color: Colors.white),
+      title: Text(
+        widget.classModel.name,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+          fontSize: 18,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Class summary with academic year, subjects and students
-            Text(
-              '${widget.classModel.academicYear} • ${subjects.length} subjects • ${widget.classModel.studentsCount ?? 0} students',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 16, // Slightly larger since it's now the main text
-                fontWeight: FontWeight.w500,
-              ),
+      actions: [
+        if (teacher != null)
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.white.withValues(alpha: 0.2),
+              backgroundImage: teacher.avatarUrl?.isNotEmpty == true
+                  ? NetworkImage(teacher.avatarUrl!)
+                  : null,
+              child: teacher.avatarUrl?.isEmpty != false
+                  ? Icon(
+                      Icons.person,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      size: 20,
+                    )
+                  : null,
             ),
-            const SizedBox(height: 16), // Reduced bottom spacing
-          ],
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: Icon(
+              Icons.person_off,
+              color: Colors.white.withValues(alpha: 0.6),
+              size: 24,
+            ),
+          ),
+        const SizedBox(width: 8),
+      ],
+      flexibleSpace: FlexibleSpaceBar(
+        background: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppTheme.primaryColor,
+                AppTheme.primaryColor.withValues(alpha: 0.8),
+              ],
+            ),
+          ),
+          // header summary info class name, teacher and academic year
+          child: Padding(
+            padding: const EdgeInsets.only(top: 50),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Class name and academic year section
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.classModel.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (teacher != null)
+                        Text(
+                          'Teacher: ${teacher.displayName}',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        )
+                      else
+                        Text(
+                          'No teacher assigned',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.classModel.academicYear,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Teacher info section - integrated into header
+                if (teacher != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 25,
+                          backgroundColor:
+                              AppTheme.primaryColor.withValues(alpha: 0.1),
+                          backgroundImage: teacher.avatarUrl?.isNotEmpty == true
+                              ? NetworkImage(teacher.avatarUrl!)
+                              : null,
+                          child: teacher.avatarUrl?.isEmpty != false
+                              ? const Icon(
+                                  Icons.person,
+                                  color: AppTheme.primaryColor,
+                                  size: 28,
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Teacher',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                teacher.displayName,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                teacher.email,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppTheme.textSecondary
+                                      .withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            // TODO: Implement chat with teacher
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Chat with teacher coming soon'),
+                                backgroundColor: AppTheme.primaryColor,
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.message,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

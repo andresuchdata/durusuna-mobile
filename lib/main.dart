@@ -5,7 +5,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 // import 'package:firebase_core/firebase_core.dart'; // TEMPORARILY DISABLED
 
 import 'core/constants/app_theme.dart';
-import 'core/constants/api_constants.dart';
 import 'core/storage/storage_service.dart';
 import 'core/utils/global_auth_handler.dart';
 import 'shared/providers/app_providers.dart';
@@ -24,9 +23,6 @@ void main() async {
   // Initialize Hive
   await Hive.initFlutter();
   await StorageService.init();
-
-  // Print debug information for connectivity troubleshooting
-  ApiConstants.printDebugInfo();
 
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
