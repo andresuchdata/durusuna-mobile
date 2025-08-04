@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_theme.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../services/notification_service.dart';
+import '../services/auth_service.dart';
+import 'global_app_drawer.dart';
 
 /// Global app scaffold that provides consistent navigation and notifications
 /// across all pages in the app
@@ -13,6 +15,7 @@ class GlobalAppScaffold extends ConsumerWidget {
   final Widget? floatingActionButton;
   final bool showNotifications;
   final bool automaticallyImplyLeading;
+  final bool showDrawer;
 
   const GlobalAppScaffold({
     super.key,
@@ -22,11 +25,14 @@ class GlobalAppScaffold extends ConsumerWidget {
     this.floatingActionButton,
     this.showNotifications = true,
     this.automaticallyImplyLeading = true,
+    this.showDrawer = true,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unreadCount = ref.watch(unreadNotificationsCountProvider);
+    final authState = ref.watch(authStateProvider);
+    final isAuthenticated = authState.user != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -42,12 +48,24 @@ class GlobalAppScaffold extends ConsumerWidget {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
+        leading: isAuthenticated && showDrawer
+            ? Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(
+                    Icons.menu,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              )
+            : (automaticallyImplyLeading ? null : const SizedBox.shrink()),
         actions: [
           // Existing actions first
           ...?actions,
 
-          // Global notifications bell
-          if (showNotifications) ...[
+          // Global notifications bell (only for authenticated users)
+          if (showNotifications && isAuthenticated) ...[
             Stack(
               children: [
                 IconButton(
@@ -94,6 +112,7 @@ class GlobalAppScaffold extends ConsumerWidget {
           ],
         ],
       ),
+      drawer: isAuthenticated && showDrawer ? const GlobalAppDrawer() : null,
       body: child,
       floatingActionButton: floatingActionButton,
     );

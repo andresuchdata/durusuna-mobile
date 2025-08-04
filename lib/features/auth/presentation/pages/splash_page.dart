@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../core/storage/storage_service.dart';
+import '../../../home/presentation/pages/enhanced_home_page_concept.dart';
 import 'login_page.dart';
-import '../../../home/presentation/pages/home_page.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
   const SplashPage({super.key});
@@ -52,16 +52,16 @@ class _SplashPageState extends ConsumerState<SplashPage>
 
   Future<void> _checkAuthStatus() async {
     await Future.delayed(const Duration(milliseconds: 2500));
-    
+
     if (!mounted) return;
-    
+
     final token = StorageService.getToken();
     final user = StorageService.getUser();
-    
+
     if (token != null && user != null) {
       // User is logged in
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const HomePage()),
+        MaterialPageRoute(builder: (context) => const EnhancedHomePage()),
       );
     } else {
       // User is not logged in
@@ -113,9 +113,9 @@ class _SplashPageState extends ConsumerState<SplashPage>
                         color: AppTheme.primaryColor,
                       ),
                     ),
-                    
+
                     const SizedBox(height: 32),
-                    
+
                     // App Name
                     const Text(
                       'Durusuna',
@@ -126,9 +126,9 @@ class _SplashPageState extends ConsumerState<SplashPage>
                         fontFamily: 'Inter',
                       ),
                     ),
-                    
+
                     const SizedBox(height: 8),
-                    
+
                     // App Tagline
                     const Text(
                       'School Communication Made Easy',
@@ -138,9 +138,9 @@ class _SplashPageState extends ConsumerState<SplashPage>
                         fontFamily: 'Inter',
                       ),
                     ),
-                    
+
                     const SizedBox(height: 48),
-                    
+
                     // Loading Indicator
                     const SizedBox(
                       width: 32,
@@ -159,4 +159,4 @@ class _SplashPageState extends ConsumerState<SplashPage>
       ),
     );
   }
-} 
+}

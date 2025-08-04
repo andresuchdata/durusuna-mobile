@@ -31,11 +31,6 @@ class UrlUtils {
   static String rewriteAttachmentUrl(String? url) {
     if (url == null || url.isEmpty) return '';
 
-    print('🔄 UrlUtils.rewriteAttachmentUrl()');
-    print('🌐 Input URL: $url');
-    print('🏭 Is production: ${ApiConstants.isProduction}');
-    print('📡 Current base URL: ${ApiConstants.baseUrl}');
-
     // If we're in production and the URL contains development URLs, replace with production URL
     if (ApiConstants.isProduction && _isDevelopmentUrl(url)) {
       // Extract the path from development URL
@@ -44,13 +39,11 @@ class UrlUtils {
 
       // Replace with production backend URL
       final productionUrl = '${ApiConstants.socketUrl}$path';
-      print('🔄 Rewriting development URL to production: $productionUrl');
       return productionUrl;
     }
 
     // For development/staging, use normal platform rewriting
     final rewrittenUrl = rewriteUrl(url);
-    print('🔄 Platform rewritten URL: $rewrittenUrl');
     return rewrittenUrl;
   }
 

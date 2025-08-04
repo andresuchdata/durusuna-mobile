@@ -4,6 +4,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/notification_service.dart';
 import '../../../../shared/services/notification_navigation_service.dart';
 import '../../../../shared/models/notification.dart';
+import '../../../../shared/widgets/global_app_scaffold.dart';
 import '../widgets/notification_tile.dart';
 
 class NotificationsPage extends ConsumerStatefulWidget {
@@ -65,46 +66,37 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       }
     });
 
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Notifications',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        backgroundColor: AppTheme.primaryColor,
-        iconTheme: const IconThemeData(color: Colors.white),
-        elevation: 0,
-        actions: [
-          if (notificationsState.notifications.isNotEmpty)
-            TextButton(
-              onPressed: notificationsState.unreadCount > 0
-                  ? () {
-                      ref.read(notificationsProvider.notifier).markAllAsRead();
-                    }
-                  : null,
-              child: Text(
-                'Mark all read',
-                style: TextStyle(
-                  color: notificationsState.unreadCount > 0
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.5),
-                  fontWeight: FontWeight.w500,
-                ),
+    return GlobalAppScaffold(
+      title: 'Notifications',
+      actions: [
+        if (notificationsState.notifications.isNotEmpty)
+          TextButton(
+            onPressed: notificationsState.unreadCount > 0
+                ? () {
+                    ref.read(notificationsProvider.notifier).markAllAsRead();
+                  }
+                : null,
+            child: Text(
+              'Mark all read',
+              style: TextStyle(
+                color: notificationsState.unreadCount > 0
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.5),
+                fontWeight: FontWeight.w500,
               ),
             ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await ref
-              .read(notificationsProvider.notifier)
-              .loadNotifications(refresh: true);
-        },
-        child: _buildBody(notificationsState),
+          ),
+      ],
+      child: Container(
+        color: AppTheme.backgroundColor,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await ref
+                .read(notificationsProvider.notifier)
+                .loadNotifications(refresh: true);
+          },
+          child: _buildBody(notificationsState),
+        ),
       ),
     );
   }

@@ -5,7 +5,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 // import 'package:firebase_core/firebase_core.dart'; // TEMPORARILY DISABLED
 
 import 'core/constants/app_theme.dart';
-import 'core/constants/api_constants.dart';
 import 'core/storage/storage_service.dart';
 import 'core/utils/global_auth_handler.dart';
 import 'shared/providers/app_providers.dart';
@@ -13,6 +12,7 @@ import 'shared/services/realtime_service.dart';
 import 'shared/services/chat_service.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
+import 'features/home/presentation/pages/enhanced_home_page_concept.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,9 +23,6 @@ void main() async {
   // Initialize Hive
   await Hive.initFlutter();
   await StorageService.init();
-
-  // Print debug information for connectivity troubleshooting
-  ApiConstants.printDebugInfo();
 
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
@@ -107,6 +104,7 @@ class DurusunaMobileApp extends ConsumerWidget {
       routes: {
         '/login': (context) => const LoginPage(),
         '/splash': (context) => const SplashPage(),
+        '/home': (context) => const EnhancedHomePage(),
       },
       builder: (context, child) {
         return MediaQuery(

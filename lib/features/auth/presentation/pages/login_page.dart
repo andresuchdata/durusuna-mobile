@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/auth_service.dart';
-import '../../../../shared/models/user.dart';
 import '../../../../shared/widgets/loading_button.dart';
-import '../../../home/presentation/pages/home_page.dart';
 import 'register_page.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -34,17 +32,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
+      debugPrint(
+          '🔐 Login: Starting login process for ${_emailController.text.trim()}');
+
       await ref.read(authStateProvider.notifier).login(
-        _emailController.text.trim(),
-        _passwordController.text,
-      );
+            _emailController.text.trim(),
+            _passwordController.text,
+          );
+
+      debugPrint('✅ Login: Authentication successful');
+
+      // Check auth state after login
+      final authState = ref.read(authStateProvider);
+      debugPrint(
+          '👤 Login: User after login: ${authState.user?.email ?? 'null'}');
+      debugPrint('🔐 Login: isAuthenticated: ${authState.isAuthenticated}');
 
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
+        debugPrint('🏠 Login: Navigating to home page');
+        Navigator.of(context).pushReplacementNamed('/home');
       }
     } catch (e) {
+      debugPrint('❌ Login: Authentication failed: ${e.toString()}');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -78,8 +87,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 60),
-                
+                const SizedBox(height: 40),
+
                 // Logo and Welcome Text
                 Center(
                   child: Column(
@@ -97,27 +106,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
                       Text(
                         'Welcome to Durusuna',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Sign in to continue',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
+                              color: AppTheme.textSecondary,
+                            ),
                       ),
                     ],
                   ),
                 ),
-                
-                const SizedBox(height: 48),
-                
+
+                const SizedBox(height: 32),
+
                 // Email Field
                 TextFormField(
                   controller: _emailController,
@@ -138,9 +150,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     return null;
                   },
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Password Field
                 TextFormField(
                   controller: _passwordController,
@@ -153,7 +165,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     prefixIcon: const Icon(Icons.lock_outlined),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
                       ),
                       onPressed: () {
                         setState(() {
@@ -169,18 +183,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     return null;
                   },
                 ),
-                
-                const SizedBox(height: 24),
-                
+
+                const SizedBox(height: 20),
+
                 // Login Button
                 LoadingButton(
                   onPressed: _handleLogin,
                   isLoading: _isLoading,
                   child: const Text('Sign In'),
                 ),
-                
-                const SizedBox(height: 16),
-                
+
+                const SizedBox(height: 12),
+
                 // Forgot Password
                 TextButton(
                   onPressed: () {
@@ -193,9 +207,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   },
                   child: const Text('Forgot Password?'),
                 ),
-                
-                const SizedBox(height: 32),
-                
+
+                const SizedBox(height: 24),
+
                 // Register Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -203,8 +217,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     Text(
                       "Don't have an account? ",
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
+                            color: AppTheme.textSecondary,
+                          ),
                     ),
                     TextButton(
                       onPressed: _navigateToRegister,
@@ -219,4 +233,4 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       ),
     );
   }
-} 
+}
