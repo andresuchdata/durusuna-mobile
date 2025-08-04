@@ -22,13 +22,10 @@ class GlobalAuthHandler {
     try {
       debugPrint('🔒 GlobalAuthHandler: Handling unauthorized access (401)');
 
-      // Clear all stored authentication data
-      await StorageService.clearUser();
+      // Clear all stored authentication and cached data
+      await StorageService.clearUserData();
 
-      // Clear any cached data that might be stale
-      await StorageService.clearCache();
-
-      // Update auth state through provider
+      // Update auth state through provider (this will also clear cached data)
       if (_ref != null) {
         _ref!.read(authStateProvider.notifier).logout();
       }
@@ -198,8 +195,7 @@ class GlobalAuthHandler {
 
     try {
       // Clear storage first
-      await StorageService.clearUser();
-      await StorageService.clearCache();
+      await StorageService.clearUserData();
       debugPrint('✅ GlobalAuthHandler: Storage cleared');
 
       // Update auth state if possible

@@ -5,14 +5,20 @@ import 'package:hive_flutter/hive_flutter.dart';
 // import 'package:firebase_core/firebase_core.dart'; // TEMPORARILY DISABLED
 
 import 'core/constants/app_theme.dart';
+import 'core/constants/api_constants.dart';
 import 'core/storage/storage_service.dart';
 import 'core/utils/global_auth_handler.dart';
 import 'shared/providers/app_providers.dart';
 import 'shared/services/realtime_service.dart';
 import 'shared/services/chat_service.dart';
+import 'shared/services/auth_service.dart';
+import 'shared/services/notification_service.dart' as notification_service
+    show unreadNotificationsCountProvider;
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/home/presentation/pages/enhanced_home_page_concept.dart';
+import 'features/class_management/presentation/pages/class_management_page.dart'
+    show userClassesProvider;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,6 +57,23 @@ class DurusunaMobileApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+
+    // Listen for auth state changes to clear cached data on logout
+    ref.listen(authStateProvider, (previous, next) {
+      // If user was authenticated but is now not authenticated (logout)
+      if (previous?.isAuthenticated == true && !next.isAuthenticated) {
+        debugPrint('🗑️ User logged out - clearing cached providers');
+
+        // Invalidate all user-specific providers to prevent data leakage
+        try {
+          ref.invalidate(userClassesProvider);
+          ref.invalidate(notification_service.unreadNotificationsCountProvider);
+          debugPrint('✅ User providers cleared on logout');
+        } catch (e) {
+          debugPrint('❌ Error clearing providers: $e');
+        }
+      }
+    });
 
     // Listen for presence updates to keep conversations list in sync
     ref.listen(realtimePresenceProvider, (previous, next) {
