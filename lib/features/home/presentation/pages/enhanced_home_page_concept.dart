@@ -8,12 +8,14 @@ import '../../../../shared/models/notification.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/notification_service.dart';
 import '../../../../shared/widgets/global_app_drawer.dart';
+import '../../../../shared/widgets/global_bottom_navigation.dart';
 
-import '../../../class_updates/presentation/pages/class_updates_page.dart';
-import '../../../chat/presentation/pages/conversations_page.dart';
 import '../../../notifications/presentation/pages/notifications_page.dart';
+import '../../../chat/presentation/pages/conversations_page.dart';
 import '../../../class_management/presentation/pages/class_management_page.dart';
 import '../../../class_management/presentation/pages/class_details_page.dart';
+import '../../../class_management/presentation/widgets/class_card.dart';
+import '../../../class_management/presentation/widgets/create_class_dialog.dart';
 
 // Import the existing provider to avoid conflicts
 import '../../../class_management/presentation/pages/class_management_page.dart'
@@ -111,8 +113,6 @@ class EnhancedHomePage extends ConsumerStatefulWidget {
 }
 
 class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
-  int _currentIndex = 0;
-
   @override
   void initState() {
     super.initState();
@@ -153,6 +153,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
+    final currentIndex = ref.watch(globalBottomNavigationProvider);
 
     debugPrint(
         '🏠 EnhancedHomePage: Building with user: ${user?.email ?? 'null'}');
@@ -198,7 +199,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
       drawer: const GlobalAppDrawer(),
       body: SafeArea(
         child: IndexedStack(
-          index: _currentIndex,
+          index: currentIndex,
           children: [
             _buildEnhancedHomeTab(user),
             _buildConversationsTab(),
@@ -207,8 +208,13 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        child: _buildBottomNavigation(),
+      bottomNavigationBar: GlobalBottomNavigation(
+        currentIndex: currentIndex,
+        onTap: (index) {
+          ref
+              .read(globalBottomNavigationProvider.notifier)
+              .setCurrentIndex(index);
+        },
       ),
     );
   }
@@ -370,7 +376,9 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
                 ),
               ),
               TextButton(
-                onPressed: () => setState(() => _currentIndex = 2),
+                onPressed: () => ref
+                    .read(globalBottomNavigationProvider.notifier)
+                    .setCurrentIndex(2),
                 child: const Text('View All'),
               ),
             ],
@@ -412,7 +420,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
-        onTap: () => _navigateToClassDetails(classModel),
+        onTap: () => _navigateToClassDetails(classModel, context),
         borderRadius: BorderRadius.circular(16),
         child: Container(
           width: double.infinity,
@@ -660,7 +668,9 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
                   title: 'New Message',
                   icon: Icons.add_comment,
                   color: AppTheme.successColor,
-                  onTap: () => setState(() => _currentIndex = 1),
+                  onTap: () => ref
+                      .read(globalBottomNavigationProvider.notifier)
+                      .setCurrentIndex(1),
                 ),
               ),
               const SizedBox(width: 12),
@@ -732,7 +742,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
   }
 
   Widget _buildAllClassesTab(User user) {
-    return const ClassManagementPage();
+    return _ClassManagementTabView();
   }
 
   Widget _buildProfileTab(User user) {
@@ -900,21 +910,22 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     );
   }
 
-  Widget _buildBottomNavigation() {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      currentIndex: _currentIndex,
-      onTap: (index) => setState(() => _currentIndex = index),
-      selectedItemColor: AppTheme.primaryColor,
-      unselectedItemColor: AppTheme.textSecondary,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Messages'),
-        BottomNavigationBarItem(icon: Icon(Icons.class_), label: 'Classes'),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-      ],
-    );
-  }
+  // This method is no longer needed as we're using GlobalBottomNavigation
+  // Widget _buildBottomNavigation() {
+  //   return BottomNavigationBar(
+  //     type: BottomNavigationBarType.fixed,
+  //     currentIndex: _currentIndex,
+  //     onTap: (index) => setState(() => _currentIndex = index),
+  //     selectedItemColor: AppTheme.primaryColor,
+  //     unselectedItemColor: AppTheme.textSecondary,
+  //     items: const [
+  //       BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Home'),
+  //       BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Messages'),
+  //       BottomNavigationBarItem(icon: Icon(Icons.class_), label: 'Classes'),
+  //       BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+  //     ],
+  //   );
+  // }
 
   Widget _buildNotificationButton() {
     final unreadCount = ref.watch(unreadNotificationsCountProvider);
@@ -988,11 +999,16 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
   }
 
   // Navigation and utility methods
-  void _navigateToClassDetails(ClassModel classModel) {
+  void _navigateToClassDetails(ClassModel classModel, BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ClassDetailsPage(
           classModel: classModel,
+          bottomNavigationBar: const GlobalBottomNavigation(
+            currentIndex: 2, // Classes tab
+            isDetailPage: true,
+          ),
+          showBackButton: true,
         ),
       ),
     );
@@ -1007,10 +1023,10 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     // Navigate based on notification type
     switch (notification.type) {
       case NotificationType.message:
-        setState(() => _currentIndex = 1);
+        ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(1);
         break;
       case NotificationType.assignment:
-        setState(() => _currentIndex = 2);
+        ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(2);
         break;
       case NotificationType.announcement:
       case NotificationType.event:
@@ -1064,28 +1080,6 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
       return '${difference.inDays}d ago';
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-    }
-  }
-
-  Color _getActivityColor(ActivityType type) {
-    switch (type) {
-      case ActivityType.message:
-        return AppTheme.successColor;
-      case ActivityType.assignment:
-        return AppTheme.warningColor;
-      case ActivityType.update:
-        return AppTheme.infoColor;
-    }
-  }
-
-  IconData _getActivityIcon(ActivityType type) {
-    switch (type) {
-      case ActivityType.message:
-        return Icons.message;
-      case ActivityType.assignment:
-        return Icons.assignment;
-      case ActivityType.update:
-        return Icons.announcement;
     }
   }
 
@@ -1218,6 +1212,221 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
             child: const Text('Logout'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// Custom tab view for class management without scaffold
+
+class _ClassManagementTabView extends ConsumerWidget {
+  const _ClassManagementTabView();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userClassesAsync = ref.watch(userClassesProvider);
+    final authState = ref.watch(authStateProvider);
+    final currentUser = authState.user;
+
+    return Container(
+      color: AppTheme.backgroundColor,
+      child: Column(
+        children: [
+          // Custom app bar for tab view
+          Container(
+            color: AppTheme.primaryColor,
+            child: SafeArea(
+              bottom: false,
+              child: Container(
+                height: 56,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Class Management',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (currentUser?.userType == UserType.teacher)
+                      IconButton(
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        onPressed: () => _showCreateClassDialog(context, ref),
+                        tooltip: 'Create Class',
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Content
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(userClassesProvider);
+              },
+              child: userClassesAsync.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+                error: (error, stack) =>
+                    _buildErrorState(error.toString(), ref),
+                data: (classes) =>
+                    _buildClassList(classes, currentUser, context, ref),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassList(List<ClassModel> classes, User? currentUser,
+      BuildContext context, WidgetRef ref) {
+    if (classes.isEmpty) {
+      return _buildEmptyState(currentUser, context, ref);
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: classes.length,
+      itemBuilder: (context, index) {
+        final classModel = classes[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: ClassCard(
+            classModel: classModel,
+            onTap: () => _navigateToClassDetails(classModel, context),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(
+      User? currentUser, BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.school_outlined,
+            size: 80,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            currentUser?.userType == UserType.teacher
+                ? 'No classes assigned yet'
+                : 'You are not enrolled in any classes',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            currentUser?.userType == UserType.teacher
+                ? 'Create a new class or contact your administrator'
+                : 'Contact your teacher for class enrollment',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          if (currentUser?.userType == UserType.teacher) ...[
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => _showCreateClassDialog(context, ref),
+              icon: const Icon(Icons.add),
+              label: const Text('Create Class'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 80,
+            color: Colors.red[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Something went wrong',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              ref.invalidate(userClassesProvider);
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Try Again'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToClassDetails(ClassModel classModel, BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ClassDetailsPage(
+          classModel: classModel,
+          bottomNavigationBar: const GlobalBottomNavigation(
+            currentIndex: 2, // Classes tab
+            isDetailPage: true,
+          ),
+          showBackButton: false,
+        ),
+      ),
+    );
+  }
+
+  // Removed _buildBottomNavigationForDetails method - now using GlobalBottomNavigation
+
+  void _showCreateClassDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => CreateClassDialog(
+        onClassCreated: () {
+          ref.invalidate(userClassesProvider);
+        },
       ),
     );
   }

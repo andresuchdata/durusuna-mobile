@@ -2,18 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_model.dart';
-import '../../../../shared/widgets/global_app_scaffold.dart';
+import '../../../../shared/widgets/global_bottom_navigation.dart';
+
 import '../widgets/lesson_tile.dart';
 import 'class_details_page.dart';
 
 class SubjectDetailsPage extends ConsumerStatefulWidget {
   final Map<String, dynamic> subject;
   final ClassModel classModel;
+  final Widget? bottomNavigationBar;
+  final bool showBackButton;
 
   const SubjectDetailsPage({
     super.key,
     required this.subject,
     required this.classModel,
+    this.bottomNavigationBar,
+    this.showBackButton = true,
   });
 
   @override
@@ -26,9 +31,28 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
     final lessons = widget.subject['lessons'] as List<dynamic>? ?? [];
     final teacher = widget.subject['teacher'] as Map<String, dynamic>? ?? {};
 
-    return GlobalAppScaffold(
-      title: widget.subject['subject_name'] ?? 'Subject Details',
-      child: Container(
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        title: Text(widget.subject['subject_name'] ?? 'Subject Details'),
+        backgroundColor: AppTheme.primaryColor,
+        foregroundColor: Colors.white,
+        automaticallyImplyLeading: widget.showBackButton,
+        titleTextStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'Inter',
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+      ),
+      bottomNavigationBar: widget.bottomNavigationBar ??
+          const GlobalBottomNavigation(
+            currentIndex: 2, // Classes tab
+            isDetailPage: true,
+          ),
+      body: Container(
         color: AppTheme.backgroundColor,
         child: SingleChildScrollView(
           child: Column(
@@ -86,6 +110,8 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
                 MaterialPageRoute(
                   builder: (context) => ClassDetailsPage(
                     classModel: widget.classModel,
+                    bottomNavigationBar: widget.bottomNavigationBar,
+                    showBackButton: widget.showBackButton,
                   ),
                 ),
               );
@@ -254,7 +280,7 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
             label,
             style: TextStyle(
               fontSize: 12,
-              color: AppTheme.textSecondary.withOpacity(0.8),
+              color: AppTheme.textSecondary.withValues(alpha: 0.8),
               fontWeight: FontWeight.w500,
             ),
             textAlign: TextAlign.center,
@@ -273,7 +299,7 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -312,7 +338,7 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -339,12 +365,12 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       '${lessons.length}',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.primaryColor,
@@ -362,14 +388,14 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
                   Icon(
                     Icons.book_outlined,
                     size: 48,
-                    color: AppTheme.textSecondary.withOpacity(0.5),
+                    color: AppTheme.textSecondary.withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'No lessons yet',
                     style: TextStyle(
                       fontSize: 16,
-                      color: AppTheme.textSecondary.withOpacity(0.7),
+                      color: AppTheme.textSecondary.withValues(alpha: 0.7),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -378,7 +404,7 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
                     'Lessons will appear here once they are scheduled',
                     style: TextStyle(
                       fontSize: 14,
-                      color: AppTheme.textSecondary.withOpacity(0.6),
+                      color: AppTheme.textSecondary.withValues(alpha: 0.6),
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -397,7 +423,7 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
                   if (lesson != lessons.last)
                     Divider(
                       height: 1,
-                      color: AppTheme.borderColor.withOpacity(0.3),
+                      color: AppTheme.borderColor.withValues(alpha: 0.3),
                     ),
                 ],
               );
@@ -467,4 +493,6 @@ class _SubjectDetailsPageState extends ConsumerState<SubjectDetailsPage> {
       ),
     );
   }
+
+  // Removed _buildDefaultBottomNavigation method - now using GlobalBottomNavigation
 }
