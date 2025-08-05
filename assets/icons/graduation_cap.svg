@@ -1,0 +1,13 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background rounded rectangle with primary color -->
+  <rect x="0" y="0" width="1024" height="1024" rx="222" ry="222" fill="#1E3A8A"/>
+  
+  <!-- Simple graduation cap icon in white -->
+  <g transform="translate(192, 288)">
+    <!-- Mortarboard (top part) with integrated tassel -->
+    <path d="M320 0L0 160L320 320L580 190V320H640V160L320 0Z" fill="white"/>
+    
+    <!-- Base of the cap -->
+    <path d="M80 260L320 370L540 260L540 360L320 470L80 360Z" fill="white"/>
+  </g>
+</svg>
