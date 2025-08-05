@@ -14,6 +14,7 @@ import 'shared/services/chat_service.dart';
 import 'shared/services/auth_service.dart';
 import 'shared/services/notification_service.dart' as notification_service
     show unreadNotificationsCountProvider;
+import 'shared/database/chat_database.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/home/presentation/pages/enhanced_home_page_concept.dart';
@@ -29,6 +30,9 @@ void main() async {
   // Initialize Hive
   await Hive.initFlutter();
   await StorageService.init();
+
+  // Initialize Isar database for local-first chat
+  await ChatDatabase.initialize();
 
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
@@ -68,7 +72,11 @@ class DurusunaMobileApp extends ConsumerWidget {
         try {
           ref.invalidate(userClassesProvider);
           ref.invalidate(notification_service.unreadNotificationsCountProvider);
-          debugPrint('✅ User providers cleared on logout');
+
+          // Clear local chat database on logout for security
+          ChatDatabase.clearAllData();
+
+          debugPrint('✅ User providers and local data cleared on logout');
         } catch (e) {
           debugPrint('❌ Error clearing providers: $e');
         }
