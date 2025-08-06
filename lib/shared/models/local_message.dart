@@ -153,15 +153,11 @@ extension LocalMessageExtension on LocalMessage {
   // Convert to API Message model for sending
   Map<String, dynamic> toApiJson() {
     return {
-      'id': serverId,
-      'conversation_id': conversationId,
-      'sender_id': senderId,
-      'content': content,
+      'conversation_id': conversationId, // Required by backend validation
       'message_type': messageType.name,
-      'reply_to_id': replyToId,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt?.toIso8601String(),
-      'metadata': metadata,
+      if (content != null) 'content': content,
+      if (replyToId != null) 'reply_to_id': replyToId,
+      if (metadata != null) 'metadata': metadata,
     };
   }
 

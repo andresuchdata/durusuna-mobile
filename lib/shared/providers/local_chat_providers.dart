@@ -6,6 +6,7 @@ import '../models/local_conversation.dart';
 import '../models/local_message.dart';
 import '../models/local_user.dart';
 import '../database/chat_database.dart';
+import '../../core/storage/storage_service.dart';
 
 /// Provider for local conversations (instant loading)
 final localConversationsProvider = StateNotifierProvider<
@@ -173,29 +174,177 @@ class LocalMessagesNotifier
     LocalMessageType messageType = LocalMessageType.text,
     String? replyToId,
   }) async {
-    try {
-      // Send with optimistic update (appears instantly)
-      final message = await _chatService.sendMessage(
-        conversationId: _conversationId,
-        content: content,
-        messageType: messageType,
-        replyToId: replyToId,
-      );
+    final startTime = DateTime.now();
+    print(
+        '🐛 [DEBUG] sendMessage called at ${startTime.millisecondsSinceEpoch}');
 
-      // Update UI immediately
+    // 🚀 INSTANT OPTIMISTIC UPDATE - Message appears immediately!
+    final currentUser = StorageService.getUser();
+    if (currentUser == null) {
+      print('🐛 [DEBUG] No current user, returning early');
+      return;
+    }
+
+    final userCheckTime = DateTime.now();
+    print(
+        '🐛 [DEBUG] User check took: ${userCheckTime.difference(startTime).inMilliseconds}ms');
+
+    // Create optimistic message with temporary ID
+    final optimisticMessage = LocalMessage(
+      serverId: null, // Will be set when synced to server
+      conversationId: _conversationId,
+      senderId: currentUser['id'],
+      content: content,
+      messageType: messageType,
+      replyToId: replyToId,
+      createdAt: DateTime.now(),
+      isFromMe: true,
+      isSynced: false,
+      readStatus: 'sending', // Special status for optimistic messages
+    );
+
+    final messageCreateTime = DateTime.now();
+    print(
+        '🐛 [DEBUG] Message creation took: ${messageCreateTime.difference(userCheckTime).inMilliseconds}ms');
+
+    // 🚀 STEP 1: Update UI INSTANTLY (0ms delay)
+    print('🐛 [DEBUG] Starting UI update...');
+    final uiUpdateStart = DateTime.now();
+
+    state.whenData((messages) {
+      if (mounted) {
+        state = AsyncValue.data([...messages, optimisticMessage]);
+        final uiUpdateEnd = DateTime.now();
+        print(
+            '🐛 [DEBUG] UI state update took: ${uiUpdateEnd.difference(uiUpdateStart).inMilliseconds}ms');
+      }
+    });
+
+    final uiUpdateTime = DateTime.now();
+    print(
+        '🐛 [DEBUG] UI update completed in: ${uiUpdateTime.difference(messageCreateTime).inMilliseconds}ms');
+
+    // 🚀 STEP 2: Update conversations list INSTANTLY
+    print('🐛 [DEBUG] Updating conversations list...');
+    final convUpdateStart = DateTime.now();
+
+    _ref
+        .read(localConversationsProvider.notifier)
+        .updateLastMessage(_conversationId, optimisticMessage);
+
+    final convUpdateTime = DateTime.now();
+    print(
+        '🐛 [DEBUG] Conversations update took: ${convUpdateTime.difference(convUpdateStart).inMilliseconds}ms');
+
+    // 🚀 STEP 3: Save to database and sync in background (no await!)
+    print('🐛 [DEBUG] Starting background operations (non-blocking)...');
+    _sendMessageInBackground(
+        optimisticMessage, content, messageType, replyToId);
+
+    final totalTime = DateTime.now();
+    print(
+        '🐛 [DEBUG] ✅ sendMessage COMPLETED in: ${totalTime.difference(startTime).inMilliseconds}ms');
+    print('🐛 [DEBUG] 🚀 Message should be visible in UI now!');
+  }
+
+  /// Background operation - doesn't block UI
+  void _sendMessageInBackground(
+    LocalMessage optimisticMessage,
+    String content,
+    LocalMessageType messageType,
+    String? replyToId,
+  ) async {
+    final bgStartTime = DateTime.now();
+    print(
+        '🐛 [BACKGROUND] Starting background save at ${bgStartTime.millisecondsSinceEpoch}');
+
+    try {
+      // Save to local database ONLY (optimistic message already in UI)
+      print('🐛 [BACKGROUND] Saving optimistic message to database...');
+      final saveStart = DateTime.now();
+
+      await _chatService.saveMessageLocally(optimisticMessage);
+
+      final saveEnd = DateTime.now();
+      print(
+          '🐛 [BACKGROUND] Database save took: ${saveEnd.difference(saveStart).inMilliseconds}ms');
+
+      // Now sync to server separately
+      print('🐛 [BACKGROUND] Syncing to server...');
+      final serverStart = DateTime.now();
+
+      final serverMessage =
+          await _chatService.syncMessageToServer(optimisticMessage);
+
+      final serverEnd = DateTime.now();
+      print(
+          '🐛 [BACKGROUND] Server sync took: ${serverEnd.difference(serverStart).inMilliseconds}ms');
+
+      // Update the optimistic message with server response (has real ID)
+      print('🐛 [BACKGROUND] Updating UI with server message...');
+      final uiUpdateStart = DateTime.now();
+
       state.whenData((messages) {
         if (mounted) {
-          state = AsyncValue.data([...messages, message]);
+          final updated = messages.map((msg) {
+            // Replace optimistic message with server message
+            if (msg.createdAt == optimisticMessage.createdAt &&
+                msg.content == optimisticMessage.content &&
+                msg.isFromMe) {
+              return serverMessage.copyWith(
+                  readStatus: 'sent'); // Change from 'sending' to 'sent'
+            }
+            return msg;
+          }).toList();
+          state = AsyncValue.data(updated);
         }
       });
 
-      // Update conversations list
-      _ref
-          .read(localConversationsProvider.notifier)
-          .updateLastMessage(_conversationId, message);
-    } catch (e, stack) {
-      // TODO: Handle error (show snackbar, retry, etc.)
-      print('Failed to send message: $e');
+      final uiUpdateEnd = DateTime.now();
+      print(
+          '🐛 [BACKGROUND] UI update took: ${uiUpdateEnd.difference(uiUpdateStart).inMilliseconds}ms');
+
+      final totalBgTime = DateTime.now();
+      print(
+          '🐛 [BACKGROUND] ✅ Background save completed in: ${totalBgTime.difference(bgStartTime).inMilliseconds}ms');
+    } catch (e) {
+      print('🐛 [BACKGROUND] ❌ Background save FAILED: $e');
+
+      // Only mark as failed if it's not a duplicate error
+      if (!e.toString().contains('Unique index violated')) {
+        // Mark message as failed for genuine errors
+        state.whenData((messages) {
+          if (mounted) {
+            final updated = messages.map((msg) {
+              if (msg.createdAt == optimisticMessage.createdAt &&
+                  msg.content == optimisticMessage.content &&
+                  msg.isFromMe) {
+                return msg.copyWith(readStatus: 'failed');
+              }
+              return msg;
+            }).toList();
+            state = AsyncValue.data(updated);
+          }
+        });
+
+        print('Failed to send message: $e');
+      } else {
+        // For duplicate errors, just mark as sent since it succeeded
+        print('🐛 [BACKGROUND] Duplicate message detected, marking as sent');
+        state.whenData((messages) {
+          if (mounted) {
+            final updated = messages.map((msg) {
+              if (msg.createdAt == optimisticMessage.createdAt &&
+                  msg.content == optimisticMessage.content &&
+                  msg.isFromMe) {
+                return msg.copyWith(readStatus: 'sent');
+              }
+              return msg;
+            }).toList();
+            state = AsyncValue.data(updated);
+          }
+        });
+      }
     }
   }
 

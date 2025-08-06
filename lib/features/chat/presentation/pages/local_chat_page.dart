@@ -5,10 +5,12 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
+import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/models/local_message.dart';
 import '../../../../shared/models/local_conversation.dart';
 import '../../../../shared/models/conversation.dart';
 import '../../../../shared/providers/local_chat_providers.dart';
+import '../../../../shared/services/local_chat_service.dart';
 import '../../../../shared/widgets/widgets.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
@@ -102,6 +104,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     _scrollController.dispose();
     _messageController.dispose();
     _focusNode.dispose();
+    _messageKeys.clear(); // Clear message keys to prevent memory leaks
 
     // Leave conversation room and clear current conversation ID
     try {
@@ -569,11 +572,22 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   Future<void> _sendMessage({String? content}) async {
-    if (content?.trim().isEmpty ?? true) return;
+    final uiStartTime = DateTime.now();
+    print(
+        '🐛 [UI] _sendMessage called at ${uiStartTime.millisecondsSinceEpoch}');
+    print('🐛 [UI] Content: "$content"');
+
+    if (content?.trim().isEmpty ?? true) {
+      print('🐛 [UI] Empty content, returning early');
+      return;
+    }
 
     try {
       // Convert LocalMessageType to match the message type system
       LocalMessageType messageType = LocalMessageType.text;
+
+      print('🐛 [UI] Calling provider.sendMessage...');
+      final providerCallStart = DateTime.now();
 
       // Send message through local provider (instant UI update)
       await ref
@@ -584,6 +598,11 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             replyToId: _replyingToMessage?.serverId,
           );
 
+      final providerCallEnd = DateTime.now();
+      print(
+          '🐛 [UI] Provider.sendMessage took: ${providerCallEnd.difference(providerCallStart).inMilliseconds}ms');
+
+      print('🐛 [UI] Clearing message controller...');
       _messageController.clear();
 
       // Clear reply state after sending
@@ -593,8 +612,26 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         });
       }
 
-      _scrollToBottom(animated: true);
+      print('🐛 [UI] Scrolling to bottom...');
+      // Wait for UI to update then scroll to bottom
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _scrollToBottom(animated: true);
+        }
+      });
+
+      // Also add a slight delay as backup
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          _scrollToBottom(animated: true);
+        }
+      });
+
+      final uiEndTime = DateTime.now();
+      print(
+          '🐛 [UI] ✅ _sendMessage COMPLETED in: ${uiEndTime.difference(uiStartTime).inMilliseconds}ms');
     } catch (e) {
+      print('🐛 [UI] ❌ _sendMessage FAILED: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -611,6 +648,24 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     final authState = ref.watch(authStateProvider);
     final messagesAsync =
         ref.watch(localMessagesProvider(widget.conversation.id));
+
+    // DEBUG: Force sync messages if empty
+    messagesAsync.whenData((messages) {
+      if (messages.isEmpty) {
+        print(
+            '🐛 [DEBUG] Messages empty, forcing manual sync for ${widget.conversation.id}');
+        // Force sync in background
+        Future.microtask(() async {
+          try {
+            final chatService = ref.read(localChatServiceProvider);
+            // Force sync this conversation's messages
+            await chatService.getMessages(widget.conversation.id);
+          } catch (e) {
+            print('🐛 [DEBUG] Manual sync failed: $e');
+          }
+        });
+      }
+    });
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -727,9 +782,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                   ),
                 ),
               ),
-            // TODO: Create LocalMessageBubble or adapt existing MessageBubble
+            // 🚀 Enhanced message bubble with instant status indicators
             Container(
-              key: _getMessageKey(message.serverId ?? message.id.toString()),
+              key: _getMessageKey(message.serverId ??
+                  '${message.createdAt.millisecondsSinceEpoch}_${message.senderId}'),
               margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
               child: Align(
                 alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -739,12 +795,46 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                   decoration: BoxDecoration(
                     color: isMe ? AppTheme.primaryColor : Colors.grey[200],
                     borderRadius: BorderRadius.circular(16),
+                    // Add subtle border for failed messages
+                    border: message.readStatus == 'failed'
+                        ? Border.all(color: AppTheme.errorColor, width: 1)
+                        : null,
                   ),
-                  child: Text(
-                    message.content ?? '',
-                    style: TextStyle(
-                      color: isMe ? Colors.white : AppTheme.textPrimary,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Message content
+                      Text(
+                        message.content ?? '',
+                        style: TextStyle(
+                          color: isMe ? Colors.white : AppTheme.textPrimary,
+                        ),
+                      ),
+
+                      // Status indicators for my messages
+                      if (isMe) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Timestamp
+                            Text(
+                              '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isMe
+                                    ? Colors.white.withValues(alpha: 0.7)
+                                    : AppTheme.textTertiary,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+
+                            // Status icon - WhatsApp style
+                            _buildStatusIcon(message.readStatus),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
@@ -856,6 +946,58 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       return 'Yesterday';
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
+
+  /// Build WhatsApp-style status icon for messages
+  Widget _buildStatusIcon(String? status) {
+    switch (status) {
+      case 'sending':
+        return SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
+        );
+
+      case 'sent':
+        return Icon(
+          Icons.check,
+          size: 12,
+          color: Colors.white.withValues(alpha: 0.7),
+        );
+
+      case 'delivered':
+        return Icon(
+          Icons.done_all,
+          size: 12,
+          color: Colors.white.withValues(alpha: 0.7),
+        );
+
+      case 'read':
+        return Icon(
+          Icons.done_all,
+          size: 12,
+          color: Colors.lightBlue[300], // Blue checkmarks for read
+        );
+
+      case 'failed':
+        return Icon(
+          Icons.error_outline,
+          size: 12,
+          color: AppTheme.errorColor,
+        );
+
+      default:
+        return Icon(
+          Icons.schedule,
+          size: 12,
+          color: Colors.white.withValues(alpha: 0.7),
+        );
     }
   }
 }

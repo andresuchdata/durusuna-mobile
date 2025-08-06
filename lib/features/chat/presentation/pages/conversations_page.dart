@@ -7,7 +7,8 @@ import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/conversation.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
-import 'chat_page.dart';
+import '../../../../shared/database/chat_database.dart';
+import 'local_chat_page.dart';
 import 'contacts_page.dart';
 
 class ConversationsPage extends ConsumerStatefulWidget {
@@ -121,6 +122,29 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 onPressed: _startSearch,
               ),
               IconButton(
+                icon: const Icon(Icons.refresh), // Force database reset
+                onPressed: () async {
+                  try {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('🔄 FORCE RECREATING database...')),
+                    );
+                    await ChatDatabase.forceRecreateDatabase();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content:
+                            Text('✅ Database RECREATED! Sync should work now.'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('❌ Recreate failed: $e')),
+                    );
+                  }
+                },
+              ),
+              IconButton(
                 icon: const Icon(Icons.add),
                 onPressed: () {
                   Navigator.of(context).push(
@@ -189,7 +213,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                             Navigator.of(context)
                                 .push(
                               MaterialPageRoute(
-                                builder: (context) => ChatPage(
+                                builder: (context) => LocalChatPage(
                                   conversation: conversation,
                                 ),
                               ),

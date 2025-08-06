@@ -77,10 +77,19 @@ class LocalChatService {
     String? replyToId,
     Map<String, dynamic>? metadata,
   }) async {
+    final serviceStartTime = DateTime.now();
+    print(
+        '🐛 [SERVICE] LocalChatService.sendMessage called at ${serviceStartTime.millisecondsSinceEpoch}');
+
     final currentUser = StorageService.getUser();
     if (currentUser == null) {
+      print('🐛 [SERVICE] No authenticated user found');
       throw LocalChatException('User not authenticated');
     }
+
+    final userCheckTime = DateTime.now();
+    print(
+        '🐛 [SERVICE] User auth check took: ${userCheckTime.difference(serviceStartTime).inMilliseconds}ms');
 
     // Create local message instantly
     final localMessage = LocalMessage(
@@ -95,22 +104,68 @@ class LocalChatService {
       metadataJson: metadata != null ? jsonEncode(metadata) : null,
     );
 
+    final messageCreateTime = DateTime.now();
+    print(
+        '🐛 [SERVICE] LocalMessage creation took: ${messageCreateTime.difference(userCheckTime).inMilliseconds}ms');
+
+    // 🚀 INSTANT RETURN - Don't wait for database operations
+    // Start database operations in background
+    print('🐛 [SERVICE] Starting background save (non-blocking)...');
+    _saveMessageInBackground(localMessage);
+
+    final returnTime = DateTime.now();
+    print(
+        '🐛 [SERVICE] ✅ Returning message instantly after: ${returnTime.difference(serviceStartTime).inMilliseconds}ms');
+
+    // Return immediately for instant UI update
+    return localMessage;
+  }
+
+  /// Save message to database and sync to server in background
+  void _saveMessageInBackground(LocalMessage localMessage) async {
+    final bgSaveStart = DateTime.now();
+    print(
+        '🐛 [SERVICE_BG] Background database save started at ${bgSaveStart.millisecondsSinceEpoch}');
+
     try {
-      // Save to local database instantly
+      // Save to local database
+      print('🐛 [SERVICE_BG] Calling ChatDatabase.saveMessage...');
+      final dbSaveStart = DateTime.now();
+
       await ChatDatabase.saveMessage(localMessage);
 
-      // Update conversation's last message instantly
+      final dbSaveEnd = DateTime.now();
+      print(
+          '🐛 [SERVICE_BG] ChatDatabase.saveMessage took: ${dbSaveEnd.difference(dbSaveStart).inMilliseconds}ms');
+
+      // Update conversation's last message
+      print('🐛 [SERVICE_BG] Updating conversation last message...');
+      final convUpdateStart = DateTime.now();
+
       await ChatDatabase.updateConversationLastMessage(
-        conversationId,
+        localMessage.conversationId,
         localMessage,
       );
 
+      final convUpdateEnd = DateTime.now();
+      print(
+          '🐛 [SERVICE_BG] Conversation update took: ${convUpdateEnd.difference(convUpdateStart).inMilliseconds}ms');
+
       // Sync to server in background (no await)
+      print('🐛 [SERVICE_BG] Starting server sync (non-blocking)...');
       _syncMessageToServer(localMessage);
 
-      return localMessage;
+      final totalBgTime = DateTime.now();
+      print(
+          '🐛 [SERVICE_BG] ✅ Background database operations completed in: ${totalBgTime.difference(bgSaveStart).inMilliseconds}ms');
     } catch (e) {
-      throw LocalChatException('Failed to send message locally: $e');
+      if (e.toString().contains('Unique index violated')) {
+        print(
+            '🐛 [SERVICE_BG] Duplicate message detected, this is normal behavior');
+      } else {
+        print('🐛 [SERVICE_BG] ❌ Background save failed: $e');
+        // TODO: Add retry logic or error handling for genuine errors
+      }
     }
   }
 
@@ -129,6 +184,49 @@ class LocalChatService {
     }
   }
 
+  /// Save message to local database only (for optimistic updates)
+  Future<void> saveMessageLocally(LocalMessage message) async {
+    try {
+      await ChatDatabase.saveMessage(message);
+      // Update conversation's last message
+      await ChatDatabase.updateConversationLastMessage(
+        message.conversationId,
+        message,
+      );
+    } catch (e) {
+      if (e.toString().contains('Unique index violated')) {
+        // Duplicate message, this is ok - just log and continue
+        print(
+            '🐛 [SERVICE] Duplicate message detected during local save: ${message.serverId}');
+        return; // Don't rethrow for duplicates
+      }
+      print('Failed to save message locally: $e');
+      rethrow;
+    }
+  }
+
+  /// Sync message to server only (after local save)
+  Future<LocalMessage> syncMessageToServer(LocalMessage localMessage) async {
+    try {
+      final response = await _apiService.post(
+        '/conversations/${localMessage.conversationId}/messages',
+        data: localMessage.toApiJson(),
+      );
+
+      final serverMessage = response.data['message'] as Map<String, dynamic>;
+      final currentUserId = StorageService.getUser()?['id'];
+
+      // Create a local message from server response
+      return LocalMessageExtension.fromApiJson(
+        serverMessage,
+        isFromMe: serverMessage['sender_id'] == currentUserId,
+      );
+    } catch (e) {
+      print('Failed to sync message to server: $e');
+      rethrow;
+    }
+  }
+
   /// Mark conversation as read locally (instant)
   Future<void> markConversationAsRead(String conversationId) async {
     try {
@@ -138,7 +236,10 @@ class LocalChatService {
       // Sync to server in background
       _syncReadStatusToServer(conversationId);
     } catch (e) {
-      throw LocalChatException('Failed to mark conversation as read: $e');
+      // Just log the error instead of throwing to avoid crashes
+      print('Failed to mark conversation as read: $e');
+      // Still try to sync to server even if local update failed
+      _syncReadStatusToServer(conversationId);
     }
   }
 
@@ -191,8 +292,8 @@ class LocalChatService {
       // Sync new messages from server
       await _syncNewMessagesFromServer();
 
-      // Sync conversation updates
-      await _syncConversationUpdatesFromServer();
+      // Sync conversation updates (disabled - endpoint doesn't exist on backend)
+      // await _syncConversationUpdatesFromServer();
     } catch (e) {
       // Log error but don't block app
       print('Background sync failed: $e');
@@ -237,9 +338,15 @@ class LocalChatService {
               LocalConversationExtension.fromApiJson(json, currentUserId))
           .toList();
 
-      // Save all conversations
+      // Save all conversations with error handling
       for (final conversation in localConversations) {
-        await ChatDatabase.saveConversation(conversation);
+        try {
+          await ChatDatabase.saveConversation(conversation);
+        } catch (e) {
+          // Skip duplicate conversations instead of crashing
+          print(
+              'Skipping duplicate conversation: ${conversation.serverId} - $e');
+        }
       }
     } catch (e) {
       throw LocalChatException('Failed to sync conversations from server: $e');
@@ -280,8 +387,22 @@ class LocalChatService {
               ))
           .toList();
 
-      // Save all messages
-      await ChatDatabase.saveMessages(localMessages);
+      // Save all messages with error handling
+      try {
+        await ChatDatabase.saveMessages(localMessages);
+      } catch (e) {
+        // Skip duplicate messages instead of crashing
+        print('Some messages already exist, skipping duplicates: $e');
+        // Try saving individual messages to identify which ones are duplicates
+        for (final message in localMessages) {
+          try {
+            await ChatDatabase.saveMessage(message);
+          } catch (duplicateError) {
+            // Skip this specific message
+            print('Skipping duplicate message: ${message.serverId}');
+          }
+        }
+      }
 
       // Update last sync time
       if (localMessages.isNotEmpty) {
@@ -330,7 +451,7 @@ class LocalChatService {
 
   Future<void> _syncReadStatusToServer(String conversationId) async {
     try {
-      await _apiService.put('/conversations/$conversationId/read');
+      await _apiService.put('/conversations/$conversationId/mark-read');
     } catch (e) {
       print('Failed to sync read status to server: $e');
     }

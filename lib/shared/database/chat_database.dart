@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/local_message.dart';
@@ -38,9 +39,22 @@ class ChatDatabase {
 
   /// Save message to local database (instant)
   static Future<void> saveMessage(LocalMessage message) async {
+    final dbStart = DateTime.now();
+    print(
+        '🐛 [DATABASE] ChatDatabase.saveMessage called at ${dbStart.millisecondsSinceEpoch}');
+
+    final txnStart = DateTime.now();
     await _isar.writeTxn(() async {
+      final putStart = DateTime.now();
       await _isar.localMessages.put(message);
+      final putEnd = DateTime.now();
+      print(
+          '🐛 [DATABASE] _isar.localMessages.put took: ${putEnd.difference(putStart).inMilliseconds}ms');
     });
+
+    final dbEnd = DateTime.now();
+    print(
+        '🐛 [DATABASE] ✅ saveMessage completed in: ${dbEnd.difference(dbStart).inMilliseconds}ms');
   }
 
   /// Save multiple messages (batch operation for sync)
@@ -51,6 +65,7 @@ class ChatDatabase {
   }
 
   /// Get messages for conversation (instant loading)
+  /// Returns messages in chronological order (oldest first) for proper chat display
   static Future<List<LocalMessage>> getMessages(
     String conversationId, {
     int limit = 50,
@@ -59,7 +74,7 @@ class ChatDatabase {
     return await _isar.localMessages
         .where()
         .conversationIdEqualTo(conversationId)
-        .sortByCreatedAtDesc()
+        .sortByCreatedAt() // Changed from Desc to chronological order
         .offset(offset)
         .limit(limit)
         .findAll();
@@ -86,14 +101,14 @@ class ChatDatabase {
           .conversationIdEqualTo(conversationId)
           .filter()
           .contentContains(query, caseSensitive: false)
-          .sortByCreatedAtDesc()
+          .sortByCreatedAt() // Changed to chronological order for consistency
           .limit(limit)
           .findAll();
     } else {
       return await _isar.localMessages
           .filter()
           .contentContains(query, caseSensitive: false)
-          .sortByCreatedAtDesc()
+          .sortByCreatedAt() // Changed to chronological order for consistency
           .limit(limit)
           .findAll();
     }
@@ -182,11 +197,15 @@ class ChatDatabase {
   /// Mark conversation as read
   static Future<void> markConversationAsRead(String conversationId) async {
     await _isar.writeTxn(() async {
-      final conversation =
-          await _isar.localConversations.getByServerId(conversationId);
-      if (conversation != null) {
-        final updated = conversation.copyWith(unreadCount: 0);
-        await _isar.localConversations.put(updated);
+      final conversation = await _isar.localConversations
+          .filter()
+          .serverIdEqualTo(conversationId)
+          .findFirst();
+
+      if (conversation != null && conversation.unreadCount > 0) {
+        // Update in place to avoid unique index violations
+        conversation.unreadCount = 0;
+        await _isar.localConversations.put(conversation);
       }
     });
   }
@@ -228,6 +247,19 @@ class ChatDatabase {
   /// Mark message as synced
   static Future<void> markMessageSynced(String localId, String serverId) async {
     await _isar.writeTxn(() async {
+      // First check if a message with this serverId already exists
+      final existingMessage = await _isar.localMessages
+          .where()
+          .serverIdEqualTo(serverId)
+          .findFirst();
+
+      if (existingMessage != null) {
+        // Message with this serverId already exists, don't create duplicate
+        print(
+            '🐛 [DATABASE] Message with serverId $serverId already exists, skipping update');
+        return;
+      }
+
       final message = await _isar.localMessages.get(int.parse(localId));
       if (message != null) {
         final updated = message.copyWith(
@@ -282,5 +314,40 @@ class ChatDatabase {
       await _isar.localConversations.clear();
       await _isar.localUsers.clear();
     });
+  }
+
+  /// Force recreate database to fix corruption issues
+  static Future<void> forceRecreateDatabase() async {
+    try {
+      // Close current instance
+      if (_initialized) {
+        await _isar.close();
+        _initialized = false;
+      }
+
+      // Delete database files
+      final dir = await getApplicationDocumentsDirectory();
+      final dbPath = '${dir.path}/durusuna_chat';
+      final dbFile = File('$dbPath.isar');
+      final lockFile = File('$dbPath.isar.lock');
+
+      if (await dbFile.exists()) {
+        await dbFile.delete();
+        print('🗑️ Deleted corrupted database file');
+      }
+
+      if (await lockFile.exists()) {
+        await lockFile.delete();
+        print('🗑️ Deleted database lock file');
+      }
+
+      // Reinitialize fresh database
+      await initialize();
+      print('✅ Database recreated successfully');
+    } catch (e) {
+      print('❌ Failed to recreate database: $e');
+      // Fallback to normal initialization
+      await initialize();
+    }
   }
 }
