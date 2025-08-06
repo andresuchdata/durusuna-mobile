@@ -40,6 +40,10 @@ class AppTheme {
 
   static ThemeData get lightTheme {
     return ThemeData(
+      // Enable high-performance rendering
+      visualDensity: VisualDensity.adaptivePlatformDensity,
+      // Optimize material animations
+      materialTapTargetSize: MaterialTapTargetSize.padded,
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: const ColorScheme.light(

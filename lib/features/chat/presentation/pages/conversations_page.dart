@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'dart:io' show Platform;
 import '../../../../core/constants/app_theme.dart';
+import '../../../../core/constants/performance_constants.dart';
+import '../../../../shared/widgets/performance_optimized_list.dart';
 import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/conversation.dart';
@@ -195,48 +197,53 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               ? _buildErrorState(conversationsState.error!)
               : conversationsState.conversations.isEmpty
                   ? _buildEmptyState()
-                  : ListView.separated(
+                  : PerformanceOptimizedList(
                       itemCount: conversationsState.conversations.length,
-                      separatorBuilder: (context, index) => const Divider(
-                        height: 0.5,
-                        indent: 64,
-                      ),
                       itemBuilder: (context, index) {
-                        final conversation =
-                            conversationsState.conversations[index];
-                        return ConversationTile(
-                          conversation: conversation,
-                          onTap: () {
-                            ref
-                                .read(currentConversationProvider.notifier)
-                                .state = null;
-                            Navigator.of(context)
-                                .push(
-                              MaterialPageRoute(
-                                builder: (context) => LocalChatPage(
-                                  conversation: conversation,
-                                ),
-                              ),
-                            )
-                                .then((_) {
-                              // When returning from chat page, ensure current conversation is cleared
-                              // Add small delay to ensure dispose methods have completed
-                              Future.delayed(const Duration(milliseconds: 100),
-                                  () {
-                                ref
-                                    .read(currentConversationProvider.notifier)
-                                    .state = null;
-
-                                // Refresh conversations to get latest unread counts
-                                ref
-                                    .read(conversationsProvider.notifier)
-                                    .loadConversations();
-                              });
-                            });
-                          },
-                        );
+                        if (index <
+                            conversationsState.conversations.length - 1) {
+                          // Add separator for all items except the last
+                          return Column(
+                            children: [
+                              _buildConversationTile(
+                                  conversationsState.conversations[index]),
+                              const Divider(height: 0.5, indent: 64),
+                            ],
+                          );
+                        }
+                        return _buildConversationTile(
+                            conversationsState.conversations[index]);
                       },
                     ),
+    );
+  }
+
+  Widget _buildConversationTile(Conversation conversation) {
+    return RepaintBoundary(
+      child: ConversationTile(
+        conversation: conversation,
+        onTap: () {
+          ref.read(currentConversationProvider.notifier).state = null;
+          Navigator.of(context)
+              .push(
+            HighRefreshPageRoute(
+              child: LocalChatPage(
+                conversation: conversation,
+              ),
+            ),
+          )
+              .then((_) {
+            // When returning from chat page, ensure current conversation is cleared
+            // Add small delay to ensure dispose methods have completed
+            Future.delayed(const Duration(milliseconds: 100), () {
+              ref.read(currentConversationProvider.notifier).state = null;
+
+              // Refresh conversations to get latest unread counts
+              ref.read(conversationsProvider.notifier).loadConversations();
+            });
+          });
+        },
+      ),
     );
   }
 

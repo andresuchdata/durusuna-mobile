@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
+import '../../../../core/constants/performance_constants.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/services/chat_service.dart';
@@ -758,9 +759,11 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     return ListView.builder(
       controller: _scrollController,
       reverse: false,
-      physics: const AlwaysScrollableScrollPhysics(),
+      physics: const HighRefreshScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       itemCount: messages.length,
+      cacheExtent: 500, // Cache more items for smoother scrolling
+      addRepaintBoundaries: true, // Isolate repaints
       itemBuilder: (context, index) {
         final message = messages[index];
         final isMe = message.isFromMe;
@@ -783,63 +786,65 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                 ),
               ),
             // 🚀 Enhanced message bubble with instant status indicators
-            Container(
-              key: _getMessageKey(message.serverId ??
-                  '${message.createdAt.millisecondsSinceEpoch}_${message.senderId}'),
-              margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
-              child: Align(
-                alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isMe ? AppTheme.primaryColor : Colors.grey[200],
-                    borderRadius: BorderRadius.circular(16),
-                    // Add subtle border for failed messages
-                    border: message.readStatus == 'failed'
-                        ? Border.all(color: AppTheme.errorColor, width: 1)
-                        : null,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      // Message content
-                      Text(
-                        message.content ?? '',
-                        style: TextStyle(
-                          color: isMe ? Colors.white : AppTheme.textPrimary,
+            RepaintBoundary(
+              child: Container(
+                key: _getMessageKey(message.serverId ??
+                    '${message.createdAt.millisecondsSinceEpoch}_${message.senderId}'),
+                margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+                child: Align(
+                  alignment:
+                      isMe ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isMe ? AppTheme.primaryColor : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(16),
+                      // Add subtle border for failed messages
+                      border: message.readStatus == 'failed'
+                          ? Border.all(color: AppTheme.errorColor, width: 1)
+                          : null,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // Message content
+                        Text(
+                          message.content ?? '',
+                          style: TextStyle(
+                            color: isMe ? Colors.white : AppTheme.textPrimary,
+                          ),
                         ),
-                      ),
 
-                      // Status indicators for my messages
-                      if (isMe) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Timestamp
-                            Text(
-                              '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: isMe
-                                    ? Colors.white.withValues(alpha: 0.7)
-                                    : AppTheme.textTertiary,
+                        // Status indicators for my messages
+                        if (isMe) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Timestamp
+                              Text(
+                                '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isMe
+                                      ? Colors.white.withValues(alpha: 0.7)
+                                      : AppTheme.textTertiary,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 4),
+                              const SizedBox(width: 4),
 
-                            // Status icon - WhatsApp style
-                            _buildStatusIcon(message.readStatus),
-                          ],
-                        ),
-                      ],
-                    ],
+                              // Status icon - WhatsApp style
+                              _buildStatusIcon(message.readStatus),
+                            ],
+                          ),
+                        ],
+                      ], // End of Column children
+                    ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 4),
           ],
         );
       },
