@@ -21,26 +21,11 @@ class RealtimeLocalIntegration {
   }
 
   void _initialize() {
-    // Listen for real-time messages and store locally
-    _ref.listen(realtimeMessagesProvider, (previous, next) {
-      next?.whenData((realtimeMessage) {
-        _handleRealtimeMessage(realtimeMessage);
-      });
-    });
-
-    // Listen for real-time presence updates
-    _ref.listen(realtimePresenceProvider, (previous, next) {
-      next?.whenData((presence) {
-        _handlePresenceUpdate(presence);
-      });
-    });
-
-    // Listen for real-time message status updates
-    _ref.listen(realtimeMessageStatusProvider, (previous, next) {
-      next?.whenData((statusEvent) {
-        _handleMessageStatusUpdate(statusEvent);
-      });
-    });
+    // DISABLED: Real-time handling is now managed by RealtimeDispatcher
+    print(
+        '⚠️ RealtimeLocalIntegration: DISABLED - Using RealtimeDispatcher instead');
+    // All real-time event handling has been moved to RealtimeDispatcher
+    // This prevents duplicate processing and message loops
   }
 
   Future<void> _handleRealtimeMessage(RealtimeMessage realtimeMessage) async {
@@ -72,7 +57,7 @@ class RealtimeLocalIntegration {
     }
   }
 
-  Future<void> _handlePresenceUpdate(PresenceUpdate presence) async {
+  Future<void> _handlePresenceUpdate(PresenceEvent presence) async {
     try {
       // Update local conversations with user presence
       final conversations = await ChatDatabase.getConversations();
@@ -110,7 +95,9 @@ class RealtimeLocalIntegration {
 
       // Update UI for the specific conversation
       final conversationId = statusEvent.conversationId;
-      _ref.read(localMessagesProvider(conversationId).notifier).refresh();
+      if (conversationId != null) {
+        _ref.read(localMessagesProvider(conversationId).notifier).refresh();
+      }
     } catch (e) {
       print('Failed to handle message status update: $e');
     }
@@ -289,41 +276,4 @@ final realtimeLocalIntegrationProvider =
   return RealtimeLocalIntegration(ref, localChatService);
 });
 
-// Mock classes for real-time events (adapt to your existing structure)
-class RealtimeMessage {
-  final Message message;
-  final String conversationId;
-  final String action;
-
-  RealtimeMessage({
-    required this.message,
-    required this.conversationId,
-    required this.action,
-  });
-}
-
-class PresenceUpdate {
-  final String userId;
-  final bool isOnline;
-  final DateTime timestamp;
-
-  PresenceUpdate({
-    required this.userId,
-    required this.isOnline,
-    required this.timestamp,
-  });
-}
-
-class MessageStatusEvent {
-  final String conversationId;
-  final List<String> messageIds;
-  final String status; // 'sent', 'delivered', 'read'
-  final DateTime timestamp;
-
-  MessageStatusEvent({
-    required this.conversationId,
-    required this.messageIds,
-    required this.status,
-    required this.timestamp,
-  });
-}
+// Note: Using RealtimeMessage, PresenceEvent, and MessageStatusEvent from realtime_service.dart

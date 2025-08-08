@@ -37,12 +37,17 @@ class PlatformOptimization {
       // Set preferred frame rate for iOS
       if (Platform.isIOS) {
         try {
+          debugPrint(
+              '🎯 Requesting ${PerformanceConstants.targetRefreshRate}Hz refresh rate...');
           await SystemChannels.platform
               .invokeMethod('SystemChrome.setPreferredFrameRate', {
             'frameRate': PerformanceConstants.targetRefreshRate,
           });
+          debugPrint('✅ iOS frame rate request sent successfully');
         } catch (e) {
-          debugPrint('Failed to set iOS frame rate: $e');
+          debugPrint('⚠️ Failed to set iOS frame rate: $e');
+          debugPrint(
+              '💡 This is normal in simulator - physical device required for 120Hz');
         }
       }
 

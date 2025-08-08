@@ -22,6 +22,10 @@ class RealtimeService with WidgetsBindingObserver {
   bool _isConnected = false;
   String? _currentUserId;
   Timer? _connectionCheckTimer;
+  final Set<String> _joinedConversations =
+      <String>{}; // Track joined conversations
+  // Queue pending presence snapshot requests when socket isn't connected
+  final Set<String> _pendingPresenceRequests = <String>{};
 
   // Stream controllers for different realtime events
   final _connectionController = StreamController<bool>.broadcast();
@@ -58,13 +62,26 @@ class RealtimeService with WidgetsBindingObserver {
 
   /// Initialize and connect to realtime service
   Future<void> connect() async {
-    if (_isConnected) return;
+    print(
+        '🔄 RealtimeService: connect() called on ${Platform.operatingSystem} - isConnected: $_isConnected');
+
+    if (_isConnected) {
+      print(
+          '✅ RealtimeService: Already connected, skipping connection attempt');
+      return;
+    }
 
     try {
       final token = StorageService.getToken();
+      print('🔐 RealtimeService: Token check - hasToken: ${token != null}');
+
       if (token == null) {
+        print('❌ RealtimeService: No authentication token found');
         throw Exception('No authentication token found');
       }
+
+      print(
+          '🚀 RealtimeService: Starting connection to ${ApiConstants.socketUrl}');
 
       // More robust socket configuration for cross-platform compatibility
       final options = <String, dynamic>{
@@ -113,6 +130,7 @@ class RealtimeService with WidgetsBindingObserver {
     _socket = null;
     _isConnected = false;
     _currentUserId = null;
+    _joinedConversations.clear(); // Clear tracked conversations on disconnect
     _connectionController.add(false);
     _stopConnectionCheck();
   }
@@ -140,13 +158,22 @@ class RealtimeService with WidgetsBindingObserver {
   }
 
   void _handleAppResumed() {
+    print('📱 RealtimeService: App resumed on ${Platform.operatingSystem}');
+
     // Check if connection is still active when app resumes
     Future.delayed(const Duration(milliseconds: 1000), () {
+      print(
+          '🔍 RealtimeService: Checking connection state - connected: $_isConnected');
+
       if (!_isConnected && StorageService.getToken() != null) {
+        print('🔄 RealtimeService: Attempting reconnect due to app resume');
         reconnect();
       } else if (_isConnected) {
         // Refresh presence even if connected
+        print('✅ RealtimeService: Connection active, refreshing presence');
         _setupUserPresence();
+      } else {
+        print('⚠️ RealtimeService: No token available, skipping reconnect');
       }
     });
     _startConnectionCheck();
@@ -175,11 +202,15 @@ class RealtimeService with WidgetsBindingObserver {
 
   void _checkConnectionHealth() {
     if (!_isConnected && StorageService.getToken() != null) {
+      // Connection is down, attempt reconnect
       reconnect();
     } else if (_isConnected && _socket != null) {
-      // Ping the server to ensure connection is active
+      // Connection appears up, verify with ping
       _socket!
           .emit('ping', {'timestamp': DateTime.now().millisecondsSinceEpoch});
+    } else if (_socket == null && StorageService.getToken() != null) {
+      // Socket is null but we have token, force reconnect
+      reconnect();
     }
   }
 
@@ -195,11 +226,18 @@ class RealtimeService with WidgetsBindingObserver {
 
   /// Force initialization - useful when app starts or after login
   Future<void> initialize() async {
+    print(
+        '🔧 RealtimeService: initialize() called on ${Platform.operatingSystem} - isConnected: $_isConnected');
+
     if (!_isConnected) {
+      print('🔄 RealtimeService: Not connected, calling connect()...');
       await connect();
       if (Platform.isAndroid) {
+        print('📱 RealtimeService: Starting Android connection health checks');
         _startConnectionCheck();
       }
+    } else {
+      print('✅ RealtimeService: Already connected, skipping initialization');
     }
   }
 
@@ -223,18 +261,29 @@ class RealtimeService with WidgetsBindingObserver {
 
   void _setupEventListeners() {
     _socket!.onConnect((_) {
+      print(
+          '🔗 RealtimeService: Connected to server on ${Platform.operatingSystem}');
       _isConnected = true;
       _connectionController.add(true);
       _setupUserPresence();
+      _flushPendingPresenceRequests();
     });
 
     _socket!.onDisconnect((reason) {
+      print(
+          '❌ RealtimeService: Disconnected from server - reason: $reason on ${Platform.operatingSystem}');
       _isConnected = false;
       _connectionController.add(false);
     });
 
     _socket!.onReconnect((attempt) {
+      print(
+          '🔄 RealtimeService: Reconnected to server (attempt $attempt) on ${Platform.operatingSystem}');
+      _isConnected = true; // Fix: Update connection state on reconnect
+      _connectionController.add(true);
       _setupUserPresence();
+      _rejoinAllConversations(); // Re-join all conversation rooms after reconnect
+      _flushPendingPresenceRequests();
     });
 
     _socket!.onReconnectAttempt((attempt) {});
@@ -300,13 +349,39 @@ class RealtimeService with WidgetsBindingObserver {
 
     // User presence
     _socket!.on('presence:online', (data) {
-      final event = PresenceEvent.fromJson(data);
-      _presenceController.add(event);
+      print('🔄 RealtimeService: Received presence:online event: $data');
+      try {
+        final event = PresenceEvent.fromJson(data);
+        _presenceController.add(event);
+        print(
+            '✅ RealtimeService: Added presence:online event to controller for user ${event.userId}');
+      } catch (e) {
+        print('❌ RealtimeService: Error parsing presence:online event: $e');
+      }
     });
 
     _socket!.on('presence:offline', (data) {
-      final event = PresenceEvent.fromJson(data);
-      _presenceController.add(event);
+      print('🔄 RealtimeService: Received presence:offline event: $data');
+      try {
+        final event = PresenceEvent.fromJson(data);
+        _presenceController.add(event);
+        print(
+            '✅ RealtimeService: Added presence:offline event to controller for user ${event.userId}');
+      } catch (e) {
+        print('❌ RealtimeService: Error parsing presence:offline event: $e');
+      }
+    });
+
+    // Presence snapshot response
+    _socket!.on('presence:snapshot', (data) {
+      try {
+        final event = PresenceEvent.fromJson(data);
+        _presenceController.add(event);
+        print(
+            '✅ RealtimeService: Received presence snapshot for user ${event.userId}');
+      } catch (e) {
+        print('❌ RealtimeService: Error parsing presence:snapshot: $e');
+      }
     });
 
     // Message status updates
@@ -373,9 +448,22 @@ class RealtimeService with WidgetsBindingObserver {
 
   void _setupUserPresence() {
     final user = StorageService.getUser();
-    if (user != null) {
+    if (user != null && _socket?.connected == true) {
       _currentUserId = user['id'];
-      _socket!.emit('user:online', {'userId': _currentUserId});
+      print(
+          '🔄 RealtimeService: Setting up presence for user $_currentUserId on ${Platform.operatingSystem}');
+
+      // Emit user online status
+      _socket!.emit('user:online', {
+        'userId': _currentUserId,
+        'platform': Platform.operatingSystem,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      print('✅ RealtimeService: Emitted user:online for $_currentUserId');
+    } else {
+      print(
+          '❌ RealtimeService: Cannot setup presence - socket not connected or user is null');
     }
   }
 
@@ -385,15 +473,25 @@ class RealtimeService with WidgetsBindingObserver {
   void joinConversation(String conversationId) {
     if (_socket?.connected == true) {
       _socket!.emit('conversation:join', {'conversationId': conversationId});
+      _joinedConversations.add(conversationId); // Track joined conversation
     }
   }
 
   /// Leave a conversation room
   void leaveConversation(String conversationId) {
-    if (!_isConnected) {
-      return;
+    if (_socket?.connected == true) {
+      _socket!.emit('conversation:leave', {'conversationId': conversationId});
+      _joinedConversations.remove(conversationId); // Remove from tracking
     }
-    _socket!.emit('conversation:leave', {'conversationId': conversationId});
+  }
+
+  /// Re-join all previously joined conversations (after reconnect)
+  void _rejoinAllConversations() {
+    for (final conversationId in _joinedConversations) {
+      if (_socket?.connected == true) {
+        _socket!.emit('conversation:join', {'conversationId': conversationId});
+      }
+    }
   }
 
   /// Start typing indicator
@@ -490,6 +588,28 @@ class RealtimeService with WidgetsBindingObserver {
       'userId': _currentUserId,
       'timestamp': DateTime.now().toIso8601String(),
     });
+  }
+
+  /// Request presence snapshot for a user (one-time pull)
+  void requestPresenceSnapshot(String userId) {
+    if (_socket?.connected == true) {
+      _socket!.emit('presence:query', {'userId': userId});
+      print('🔎 RealtimeService: Requested presence snapshot for $userId');
+    } else {
+      _pendingPresenceRequests.add(userId);
+      print(
+          '🕒 RealtimeService: Queued presence snapshot for $userId (will send on connect)');
+    }
+  }
+
+  void _flushPendingPresenceRequests() {
+    if (_pendingPresenceRequests.isEmpty) return;
+    if (_socket?.connected != true) return;
+    for (final userId in _pendingPresenceRequests) {
+      _socket!.emit('presence:query', {'userId': userId});
+      print('🚀 RealtimeService: Flushed presence snapshot for $userId');
+    }
+    _pendingPresenceRequests.clear();
   }
 
   /// Report file upload progress
@@ -739,10 +859,17 @@ class LastSeenEvent {
 
 final realtimeServiceProvider = Provider<RealtimeService>((ref) {
   final service = RealtimeService.instance;
+  print(
+      '🔌 RealtimeServiceProvider: Creating provider on ${Platform.operatingSystem}');
 
   // Listen to auth state changes and connect/disconnect automatically
   ref.listen(authStateProvider, (previous, next) {
+    print(
+        '🔐 RealtimeServiceProvider: Auth state changed - isAuthenticated: ${next.isAuthenticated}, isConnected: ${service.isConnected}');
+
     if (next.isAuthenticated == true && !service.isConnected) {
+      print(
+          '🚀 RealtimeServiceProvider: User authenticated, starting connection attempts...');
       // Immediate attempt
       service.initialize();
 

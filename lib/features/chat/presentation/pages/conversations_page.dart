@@ -1,9 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'dart:io' show Platform;
 import '../../../../core/constants/app_theme.dart';
-import '../../../../core/constants/performance_constants.dart';
 import '../../../../shared/widgets/performance_optimized_list.dart';
 import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/services/realtime_service.dart';
@@ -67,11 +67,89 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     setState(() => _isSearching = true);
   }
 
-  void _stopSearch() {
-    setState(() {
-      _isSearching = false;
-      _searchController.clear();
-    });
+  /// Show confirmation dialog for clearing local data
+  void _showClearDataDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.bug_report, color: Colors.orange, size: 20),
+            SizedBox(width: 8),
+            Text('Debug: Clear Local Data'),
+          ],
+        ),
+        content: const Text(
+            'This will clear all local messages, conversations, and contacts. '
+            'Data will be re-synced from the server when you use the app.\n\n'
+            '⚠️ This is a debug feature for development.\n\n'
+            'Are you sure you want to continue?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await _clearLocalData();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            child: const Text('Clear Data'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Clear all local data (messages, conversations, users)
+  Future<void> _clearLocalData() async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('🧹 Clearing local data...')),
+      );
+
+      await ChatDatabase.clearAllData();
+
+      // Refresh the conversations list
+      ref.read(conversationsProvider.notifier).loadConversations();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Local data cleared! Will re-sync from server.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Clear failed: $e')),
+      );
+    }
+  }
+
+  /// Recreate database (existing functionality)
+  Future<void> _recreateDatabase() async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('🔄 FORCE RECREATING database...')),
+      );
+
+      await ChatDatabase.forceRecreateDatabase();
+
+      // Refresh the conversations list
+      ref.read(conversationsProvider.notifier).loadConversations();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Database RECREATED! Sync should work now.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Recreate failed: $e')),
+      );
+    }
   }
 
   @override
@@ -87,21 +165,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       }
     });
 
-    // LOCAL BACKUP LISTENER: Ensure conversations list updates in real-time
-    // This is a backup in case the global listener in main.dart isn't active
-    ref.listen(realtimeMessagesProvider, (previous, next) {
-      next?.when(
-        data: (realtimeMessage) {
-          // Update conversation's last message and unread count
-          ref
-              .read(conversationsProvider.notifier)
-              .updateConversationLastMessage(
-                  realtimeMessage.conversationId, realtimeMessage.message);
-        },
-        loading: () {},
-        error: (error, stack) {},
-      );
-    });
+    // Real-time conversations updates are now handled by the centralized RealtimeDispatcher
 
     return GlobalAppScaffold(
       title: _isSearching ? null : 'Messages',
@@ -123,29 +187,44 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 icon: const Icon(Icons.search),
                 onPressed: _startSearch,
               ),
-              IconButton(
-                icon: const Icon(Icons.refresh), // Force database reset
-                onPressed: () async {
-                  try {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('🔄 FORCE RECREATING database...')),
-                    );
-                    await ChatDatabase.forceRecreateDatabase();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content:
-                            Text('✅ Database RECREATED! Sync should work now.'),
-                        backgroundColor: Colors.green,
+              // Only show database management options in debug mode
+              if (kDebugMode)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert),
+                  tooltip: 'Debug Options',
+                  onSelected: (value) async {
+                    switch (value) {
+                      case 'clear_data':
+                        _showClearDataDialog();
+                        break;
+                      case 'recreate_db':
+                        _recreateDatabase();
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'clear_data',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_sweep, color: Colors.orange),
+                          SizedBox(width: 8),
+                          Text('Clear Local Data'),
+                        ],
                       ),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('❌ Recreate failed: $e')),
-                    );
-                  }
-                },
-              ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'recreate_db',
+                      child: Row(
+                        children: [
+                          Icon(Icons.refresh, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Recreate Database'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               IconButton(
                 icon: const Icon(Icons.add),
                 onPressed: () {

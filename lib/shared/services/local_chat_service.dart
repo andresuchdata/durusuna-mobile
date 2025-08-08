@@ -18,6 +18,10 @@ class LocalChatService {
   Timer? _syncTimer;
   bool _isInitialSyncComplete = false;
 
+  // Sync throttling to prevent loops
+  DateTime? _lastSyncTime;
+  static const _syncThrottleDelay = Duration(seconds: 10);
+
   LocalChatService(this._apiService, this._realtimeService) {
     _initialize();
   }
@@ -53,12 +57,18 @@ class LocalChatService {
     int offset = 0,
   }) async {
     try {
-      // Get from local database instantly
-      final messages = await ChatDatabase.getMessages(
-        conversationId,
-        limit: limit,
-        offset: offset,
-      );
+      // If requesting the first page, pull latest N messages to ensure newest appear
+      final messages = offset == 0
+          ? await ChatDatabase.getLatestMessages(
+              conversationId,
+              limit: limit,
+              offsetFromLatest: 0,
+            )
+          : await ChatDatabase.getMessages(
+              conversationId,
+              limit: limit,
+              offset: offset,
+            );
 
       // Trigger background sync for this conversation
       _triggerMessagesSync(conversationId);
@@ -256,6 +266,10 @@ class LocalChatService {
   // ========== BACKGROUND SYNC OPERATIONS ==========
 
   void _startBackgroundSync() {
+    // 🚫 DISABLED: Temporarily stop background sync to prevent message loops
+    print('⚠️ Background sync DISABLED to stop pending message loops');
+    return;
+
     // Sync every 30 seconds when app is active
     _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _performBackgroundSync();
@@ -353,6 +367,48 @@ class LocalChatService {
     }
   }
 
+  /// Force immediate sync of messages from server (for empty conversations)
+  Future<void> forceSyncMessagesFromServer(String conversationId) async {
+    print(
+        '🔄 Force syncing messages from server for conversation: $conversationId');
+    await _syncMessagesFromServer(conversationId, limit: 50);
+  }
+
+  /// Delete single message on server
+  Future<void> deleteMessageOnServer(
+      String messageId, String conversationId) async {
+    try {
+      await _apiService
+          .delete('/conversations/$conversationId/messages/$messageId');
+      print('✅ Message deleted on server: $messageId');
+    } catch (e) {
+      print('❌ Failed to delete message on server: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete multiple messages on server (batch)
+  Future<Map<String, dynamic>> deleteBatchMessagesOnServer(
+      List<String> messageIds, String conversationId) async {
+    try {
+      final response = await _apiService.delete(
+        '/conversations/$conversationId/messages/batch',
+        data: {
+          'message_ids': messageIds,
+        },
+      );
+
+      final result = response.data as Map<String, dynamic>;
+      print(
+          '✅ Batch delete response: ${result['deleted_count']} deleted, ${result['failed_count']} failed');
+
+      return result;
+    } catch (e) {
+      print('❌ Failed to delete batch messages on server: $e');
+      rethrow;
+    }
+  }
+
   Future<void> _syncMessagesFromServer(String conversationId,
       {int limit = 50}) async {
     try {
@@ -418,11 +474,13 @@ class LocalChatService {
 
   Future<void> _syncMessageToServer(LocalMessage message) async {
     try {
-      // Send to server
-      final response = await _apiService.post(
-        '/conversations/${message.conversationId}/messages',
-        data: message.toApiJson(),
-      );
+      // Send to server with timeout to prevent hanging
+      final response = await _apiService
+          .post(
+            '/conversations/${message.conversationId}/messages',
+            data: message.toApiJson(),
+          )
+          .timeout(const Duration(seconds: 10));
 
       final serverMessage = response.data['message'] as Map<String, dynamic>;
 
@@ -431,17 +489,52 @@ class LocalChatService {
         message.id.toString(),
         serverMessage['id'],
       );
+
+      print('✅ Message synced successfully: ${serverMessage['id']}');
     } catch (e) {
-      // Message will remain unsynced and retry later
-      print('Failed to sync message to server: $e');
+      print('❌ Failed to sync message to server: $e');
+
+      // 🔥 CRITICAL: Mark as synced with "failed" status to stop infinite retries
+      await ChatDatabase.markMessageSynced(message.id.toString(),
+          'failed_${DateTime.now().millisecondsSinceEpoch}');
+
+      print('🚫 Message marked as failed - will not retry: ${message.id}');
+      // Don't rethrow - we handled the failure by marking it as "failed"
     }
   }
 
   Future<void> _syncPendingMessages() async {
     try {
+      // Throttle sync calls to prevent loops
+      final now = DateTime.now();
+      if (_lastSyncTime != null &&
+          now.difference(_lastSyncTime!) < _syncThrottleDelay) {
+        print(
+            '⏳ Sync throttled - last sync was ${now.difference(_lastSyncTime!).inSeconds}s ago');
+        return;
+      }
+      _lastSyncTime = now;
+
       final pendingMessages = await ChatDatabase.getPendingSyncMessages();
 
-      for (final message in pendingMessages) {
+      // STOP: Don't sync if there are too many pending messages (indicates a loop)
+      if (pendingMessages.length > 20) {
+        print(
+            '⚠️ Too many pending messages (${pendingMessages.length}) - stopping sync to prevent loops');
+        return;
+      }
+
+      // Limit to prevent infinite loops
+      final messagesToSync =
+          pendingMessages.take(5).toList(); // Reduced from 10 to 5
+      print('🔄 Syncing ${messagesToSync.length} pending messages');
+
+      if (messagesToSync.isEmpty) {
+        return; // No messages to sync
+      }
+
+      for (final message in messagesToSync) {
+        // Sync message - failures are now handled inside _syncMessageToServer
         await _syncMessageToServer(message);
       }
     } catch (e) {

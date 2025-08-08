@@ -11,6 +11,8 @@ import 'core/utils/global_auth_handler.dart';
 import 'core/utils/platform_optimization.dart';
 import 'shared/providers/app_providers.dart';
 import 'shared/services/realtime_service.dart';
+
+import 'shared/services/realtime_dispatcher.dart';
 import 'shared/services/chat_service.dart';
 import 'shared/services/auth_service.dart';
 import 'shared/services/notification_service.dart' as notification_service
@@ -114,29 +116,17 @@ class DurusunaMobileApp extends ConsumerWidget {
       );
     });
 
-    // Listen for new messages to update conversations list in real-time
-    ref.listen(realtimeMessagesProvider, (previous, next) {
-      next.when(
-        data: (realtimeMessage) {
-          // Update conversation's last message and unread count
-          ref
-              .read(conversationsProvider.notifier)
-              .updateConversationLastMessage(
-                  realtimeMessage.conversationId, realtimeMessage.message);
-        },
-        loading: () {},
-        error: (error, stack) {
-          // Error in global message listener
-        },
-      );
-    });
+    // Initialize centralized real-time dispatcher (handles all real-time events)
+    ref.read(realtimeDispatcherProvider);
 
     // Initialize GlobalAuthHandler with navigator key and ref
     WidgetsBinding.instance.addPostFrameCallback((_) {
       GlobalAuthHandler.initialize(navigatorKey, ref);
 
       // Initialize RealtimeService for app-wide socket connection
+      print('🏗️ Main: Initializing RealtimeService provider...');
       ref.read(realtimeServiceProvider);
+      print('✅ Main: RealtimeService provider initialized');
     });
 
     return PerformanceMonitor(

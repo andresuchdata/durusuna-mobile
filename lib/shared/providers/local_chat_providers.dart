@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/local_chat_service.dart';
-import '../services/realtime_service.dart';
 import '../models/local_conversation.dart';
 import '../models/local_message.dart';
 import '../models/local_user.dart';
@@ -147,6 +147,33 @@ class LocalMessagesNotifier
         offset: offset,
       );
 
+      // 🔥 CRITICAL: If no local messages found and it's initial load, force server sync
+      if (messages.isEmpty && offset == 0) {
+        print(
+            '🔄 No local messages found, forcing server sync for conversation: $_conversationId');
+        try {
+          // Force immediate sync from server for this conversation
+          await _chatService.forceSyncMessagesFromServer(_conversationId);
+
+          // Reload from local database after sync
+          final syncedMessages = await _chatService.getMessages(
+            _conversationId,
+            limit: _pageSize,
+            offset: 0,
+          );
+
+          if (mounted) {
+            state = AsyncValue.data(syncedMessages);
+            _currentOffset = syncedMessages.length;
+            _hasMore = syncedMessages.length >= _pageSize;
+          }
+          return;
+        } catch (e) {
+          print('⚠️ Failed to force sync messages from server: $e');
+          // Continue with empty local messages
+        }
+      }
+
       if (mounted) {
         if (loadMore) {
           // Append older messages
@@ -280,23 +307,49 @@ class LocalMessagesNotifier
       print(
           '🐛 [BACKGROUND] Server sync took: ${serverEnd.difference(serverStart).inMilliseconds}ms');
 
-      // Update the optimistic message with server response (has real ID)
+      // Persist sync state in local DB (replace local optimistic with real serverId)
+      try {
+        if (serverMessage.serverId != null) {
+          await ChatDatabase.markMessageSynced(
+            optimisticMessage.id.toString(),
+            serverMessage.serverId!,
+          );
+        }
+      } catch (e) {
+        print('⚠️ [BACKGROUND] Failed to mark message synced in DB: $e');
+      }
+
+      // Update the optimistic message in UI with server response (has real ID)
       print('🐛 [BACKGROUND] Updating UI with server message...');
       final uiUpdateStart = DateTime.now();
 
       state.whenData((messages) {
         if (mounted) {
+          bool messageUpdated = false;
           final updated = messages.map((msg) {
             // Replace optimistic message with server message
             if (msg.createdAt == optimisticMessage.createdAt &&
                 msg.content == optimisticMessage.content &&
                 msg.isFromMe) {
+              messageUpdated = true;
+              print(
+                  '🔄 [BACKGROUND] Replacing optimistic message ${msg.id} with server message ${serverMessage.serverId}');
               return serverMessage.copyWith(
                   readStatus: 'sent'); // Change from 'sending' to 'sent'
             }
             return msg;
           }).toList();
+
+          if (!messageUpdated) {
+            print(
+                '⚠️ [BACKGROUND] Could not find optimistic message to replace! Adding server message to end.');
+            // If we couldn't replace the optimistic message, add the server message
+            updated.add(serverMessage.copyWith(readStatus: 'sent'));
+          }
+
           state = AsyncValue.data(updated);
+          print(
+              '🐛 [BACKGROUND] UI state updated with ${updated.length} messages');
         }
       });
 
@@ -383,6 +436,163 @@ class LocalMessagesNotifier
         state = AsyncValue.data(updated);
       }
     });
+  }
+
+  /// Delete a single message with modal confirmation
+  /// Returns true if message was deleted, false if cancelled
+  Future<bool> deleteMessage(LocalMessage message, BuildContext context) async {
+    return await deleteBatchMessages([message], context);
+  }
+
+  /// Delete multiple messages with batch confirmation
+  /// Returns true if messages were deleted, false if cancelled
+  Future<bool> deleteBatchMessages(
+      List<LocalMessage> messages, BuildContext context) async {
+    if (messages.isEmpty) return true;
+
+    // Step 1: Show batch confirmation modal
+    final confirmed =
+        await _showBatchDeleteConfirmation(context, messages.length);
+    if (!confirmed) {
+      return false;
+    }
+
+    int successCount = 0;
+    int failCount = 0;
+
+    try {
+      // Step 2: Delete all messages locally first (optimistic update)
+      for (final message in messages) {
+        try {
+          await _deleteMessageLocally(message);
+          successCount++;
+        } catch (e) {
+          print('❌ Failed to delete message locally: ${message.id} - $e');
+          failCount++;
+        }
+      }
+
+      // Step 3: Attempt to delete on server (batch or individual)
+      for (final message in messages) {
+        if (message.serverId != null) {
+          try {
+            await _deleteMessageOnServer(
+                message.serverId!, message.conversationId);
+          } catch (e) {
+            print(
+                '⚠️ Failed to delete message on server: ${message.serverId} - $e');
+            // Continue - local deletion already succeeded
+          }
+        }
+      }
+
+      // Show result feedback
+      if (context.mounted) {
+        final String resultMessage;
+        Color backgroundColor;
+
+        if (failCount == 0) {
+          resultMessage = successCount == 1
+              ? 'Message deleted successfully'
+              : '$successCount messages deleted successfully';
+          backgroundColor = Colors.green;
+        } else if (successCount == 0) {
+          resultMessage =
+              'Failed to delete ${messages.length} message${messages.length > 1 ? 's' : ''}';
+          backgroundColor = Colors.red;
+        } else {
+          resultMessage = '$successCount deleted, $failCount failed';
+          backgroundColor = Colors.orange;
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(resultMessage),
+            backgroundColor: backgroundColor,
+          ),
+        );
+      }
+
+      return failCount == 0;
+    } catch (e) {
+      print('❌ Failed to delete messages: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete messages: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return false;
+    }
+  }
+
+  /// Show confirmation dialog for batch message deletion
+  Future<bool> _showBatchDeleteConfirmation(
+      BuildContext context, int messageCount) async {
+    final isPlural = messageCount > 1;
+    final title = isPlural ? 'Delete $messageCount Messages' : 'Delete Message';
+    final content = isPlural
+        ? 'Are you sure you want to delete $messageCount messages? This action cannot be undone.'
+        : 'Are you sure you want to delete this message? This action cannot be undone.';
+
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(title),
+            content: Text(content),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: Text(isPlural ? 'Delete All' : 'Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  /// Delete message locally (instant UI update)
+  Future<void> _deleteMessageLocally(LocalMessage message) async {
+    // Remove from UI immediately
+    state.whenData((messages) {
+      if (mounted) {
+        final updated = messages
+            .where(
+                (m) => !(m.serverId == message.serverId || m.id == message.id))
+            .toList();
+        state = AsyncValue.data(updated);
+      }
+    });
+
+    // Delete from local database
+    final messageId = message.serverId ?? message.id.toString();
+    await ChatDatabase.deleteMessage(messageId);
+
+    // CRITICAL: Remove from pending sync queue to prevent reappearing
+    await ChatDatabase.removePendingMessage(messageId);
+
+    print(
+        '🗑️ Deleted message locally and removed from pending sync: $messageId');
+  }
+
+  /// Delete message on server
+  Future<void> _deleteMessageOnServer(
+      String serverId, String conversationId) async {
+    try {
+      final chatService = _ref.read(localChatServiceProvider);
+      await chatService.deleteMessageOnServer(serverId, conversationId);
+      debugPrint('🗑️ Message deleted on server: $serverId');
+    } catch (e) {
+      debugPrint('❌ Failed to delete message on server: $e');
+      rethrow;
+    }
   }
 
   bool get hasMore => _hasMore;

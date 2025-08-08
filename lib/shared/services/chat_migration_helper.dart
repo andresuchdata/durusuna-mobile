@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/chat_database.dart';
 import '../models/local_conversation.dart';
 import '../models/local_message.dart';
+import '../models/message.dart';
 import '../services/chat_service.dart';
 import '../services/local_chat_service.dart';
 import '../services/realtime_local_integration.dart';

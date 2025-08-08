@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
@@ -8,15 +8,13 @@ import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/models/local_message.dart';
-import '../../../../shared/models/local_conversation.dart';
 import '../../../../shared/models/conversation.dart';
 import '../../../../shared/providers/local_chat_providers.dart';
 import '../../../../shared/services/local_chat_service.dart';
-import '../../../../shared/widgets/widgets.dart';
-import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/chat_action_bar.dart';
-import '../widgets/reply_preview.dart';
+import '../widgets/local_message_bubble.dart';
+import '../widgets/chat_top_user_panel.dart';
 
 /// Local-first chat page with instant loading and offline support
 /// This is the new WhatsApp-style implementation
@@ -45,8 +43,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   // Track online status of the other user dynamically
   late bool _isOtherUserOnline;
 
-  // Track if we should auto-scroll to bottom on initial load
-  bool _shouldAutoScrollOnLoad = true;
+  // Track typing status of the other user
+  bool _isOtherUserTyping = false;
+
+  // Auto-scroll handling removed - not used
 
   // Key for tracking highlighted message
   final Map<String, GlobalKey> _messageKeys = {};
@@ -58,8 +58,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   // State for replying to a message
   LocalMessage? _replyingToMessage;
 
-  // State for highlighting a message when scrolled to
-  String? _highlightedMessageId;
+  // Track last known message count to detect new arrivals
+  int _lastMessageCount = 0;
+
+  // Message highlighting removed - not used
 
   @override
   void initState() {
@@ -81,6 +83,12 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
       // Update last seen when entering conversation
       realtimeService.updateLastSeen(widget.conversation.id);
+
+      // Request presence snapshot for the other user so we show status immediately
+      final otherUserId = widget.conversation.otherUser?.id;
+      if (otherUserId != null) {
+        realtimeService.requestPresenceSnapshot(otherUserId);
+      }
 
       // Mark as read when entering chat page
       _markOnChatPageEnter();
@@ -229,145 +237,29 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         onCancel: _exitSelectionMode,
       );
     } else {
-      return AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            GestureDetector(
-              onTap: () => _showProfileCard(),
-              child: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppTheme.primaryColor,
-                    backgroundImage: _getAvatarUrl().isNotEmpty
-                        ? NetworkImage(_getAvatarUrl())
-                        : null,
-                    child: _getAvatarUrl().isEmpty
-                        ? Text(
-                            _getInitials(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          )
-                        : null,
-                  ),
-                  // Online indicator for direct conversations
-                  if (widget.conversation.type == 'direct' &&
-                      _isOtherUserOnline)
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        width: 16,
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: Colors.green,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => _showProfileCard(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _getDisplayName(),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      _isOtherUserOnline
-                          ? 'Online'
-                          : widget.conversation.lastActivity != null
-                              ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
-                              : 'Last seen recently',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: _isOtherUserOnline
-                            ? AppTheme.successColor
-                            : AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.call),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Voice call coming soon')),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.videocam),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Video call coming soon')),
-              );
-            },
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'clear':
-                  _showClearChatDialog();
-                  break;
-                case 'block':
-                  _showBlockUserDialog();
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'clear',
-                child: Row(
-                  children: [
-                    Icon(Icons.clear_all, size: 20),
-                    SizedBox(width: 8),
-                    Text('Clear Chat'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'block',
-                child: Row(
-                  children: [
-                    Icon(Icons.block, size: 20, color: AppTheme.errorColor),
-                    SizedBox(width: 8),
-                    Text('Block User',
-                        style: TextStyle(color: AppTheme.errorColor)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
+      return ChatTopUserPanel(
+        displayName: _getDisplayName(),
+        avatarUrl: _getAvatarUrl(),
+        initials: _getInitials(),
+        isDirect: widget.conversation.type == 'direct',
+        isOnline: _isOtherUserOnline,
+        isTyping: _isOtherUserTyping,
+        lastSeenLabel: widget.conversation.lastActivity != null
+            ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
+            : 'Last seen recently',
+        onAvatarTap: _showProfileCard,
+        onVoiceCall: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Voice call coming soon')),
+          );
+        },
+        onVideoCall: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Video call coming soon')),
+          );
+        },
+        onClearChat: _showClearChatDialog,
+        onBlockUser: _showBlockUserDialog,
       );
     }
   }
@@ -448,18 +340,14 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   void _highlightMessage(String messageId) {
-    setState(() {
-      _highlightedMessageId = messageId;
-    });
-
-    // Clear highlight after animation
-    Future.delayed(const Duration(milliseconds: 2000), () {
-      if (mounted) {
-        setState(() {
-          _highlightedMessageId = null;
-        });
-      }
-    });
+    // TODO: Implement message highlighting if needed
+    // For now, just show a snackbar to indicate the message was found
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Scrolled to message: $messageId'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   GlobalKey _getMessageKey(String messageId) {
@@ -475,16 +363,26 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     _focusNode.requestFocus();
   }
 
-  // Selection mode methods
+  // Selection mode methods moved below to avoid duplicates
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedMessageIds.clear();
+    });
+  }
+
+  /// Enter selection mode and select the tapped message
   void _enterSelectionMode(LocalMessage message) {
     setState(() {
       _isSelectionMode = true;
       _selectedMessageIds.clear();
       _selectedMessageIds.add(message.serverId ?? message.id.toString());
-      _replyingToMessage = null;
+      _replyingToMessage = null; // Cancel any ongoing reply
     });
   }
 
+  /// Toggle message selection in selection mode
   void _toggleMessageSelection(LocalMessage message) {
     if (!_isSelectionMode) return;
 
@@ -497,29 +395,103 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         }
       } else {
         if (_selectedMessageIds.length < 5) {
+          // Max 5 for forwarding (like WhatsApp)
           _selectedMessageIds.add(messageId);
         }
       }
     });
   }
 
-  void _exitSelectionMode() {
-    setState(() {
-      _isSelectionMode = false;
-      _selectedMessageIds.clear();
-    });
-  }
-
   void _handleReplySelection() {
-    // TODO: Implement reply selection
+    if (_selectedMessageIds.length == 1) {
+      final messagesAsync =
+          ref.read(localMessagesProvider(widget.conversation.id));
+
+      messagesAsync.whenData((messages) {
+        final message = messages.firstWhere(
+          (msg) =>
+              (msg.serverId ?? msg.id.toString()) == _selectedMessageIds.first,
+          orElse: () => messages.first, // Fallback
+        );
+        _replyToMessage(message);
+      });
+    }
   }
 
   void _handleForwardSelection() {
-    // TODO: Implement forward selection
+    final messagesAsync =
+        ref.read(localMessagesProvider(widget.conversation.id));
+
+    messagesAsync.whenData((messages) {
+      final messagesToForward = messages
+          .where((msg) =>
+              _selectedMessageIds.contains(msg.serverId ?? msg.id.toString()))
+          .toList();
+
+      // TODO: Implement proper forwarding when forward page is compatible with LocalMessage
+
+      // Show forward contacts page (assuming it exists and works with Message objects)
+      // For now, show a placeholder message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Forward ${messagesToForward.length} message${messagesToForward.length != 1 ? 's' : ''} (coming soon)'),
+          action: SnackBarAction(
+            label: 'OK',
+            onPressed: () {},
+          ),
+        ),
+      );
+
+      _exitSelectionMode();
+    });
   }
 
+  // Message type conversion removed - not used for now
+
   void _handleDeleteSelection() {
-    // TODO: Implement delete selection
+    if (_selectedMessageIds.isEmpty) return;
+    // Single confirmation is handled inside deleteBatchMessages
+    _deleteSelectedMessages();
+  }
+
+  /// Delete all selected messages using batch delete
+  Future<void> _deleteSelectedMessages() async {
+    final messagesAsync =
+        ref.read(localMessagesProvider(widget.conversation.id));
+
+    messagesAsync.whenData((messages) async {
+      final messagesToDelete = messages
+          .where((msg) =>
+              _selectedMessageIds.contains(msg.serverId ?? msg.id.toString()))
+          .toList();
+
+      if (messagesToDelete.isEmpty) {
+        _exitSelectionMode();
+        return;
+      }
+
+      final notifier =
+          ref.read(localMessagesProvider(widget.conversation.id).notifier);
+
+      // Use batch delete - single confirmation modal for all messages
+      await notifier.deleteBatchMessages(messagesToDelete, context);
+
+      _exitSelectionMode();
+
+      // Feedback is already handled in deleteBatchMessages method
+    });
+  }
+
+  /// Handle delete of a single message
+  Future<void> _handleDeleteMessage(LocalMessage message) async {
+    final notifier =
+        ref.read(localMessagesProvider(widget.conversation.id).notifier);
+
+    // Use batch delete for consistency (single message batch)
+    await notifier.deleteBatchMessages([message], context);
+
+    // Feedback is already handled in deleteBatchMessages method
   }
 
   void _scrollToBottom({bool animated = true}) {
@@ -565,10 +537,12 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   void _handleTyping(bool isTyping) {
     final realtimeService = ref.read(realtimeServiceProvider);
-    if (isTyping) {
-      realtimeService.startTyping(widget.conversation.id);
-    } else {
-      realtimeService.stopTyping(widget.conversation.id);
+    if (realtimeService.isConnected) {
+      if (isTyping) {
+        realtimeService.startTyping(widget.conversation.id);
+      } else {
+        realtimeService.stopTyping(widget.conversation.id);
+      }
     }
   }
 
@@ -650,8 +624,51 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     final messagesAsync =
         ref.watch(localMessagesProvider(widget.conversation.id));
 
-    // DEBUG: Force sync messages if empty
+    // Real-time messages are now handled by the centralized RealtimeDispatcher
+    // This ensures no duplicate processing and better performance
+
+    // CRITICAL: Listen for real-time typing indicators
+    ref.listen(realtimeTypingProvider, (previous, next) {
+      next.whenData((typingEvent) {
+        if (typingEvent.conversationId == widget.conversation.id) {
+          final otherUserId = widget.conversation.otherUser?.id;
+          if (otherUserId != null && typingEvent.userId == otherUserId) {
+            setState(() {
+              _isOtherUserTyping = typingEvent.isTyping;
+            });
+
+            // Auto-hide typing indicator after 3 seconds of no updates
+            if (typingEvent.isTyping) {
+              Future.delayed(const Duration(seconds: 3), () {
+                if (mounted) {
+                  setState(() {
+                    _isOtherUserTyping = false;
+                  });
+                }
+              });
+            }
+          }
+        }
+      });
+    });
+
+    // CRITICAL: Listen for real-time presence updates
+    ref.listen(realtimePresenceProvider, (previous, next) {
+      next.whenData((presenceEvent) {
+        final otherUserId = widget.conversation.otherUser?.id;
+        if (otherUserId != null && presenceEvent.userId == otherUserId) {
+          setState(() {
+            _isOtherUserOnline = presenceEvent.isOnline;
+          });
+        }
+      });
+    });
+
+    // DEBUG: Force sync messages if empty AND log message count
     messagesAsync.whenData((messages) {
+      print(
+          '🐛 [DEBUG] LocalChatPage: ${widget.conversation.id} has ${messages.length} messages');
+
       if (messages.isEmpty) {
         print(
             '🐛 [DEBUG] Messages empty, forcing manual sync for ${widget.conversation.id}');
@@ -676,7 +693,22 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           // Messages list
           Expanded(
             child: messagesAsync.when(
-              data: (messages) => _buildMessagesList(messages, authState),
+              data: (messages) {
+                // Auto-scroll when new incoming messages appear (no ref.listen here)
+                if (messages.length > _lastMessageCount) {
+                  final last = messages.isNotEmpty ? messages.last : null;
+                  if (last != null && last.isFromMe == false) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        _scrollToBottom(animated: true);
+                      }
+                    });
+                  }
+                }
+                _lastMessageCount = messages.length;
+
+                return _buildMessagesList(messages, authState);
+              },
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, stack) => _buildErrorState(error),
             ),
@@ -756,15 +788,26 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       return _buildEmptyState();
     }
 
+    // Calculate item count including typing indicator
+    final itemCount = messages.length + (_isOtherUserTyping ? 1 : 0);
+
     return ListView.builder(
       controller: _scrollController,
       reverse: false,
       physics: const HighRefreshScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      itemCount: messages.length,
+      padding: const EdgeInsets.fromLTRB(4, 2, 4, 24),
+      itemCount: itemCount,
       cacheExtent: 500, // Cache more items for smoother scrolling
       addRepaintBoundaries: true, // Isolate repaints
       itemBuilder: (context, index) {
+        // Show typing indicator at the end of the list
+        if (index == messages.length && _isOtherUserTyping) {
+          return _buildTypingIndicator();
+        }
+
+        if (index >= messages.length) {
+          return const SizedBox.shrink();
+        }
         final message = messages[index];
         final isMe = message.isFromMe;
         final showTimestamp = _shouldShowTimestamp(
@@ -785,68 +828,89 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                   ),
                 ),
               ),
-            // 🚀 Enhanced message bubble with instant status indicators
+            // 🚀 Enhanced message bubble with selection support
             RepaintBoundary(
-              child: Container(
+              child: LocalMessageBubble(
                 key: _getMessageKey(message.serverId ??
                     '${message.createdAt.millisecondsSinceEpoch}_${message.senderId}'),
-                margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
-                child: Align(
-                  alignment:
-                      isMe ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isMe ? AppTheme.primaryColor : Colors.grey[200],
-                      borderRadius: BorderRadius.circular(16),
-                      // Add subtle border for failed messages
-                      border: message.readStatus == 'failed'
-                          ? Border.all(color: AppTheme.errorColor, width: 1)
-                          : null,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        // Message content
-                        Text(
-                          message.content ?? '',
-                          style: TextStyle(
-                            color: isMe ? Colors.white : AppTheme.textPrimary,
-                          ),
-                        ),
-
-                        // Status indicators for my messages
-                        if (isMe) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Timestamp
-                              Text(
-                                '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: isMe
-                                      ? Colors.white.withValues(alpha: 0.7)
-                                      : AppTheme.textTertiary,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-
-                              // Status icon - WhatsApp style
-                              _buildStatusIcon(message.readStatus),
-                            ],
-                          ),
-                        ],
-                      ], // End of Column children
-                    ),
-                  ),
-                ),
+                message: message,
+                isMe: isMe,
+                isSelectionMode: _isSelectionMode,
+                isSelected: _selectedMessageIds
+                    .contains(message.serverId ?? message.id.toString()),
+                onTap: () {
+                  if (_isSelectionMode) {
+                    _toggleMessageSelection(message);
+                  } else {
+                    _showMessageOptions(context, message);
+                  }
+                },
+                onLongPress: () =>
+                    _isSelectionMode ? null : _enterSelectionMode(message),
               ),
             ),
           ],
         );
+      },
+    );
+  }
+
+  Widget _buildTypingIndicator() {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Animated typing dots
+              SizedBox(
+                width: 24,
+                height: 16,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildTypingDot(0),
+                    _buildTypingDot(1),
+                    _buildTypingDot(2),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypingDot(int index) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.5, end: 1.0),
+      duration: Duration(milliseconds: 600 + (index * 200)),
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: Container(
+            width: 4,
+            height: 4,
+            decoration: const BoxDecoration(
+              color: AppTheme.textSecondary,
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      },
+      onEnd: () {
+        // Restart animation
+        if (mounted && _isOtherUserTyping) {
+          setState(() {});
+        }
       },
     );
   }
@@ -954,55 +1018,90 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     }
   }
 
-  /// Build WhatsApp-style status icon for messages
-  Widget _buildStatusIcon(String? status) {
-    switch (status) {
-      case 'sending':
-        return SizedBox(
-          width: 12,
-          height: 12,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              Colors.white.withValues(alpha: 0.7),
-            ),
+  /// Show message options bottom sheet (only when not in selection mode)
+  void _showMessageOptions(BuildContext context, LocalMessage message) {
+    if (_isSelectionMode) return; // Don't show options in selection mode
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => SafeArea(
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Reply option
+              ListTile(
+                leading: const Icon(Icons.reply),
+                title: const Text('Reply'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _replyToMessage(message);
+                },
+              ),
+
+              // Select option
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline),
+                title: const Text('Select'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _enterSelectionMode(message);
+                },
+              ),
+
+              // Copy option
+              ListTile(
+                leading: const Icon(Icons.copy),
+                title: const Text('Copy'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _copyMessage(message);
+                },
+              ),
+
+              // Delete option (only for own messages or if user is admin)
+              if (message.isFromMe)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: AppTheme.errorColor),
+                  title: const Text('Delete',
+                      style: TextStyle(color: AppTheme.errorColor)),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _handleDeleteMessage(message);
+                  },
+                ),
+            ],
           ),
-        );
-
-      case 'sent':
-        return Icon(
-          Icons.check,
-          size: 12,
-          color: Colors.white.withValues(alpha: 0.7),
-        );
-
-      case 'delivered':
-        return Icon(
-          Icons.done_all,
-          size: 12,
-          color: Colors.white.withValues(alpha: 0.7),
-        );
-
-      case 'read':
-        return Icon(
-          Icons.done_all,
-          size: 12,
-          color: Colors.lightBlue[300], // Blue checkmarks for read
-        );
-
-      case 'failed':
-        return Icon(
-          Icons.error_outline,
-          size: 12,
-          color: AppTheme.errorColor,
-        );
-
-      default:
-        return Icon(
-          Icons.schedule,
-          size: 12,
-          color: Colors.white.withValues(alpha: 0.7),
-        );
-    }
+        ),
+      ),
+    );
   }
+
+  /// Copy message content to clipboard
+  void _copyMessage(LocalMessage message) {
+    Clipboard.setData(ClipboardData(text: message.content ?? ''));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Message copied to clipboard'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // Status icon logic moved to LocalMessageBubble
 }

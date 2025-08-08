@@ -39,22 +39,58 @@ class ChatDatabase {
 
   /// Save message to local database (instant)
   static Future<void> saveMessage(LocalMessage message) async {
-    final dbStart = DateTime.now();
-    print(
-        '🐛 [DATABASE] ChatDatabase.saveMessage called at ${dbStart.millisecondsSinceEpoch}');
+    try {
+      await _isar.writeTxn(() async {
+        // Enhanced duplicate checking for both serverId and content+time
+        if (message.serverId != null) {
+          final existingByServerId = await _isar.localMessages
+              .where()
+              .serverIdEqualTo(message.serverId!)
+              .findFirst();
+          if (existingByServerId != null) {
+            print(
+                '🐛 [DATABASE] Skipping duplicate message with serverId: ${message.serverId}');
+            return;
+          }
+        }
 
-    final txnStart = DateTime.now();
-    await _isar.writeTxn(() async {
-      final putStart = DateTime.now();
-      await _isar.localMessages.put(message);
-      final putEnd = DateTime.now();
+        // Additional check: Look for optimistic messages that match content and time
+        // This catches cases where optimistic -> server ID update -> real-time duplicate
+        final potentialDuplicates = await _isar.localMessages
+            .where()
+            .conversationIdEqualTo(message.conversationId)
+            .filter()
+            .contentEqualTo(message.content)
+            .and()
+            .senderIdEqualTo(message.senderId)
+            .findAll();
+
+        for (final existing in potentialDuplicates) {
+          // Check if timestamps are very close (within 5 seconds)
+          final timeDiff =
+              message.createdAt.difference(existing.createdAt).abs();
+          if (timeDiff.inSeconds <= 5) {
+            print(
+                '🐛 [DATABASE] Skipping duplicate message with similar content/time - serverId: ${message.serverId}, existing ID: ${existing.id}');
+            return;
+          }
+        }
+
+        await _isar.localMessages.put(message);
+        print(
+            '🐛 [DATABASE] Saved new message: ${message.serverId ?? message.id}');
+      });
+    } catch (e) {
+      if (e.toString().contains('Unique index violated')) {
+        // Duplicate message, ignore silently
+        print(
+            '🐛 [DATABASE] Skipping duplicate message (unique index violated): ${message.serverId ?? message.id}');
+        return;
+      }
       print(
-          '🐛 [DATABASE] _isar.localMessages.put took: ${putEnd.difference(putStart).inMilliseconds}ms');
-    });
-
-    final dbEnd = DateTime.now();
-    print(
-        '🐛 [DATABASE] ✅ saveMessage completed in: ${dbEnd.difference(dbStart).inMilliseconds}ms');
+          '❌ [DATABASE] Failed to save message: ${message.serverId ?? message.id} - $e');
+      rethrow; // Re-throw other errors
+    }
   }
 
   /// Save multiple messages (batch operation for sync)
@@ -74,10 +110,27 @@ class ChatDatabase {
     return await _isar.localMessages
         .where()
         .conversationIdEqualTo(conversationId)
-        .sortByCreatedAt() // Changed from Desc to chronological order
+        .sortByCreatedAt() // chronological order (oldest first)
         .offset(offset)
         .limit(limit)
         .findAll();
+  }
+
+  /// Get latest N messages for conversation, returned in chronological order
+  /// Fetches using descending sort for efficiency, then reverses for UI
+  static Future<List<LocalMessage>> getLatestMessages(
+    String conversationId, {
+    int limit = 50,
+    int offsetFromLatest = 0,
+  }) async {
+    final desc = await _isar.localMessages
+        .where()
+        .conversationIdEqualTo(conversationId)
+        .sortByCreatedAtDesc()
+        .offset(offsetFromLatest)
+        .limit(limit)
+        .findAll();
+    return desc.reversed.toList(growable: false);
   }
 
   /// Get latest message for conversation (for conversation list)
@@ -121,31 +174,59 @@ class ChatDatabase {
     DateTime? readAt,
     DateTime? deliveredAt,
   }) async {
-    await _isar.writeTxn(() async {
-      final message = await _isar.localMessages
-          .where()
-          .serverIdEqualTo(messageId)
-          .findFirst();
-      if (message != null) {
-        final updated = message.copyWith(
-          readStatus: readStatus,
-          readAt: readAt,
-          deliveredAt: deliveredAt,
-        );
-        await _isar.localMessages.put(updated);
+    try {
+      await _isar.writeTxn(() async {
+        final message = await _isar.localMessages
+            .where()
+            .serverIdEqualTo(messageId)
+            .findFirst();
+        if (message != null) {
+          // Only update if status actually changed
+          if (message.readStatus != readStatus) {
+            final updated = message.copyWith(
+              readStatus: readStatus,
+              readAt: readAt,
+              deliveredAt: deliveredAt,
+            );
+            await _isar.localMessages.put(updated);
+          }
+        }
+      });
+    } catch (e) {
+      if (e.toString().contains('Unique index violated')) {
+        // Message status update conflict - ignore silently
+        return;
       }
-    });
+      rethrow; // Re-throw other errors
+    }
   }
 
-  /// Delete message locally
+  /// Delete message locally (and remove from pending sync)
   static Future<void> deleteMessage(String messageId) async {
     await _isar.writeTxn(() async {
-      final message = await _isar.localMessages
+      // Try to find by serverId first
+      LocalMessage? message = await _isar.localMessages
           .where()
           .serverIdEqualTo(messageId)
           .findFirst();
+
+      // If not found by serverId, try by local ID (for unsent messages)
+      if (message == null) {
+        try {
+          final intId = int.parse(messageId);
+          message =
+              await _isar.localMessages.where().idEqualTo(intId).findFirst();
+        } catch (e) {
+          // messageId is not an int, so it's not a local ID
+        }
+      }
+
       if (message != null) {
         await _isar.localMessages.delete(message.id);
+        print(
+            '✅ [DATABASE] Deleted message: $messageId (localId: ${message.id})');
+      } else {
+        print('⚠️ [DATABASE] Message not found for deletion: $messageId');
       }
     });
   }
@@ -239,34 +320,92 @@ class ChatDatabase {
 
   // ========== SYNC OPERATIONS ==========
 
-  /// Get messages that need to be synced to server
+  /// Get messages that need to be synced to server (excluding failed messages)
   static Future<List<LocalMessage>> getPendingSyncMessages() async {
-    return await _isar.localMessages.where().isSyncedEqualTo(false).findAll();
+    final pendingMessages =
+        await _isar.localMessages.where().isSyncedEqualTo(false).findAll();
+
+    // Filter out messages that are marked as failed (serverId starts with 'failed_')
+    final validPendingMessages = pendingMessages.where((message) {
+      if (message.serverId != null && message.serverId!.startsWith('failed_')) {
+        return false; // Skip failed messages
+      }
+      return true;
+    }).toList();
+
+    print(
+        '🔄 [DATABASE] Found ${validPendingMessages.length} valid pending messages (filtered ${pendingMessages.length - validPendingMessages.length} failed)');
+    return validPendingMessages;
+  }
+
+  /// Remove message from pending sync queue (mark as synced or delete)
+  static Future<void> removePendingMessage(String messageId) async {
+    await _isar.writeTxn(() async {
+      // Try to find by serverId first
+      LocalMessage? message = await _isar.localMessages
+          .where()
+          .serverIdEqualTo(messageId)
+          .findFirst();
+
+      // If not found by serverId, try by local ID
+      if (message == null) {
+        try {
+          final intId = int.parse(messageId);
+          message =
+              await _isar.localMessages.where().idEqualTo(intId).findFirst();
+        } catch (e) {
+          // messageId is not an int
+        }
+      }
+
+      if (message != null && !message.isSynced) {
+        // Mark as synced with special 'deleted' serverId to prevent future sync
+        final updated = message.copyWith(
+          isSynced: true,
+          serverId: 'deleted_${DateTime.now().millisecondsSinceEpoch}',
+        );
+        await _isar.localMessages.put(updated);
+        print('✅ [DATABASE] Removed message from pending sync: $messageId');
+      }
+    });
   }
 
   /// Mark message as synced
   static Future<void> markMessageSynced(String localId, String serverId) async {
     await _isar.writeTxn(() async {
       // First check if a message with this serverId already exists
-      final existingMessage = await _isar.localMessages
+      final existingByServerId = await _isar.localMessages
           .where()
           .serverIdEqualTo(serverId)
           .findFirst();
 
-      if (existingMessage != null) {
+      if (existingByServerId != null) {
         // Message with this serverId already exists, don't create duplicate
         print(
-            '🐛 [DATABASE] Message with serverId $serverId already exists, skipping update');
+            '🐛 [DATABASE] Message with serverId $serverId already exists, skipping sync update');
         return;
       }
 
-      final message = await _isar.localMessages.get(int.parse(localId));
-      if (message != null) {
-        final updated = message.copyWith(
+      // Find the local message to update
+      final localMessage = await _isar.localMessages.get(int.parse(localId));
+      if (localMessage != null) {
+        // Double-check that we're not creating a duplicate
+        if (localMessage.serverId != null &&
+            localMessage.serverId != serverId) {
+          print(
+              '⚠️ [DATABASE] Local message already has different serverId: ${localMessage.serverId} vs $serverId');
+          return;
+        }
+
+        final updated = localMessage.copyWith(
           serverId: serverId,
           isSynced: true,
+          readStatus: 'sent', // Update status to sent
         );
         await _isar.localMessages.put(updated);
+        print('✅ [DATABASE] Marked message as synced: $localId -> $serverId');
+      } else {
+        print('⚠️ [DATABASE] Local message not found for sync: $localId');
       }
     });
   }
