@@ -114,11 +114,15 @@ class LocalConversationsNotifier
 /// Provider for local messages in a specific conversation
 final localMessagesProvider = StateNotifierProvider.family<
     LocalMessagesNotifier, AsyncValue<List<LocalMessage>>, String>(
-  (ref, conversationId) => LocalMessagesNotifier(
-    ref.read(localChatServiceProvider),
-    conversationId,
-    ref,
-  ),
+  (ref, conversationId) {
+    print(
+        '🔍 [PROVIDER] Creating LocalMessagesNotifier for conversationId: "$conversationId"');
+    return LocalMessagesNotifier(
+      ref.read(localChatServiceProvider),
+      conversationId,
+      ref,
+    );
+  },
 );
 
 class LocalMessagesNotifier
@@ -133,25 +137,26 @@ class LocalMessagesNotifier
 
   LocalMessagesNotifier(this._chatService, this._conversationId, this._ref)
       : super(const AsyncValue.loading()) {
+    print(
+        '🔍 [PROVIDER] LocalMessagesNotifier created for conversationId: "$_conversationId"');
     _watchMessages();
   }
 
   void _watchMessages() {
+    print(
+        '🔍 [PROVIDER] _watchMessages() called for conversationId: "$_conversationId"');
     _streamSub?.cancel();
     _streamSub = ChatDatabase.watchMessages(_conversationId, limit: _pageSize)
         .listen((messages) async {
-      // Force an initial server sync on empty state
-      if (messages.isEmpty) {
-        try {
-          await _chatService.forceSyncMessagesFromServer(_conversationId);
-        } catch (_) {}
-      }
+      print(
+          '🔍 [PROVIDER] Stream received ${messages.length} messages for "$_conversationId"');
       if (mounted) {
         state = AsyncValue.data(messages);
         _currentOffset = messages.length;
         _hasMore = messages.length >= _pageSize;
       }
     }, onError: (e, st) {
+      print('🔍 [PROVIDER] Stream error for "$_conversationId": $e');
       if (mounted) state = AsyncValue.error(e, st);
     });
   }
@@ -169,42 +174,13 @@ class LocalMessagesNotifier
         offset: offset,
       );
 
-      // 🔥 CRITICAL: If no local messages found and it's initial load, force server sync
-      if (messages.isEmpty && offset == 0) {
-        print(
-            '🔄 No local messages found, forcing server sync for conversation: $_conversationId');
-        try {
-          // Force immediate sync from server for this conversation
-          await _chatService.forceSyncMessagesFromServer(_conversationId);
-
-          // Reload from local database after sync
-          final syncedMessages = await _chatService.getMessages(
-            _conversationId,
-            limit: _pageSize,
-            offset: 0,
-          );
-
-          if (mounted) {
-            state = AsyncValue.data(syncedMessages);
-            _currentOffset = syncedMessages.length;
-            _hasMore = syncedMessages.length >= _pageSize;
-          }
-          return;
-        } catch (e) {
-          print('⚠️ Failed to force sync messages from server: $e');
-          // Continue with empty local messages
-        }
-      }
-
       if (mounted) {
         if (loadMore) {
-          // Append older messages
           state.whenData((existingMessages) {
             final combined = [...existingMessages, ...messages];
             state = AsyncValue.data(combined);
           });
         } else {
-          // Replace with fresh data
           state = AsyncValue.data(messages);
         }
 

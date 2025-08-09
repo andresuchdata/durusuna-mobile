@@ -94,7 +94,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       _markOnChatPageEnter();
 
       // Reconcile any leftover pending messages on initial open
-      Future.microtask(() async {
+      Future.delayed(const Duration(milliseconds: 250), () async {
         try {
           final chatService = ref.read(localChatServiceProvider);
           await chatService.reconcilePendingOnOpen(widget.conversation.id);
@@ -628,9 +628,12 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    print(
+        '🔍 [UI] LocalChatPage.build() called for conversationId: "${widget.conversation.id}"');
     final authState = ref.watch(authStateProvider);
     final messagesAsync =
         ref.watch(localMessagesProvider(widget.conversation.id));
+    print('🔍 [UI] messagesAsync state: ${messagesAsync.runtimeType}');
 
     // Real-time messages are now handled by the centralized RealtimeDispatcher
     // This ensures no duplicate processing and better performance
@@ -672,25 +675,13 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       });
     });
 
-    // DEBUG: Force sync messages if empty AND log message count
+    // DEBUG: Log message count and conversation details
     messagesAsync.whenData((messages) {
       print(
-          '🐛 [DEBUG] LocalChatPage: ${widget.conversation.id} has ${messages.length} messages');
-
-      if (messages.isEmpty) {
-        print(
-            '🐛 [DEBUG] Messages empty, forcing manual sync for ${widget.conversation.id}');
-        // Force sync in background
-        Future.microtask(() async {
-          try {
-            final chatService = ref.read(localChatServiceProvider);
-            // Force sync this conversation's messages
-            await chatService.getMessages(widget.conversation.id);
-          } catch (e) {
-            print('🐛 [DEBUG] Manual sync failed: $e');
-          }
-        });
-      }
+          '🐛 [DEBUG] LocalChatPage: conversationId="${widget.conversation.id}" has ${messages.length} messages');
+      print('🐛 [DEBUG] Conversation type: ${widget.conversation.type}');
+      print(
+          '🐛 [DEBUG] Last message in conversation model: ${widget.conversation.lastMessage?.content ?? "null"}');
     });
 
     return Scaffold(

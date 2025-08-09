@@ -370,27 +370,65 @@ class LocalChatService {
   Future<void> reconcilePendingOnOpen(String conversationId,
       {Duration staleAfter = const Duration(seconds: 45)}) async {
     try {
-      // Pull a recent window so we can adopt
-      await _syncMessagesFromServer(conversationId, limit: 100);
+      // DEBUG: Check what conversation IDs exist in database
+      final allMessages = await ChatDatabase.getAllMessages();
+      final uniqueConversationIds =
+          allMessages.map((m) => m.conversationId).toSet();
+      print(
+          '🔍 [DEBUG] All conversation IDs in database: $uniqueConversationIds');
+      print('🔍 [DEBUG] Looking for conversationId: "$conversationId"');
+
+      // Only reconcile if we have pending messages to avoid unnecessary work
+      final pending =
+          await ChatDatabase.getPendingMessagesForConversation(conversationId);
+      if (pending.isEmpty) {
+        print('🔄 No pending messages to reconcile for $conversationId');
+        return;
+      }
+
+      print(
+          '🔄 Reconciling ${pending.length} pending messages for $conversationId');
+
+      // Pull a recent window so we can adopt - but catch any unique violations
+      try {
+        await _syncMessagesFromServer(conversationId, limit: 100);
+      } catch (e) {
+        if (e.toString().contains('Unique index violated')) {
+          print(
+              'ℹ️ Some messages already exist during reconcile sync - continuing');
+        } else {
+          rethrow;
+        }
+      }
 
       // Try adopting each recent server message into any optimistic row
       final recent = await ChatDatabase.getLatestMessages(conversationId,
           limit: 200, offsetFromLatest: 0);
       for (final m in recent) {
         if (m.serverId != null) {
-          await ChatDatabase.adoptServerMessage(m);
+          try {
+            await ChatDatabase.adoptServerMessage(m);
+          } catch (e) {
+            if (e.toString().contains('Unique index violated')) {
+              // Skip if already exists
+              continue;
+            }
+            print('⚠️ Failed to adopt message ${m.serverId}: $e');
+          }
         }
       }
 
       // Any remaining pending older than threshold become failed
-      final pending =
+      final stillPending =
           await ChatDatabase.getPendingMessagesForConversation(conversationId);
       final now = DateTime.now();
-      for (final p in pending) {
+      for (final p in stillPending) {
         if (now.difference(p.createdAt) > staleAfter) {
           await ChatDatabase.markMessageFailed(p.id.toString());
         }
       }
+
+      print('🔄 Reconcile completed for $conversationId');
     } catch (e) {
       print('⚠️ reconcilePendingOnOpen failed: $e');
     }

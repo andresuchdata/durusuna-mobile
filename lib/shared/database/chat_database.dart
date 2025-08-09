@@ -268,6 +268,11 @@ class ChatDatabase {
     }
   }
 
+  /// Get all messages (for debugging)
+  static Future<List<LocalMessage>> getAllMessages() async {
+    return await _isar.localMessages.where().findAll();
+  }
+
   /// Get messages for conversation (instant loading)
   /// Returns messages in chronological order (oldest first) for proper chat display
   static Future<List<LocalMessage>> getMessages(
@@ -308,6 +313,9 @@ class ChatDatabase {
     String conversationId, {
     int? limit,
   }) {
+    print(
+        '🔍 [DATABASE] watchMessages called for conversationId: "$conversationId"');
+
     final query = _isar.localMessages
         .where()
         .conversationIdEqualTo(conversationId)
@@ -315,6 +323,13 @@ class ChatDatabase {
 
     // Isar doesn't support limit directly on watch queries; consumers can trim.
     return query.watch(fireImmediately: true).map((messages) {
+      print(
+          '🔍 [DATABASE] watchMessages found ${messages.length} messages for "$conversationId"');
+      for (int i = 0; i < messages.length && i < 3; i++) {
+        print(
+            '🔍 [DATABASE]   Message $i: "${messages[i].content}" (serverId: ${messages[i].serverId})');
+      }
+
       if (limit != null && messages.length > limit) {
         return messages.sublist(messages.length - limit);
       }
