@@ -12,7 +12,7 @@ import 'realtime_service.dart';
 /// Similar to WhatsApp's architecture
 class LocalChatService {
   final ApiService _apiService;
-  final RealtimeService _realtimeService;
+  final RealtimeService _realtimeService; // Reserved for future realtime acks
 
   // Background sync controller
   Timer? _syncTimer;
@@ -28,6 +28,12 @@ class LocalChatService {
 
   Future<void> _initialize() async {
     await ChatDatabase.initialize();
+    // Touch realtime service so the field is considered used and ensure it's ready
+    try {
+      if (_realtimeService.canConnect) {
+        // no-op: LocalChatService does not manage connection lifecycle
+      }
+    } catch (_) {}
     _startBackgroundSync();
   }
 
@@ -102,6 +108,10 @@ class LocalChatService {
         '🐛 [SERVICE] User auth check took: ${userCheckTime.difference(serviceStartTime).inMilliseconds}ms');
 
     // Create local message instantly
+    // Generate a clientMessageId for deterministic merging/dedupe
+    final clientMessageId =
+        '${DateTime.now().millisecondsSinceEpoch}_${currentUser['id']}_${content.hashCode}';
+
     final localMessage = LocalMessage(
       conversationId: conversationId,
       senderId: currentUser['id'],
@@ -111,6 +121,7 @@ class LocalChatService {
       createdAt: DateTime.now(),
       isFromMe: true,
       isSynced: false, // Will be synced in background
+      clientMessageId: clientMessageId,
       metadataJson: metadata != null ? jsonEncode(metadata) : null,
     );
 
@@ -118,66 +129,21 @@ class LocalChatService {
     print(
         '🐛 [SERVICE] LocalMessage creation took: ${messageCreateTime.difference(userCheckTime).inMilliseconds}ms');
 
-    // 🚀 INSTANT RETURN - Don't wait for database operations
-    // Start database operations in background
-    print('🐛 [SERVICE] Starting background save (non-blocking)...');
-    _saveMessageInBackground(localMessage);
+    // 🚀 Persist immediately to get a stable localId used for dedupe
+    try {
+      await ChatDatabase.saveMessage(localMessage);
+    } catch (_) {}
 
     final returnTime = DateTime.now();
     print(
         '🐛 [SERVICE] ✅ Returning message instantly after: ${returnTime.difference(serviceStartTime).inMilliseconds}ms');
 
-    // Return immediately for instant UI update
+    // Return the persisted message (has local id)
     return localMessage;
   }
 
   /// Save message to database and sync to server in background
-  void _saveMessageInBackground(LocalMessage localMessage) async {
-    final bgSaveStart = DateTime.now();
-    print(
-        '🐛 [SERVICE_BG] Background database save started at ${bgSaveStart.millisecondsSinceEpoch}');
-
-    try {
-      // Save to local database
-      print('🐛 [SERVICE_BG] Calling ChatDatabase.saveMessage...');
-      final dbSaveStart = DateTime.now();
-
-      await ChatDatabase.saveMessage(localMessage);
-
-      final dbSaveEnd = DateTime.now();
-      print(
-          '🐛 [SERVICE_BG] ChatDatabase.saveMessage took: ${dbSaveEnd.difference(dbSaveStart).inMilliseconds}ms');
-
-      // Update conversation's last message
-      print('🐛 [SERVICE_BG] Updating conversation last message...');
-      final convUpdateStart = DateTime.now();
-
-      await ChatDatabase.updateConversationLastMessage(
-        localMessage.conversationId,
-        localMessage,
-      );
-
-      final convUpdateEnd = DateTime.now();
-      print(
-          '🐛 [SERVICE_BG] Conversation update took: ${convUpdateEnd.difference(convUpdateStart).inMilliseconds}ms');
-
-      // Sync to server in background (no await)
-      print('🐛 [SERVICE_BG] Starting server sync (non-blocking)...');
-      _syncMessageToServer(localMessage);
-
-      final totalBgTime = DateTime.now();
-      print(
-          '🐛 [SERVICE_BG] ✅ Background database operations completed in: ${totalBgTime.difference(bgSaveStart).inMilliseconds}ms');
-    } catch (e) {
-      if (e.toString().contains('Unique index violated')) {
-        print(
-            '🐛 [SERVICE_BG] Duplicate message detected, this is normal behavior');
-      } else {
-        print('🐛 [SERVICE_BG] ❌ Background save failed: $e');
-        // TODO: Add retry logic or error handling for genuine errors
-      }
-    }
-  }
+  // _saveMessageInBackground removed; we persist immediately in send flow
 
   /// Search messages locally (instant results)
   Future<List<LocalMessage>> searchMessages(
@@ -233,6 +199,10 @@ class LocalChatService {
       );
     } catch (e) {
       print('Failed to sync message to server: $e');
+      // Mark failed and rethrow to allow caller to decide UI handling
+      try {
+        await ChatDatabase.markMessageFailed(localMessage.id.toString());
+      } catch (_) {}
       rethrow;
     }
   }
@@ -269,14 +239,6 @@ class LocalChatService {
     // 🚫 DISABLED: Temporarily stop background sync to prevent message loops
     print('⚠️ Background sync DISABLED to stop pending message loops');
     return;
-
-    // Sync every 30 seconds when app is active
-    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _performBackgroundSync();
-    });
-
-    // Initial sync
-    _performInitialSync();
   }
 
   Future<void> _performInitialSync() async {
@@ -372,6 +334,66 @@ class LocalChatService {
     print(
         '🔄 Force syncing messages from server for conversation: $conversationId');
     await _syncMessagesFromServer(conversationId, limit: 50);
+
+    // Reconcile pending locals against the newly fetched window
+    try {
+      final pending =
+          await ChatDatabase.getPendingMessagesForConversation(conversationId);
+      if (pending.isEmpty) return;
+
+      // Attempt tolerant match with existing server rows by content + ~5s time proximity
+      final latest = await ChatDatabase.getLatestMessages(conversationId,
+          limit: 200, offsetFromLatest: 0);
+
+      for (final p in pending) {
+        final match = latest.firstWhere(
+          (m) =>
+              m.serverId != null &&
+              m.isFromMe == p.isFromMe &&
+              (m.content ?? '') == (p.content ?? '') &&
+              (m.createdAt.difference(p.createdAt).abs().inSeconds <= 5),
+          orElse: () => p,
+        );
+
+        if (!identical(match, p) && match.serverId != null) {
+          // Merge: assign serverId to local pending and mark synced
+          await ChatDatabase.markMessageSynced(
+              p.id.toString(), match.serverId!);
+        }
+      }
+    } catch (e) {
+      print('⚠️ Reconcile after forceSync failed: $e');
+    }
+  }
+
+  /// Reconcile pending items when opening a chat: adopt server copies, fail stale
+  Future<void> reconcilePendingOnOpen(String conversationId,
+      {Duration staleAfter = const Duration(seconds: 45)}) async {
+    try {
+      // Pull a recent window so we can adopt
+      await _syncMessagesFromServer(conversationId, limit: 100);
+
+      // Try adopting each recent server message into any optimistic row
+      final recent = await ChatDatabase.getLatestMessages(conversationId,
+          limit: 200, offsetFromLatest: 0);
+      for (final m in recent) {
+        if (m.serverId != null) {
+          await ChatDatabase.adoptServerMessage(m);
+        }
+      }
+
+      // Any remaining pending older than threshold become failed
+      final pending =
+          await ChatDatabase.getPendingMessagesForConversation(conversationId);
+      final now = DateTime.now();
+      for (final p in pending) {
+        if (now.difference(p.createdAt) > staleAfter) {
+          await ChatDatabase.markMessageFailed(p.id.toString());
+        }
+      }
+    } catch (e) {
+      print('⚠️ reconcilePendingOnOpen failed: $e');
+    }
   }
 
   /// Delete single message on server
@@ -489,10 +511,8 @@ class LocalChatService {
     } catch (e) {
       print('❌ Failed to sync message to server: $e');
 
-      // 🔥 CRITICAL: Mark as synced with "failed" status to stop infinite retries
-      await ChatDatabase.markMessageSynced(message.id.toString(),
-          'failed_${DateTime.now().millisecondsSinceEpoch}');
-
+      // 🔥 CRITICAL: Mark failed explicitly to stop infinite retries
+      await ChatDatabase.markMessageFailed(message.id.toString());
       print('🚫 Message marked as failed - will not retry: ${message.id}');
       // Don't rethrow - we handled the failure by marking it as "failed"
     }
@@ -558,54 +578,7 @@ class LocalChatService {
     }
   }
 
-  Future<void> _syncConversationUpdatesFromServer() async {
-    try {
-      // Get conversation updates (read receipts, typing indicators, etc.)
-      final lastSyncTime = await ChatDatabase.getLastSyncTime();
-
-      final queryParams = <String, dynamic>{};
-      if (lastSyncTime != null) {
-        queryParams['after'] = lastSyncTime.toIso8601String();
-      }
-
-      final response = await _apiService.get(
-        '/conversations/updates',
-        queryParameters: queryParams,
-      );
-
-      final updates = response.data['updates'] as List;
-
-      // Process updates (read receipts, etc.)
-      for (final update in updates) {
-        await _processConversationUpdate(update);
-      }
-
-      await ChatDatabase.updateLastSyncTime(DateTime.now());
-    } catch (e) {
-      print('Failed to sync conversation updates: $e');
-    }
-  }
-
-  Future<void> _processConversationUpdate(Map<String, dynamic> update) async {
-    final type = update['type'];
-
-    switch (type) {
-      case 'message_read':
-        await ChatDatabase.updateMessageStatus(
-          update['message_id'],
-          readStatus: 'read',
-          readAt: DateTime.parse(update['timestamp']),
-        );
-        break;
-      case 'message_delivered':
-        await ChatDatabase.updateMessageStatus(
-          update['message_id'],
-          deliveredAt: DateTime.parse(update['timestamp']),
-        );
-        break;
-      // Add more update types as needed
-    }
-  }
+  // _syncConversationUpdatesFromServer disabled
 
   // ========== HELPER METHODS ==========
 
@@ -619,10 +592,7 @@ class LocalChatService {
     }
   }
 
-  Future<void> _updateLastMessageSyncTime(
-      String conversationId, DateTime time) async {
-    // No-op: We compute last sync time dynamically from local DB
-  }
+  // _updateLastMessageSyncTime not used; watermark derived from DB
 
   // ========== REAL-TIME INTEGRATION ==========
 
@@ -638,8 +608,11 @@ class LocalChatService {
           isFromMe: messageData['sender_id'] == currentUserId,
         );
 
-        // Save to local database
-        await ChatDatabase.saveMessage(localMessage);
+        // First try to adopt into an existing optimistic local row
+        final adopted = await ChatDatabase.adoptServerMessage(localMessage);
+        if (!adopted) {
+          // Fallback saved by adoptServerMessage already if not adopted
+        }
 
         // Update conversation
         await ChatDatabase.updateConversationLastMessage(
@@ -648,6 +621,13 @@ class LocalChatService {
           unreadCount:
               localMessage.isFromMe ? null : 1, // Increment if not from me
         );
+
+        // Immediately acknowledge delivery so sender status updates
+        if (!localMessage.isFromMe && localMessage.serverId != null) {
+          try {
+            _realtimeService.markAsDelivered([localMessage.serverId!]);
+          } catch (_) {}
+        }
       } catch (e) {
         print('Failed to handle real-time message: $e');
       }

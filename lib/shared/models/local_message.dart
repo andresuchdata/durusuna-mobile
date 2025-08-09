@@ -10,6 +10,10 @@ class LocalMessage {
   @Index(unique: true)
   String? serverId; // Server-side UUID
 
+  /// Client-generated id to dedupe optimistic vs server messages
+  @Index(unique: true, caseSensitive: false)
+  String? clientMessageId;
+
   @Index()
   String conversationId;
 
@@ -57,6 +61,7 @@ class LocalMessage {
 
   LocalMessage({
     this.serverId,
+    this.clientMessageId,
     required this.conversationId,
     required this.senderId,
     this.content,
@@ -81,6 +86,7 @@ class LocalMessage {
 
   LocalMessage copyWith({
     String? serverId,
+    String? clientMessageId,
     String? conversationId,
     String? senderId,
     String? content,
@@ -104,6 +110,7 @@ class LocalMessage {
   }) {
     return LocalMessage(
       serverId: serverId ?? this.serverId,
+      clientMessageId: clientMessageId ?? this.clientMessageId,
       conversationId: conversationId ?? this.conversationId,
       senderId: senderId ?? this.senderId,
       content: content ?? this.content,
@@ -155,6 +162,7 @@ extension LocalMessageExtension on LocalMessage {
     return {
       'conversation_id': conversationId, // Required by backend validation
       'message_type': messageType.name,
+      if (clientMessageId != null) 'client_message_id': clientMessageId,
       if (content != null) 'content': content,
       if (replyToId != null) 'reply_to_id': replyToId,
       if (metadata != null) 'metadata': metadata,
@@ -166,6 +174,7 @@ extension LocalMessageExtension on LocalMessage {
       {required bool isFromMe}) {
     return LocalMessage(
       serverId: json['id'],
+      clientMessageId: json['client_message_id'],
       conversationId: json['conversation_id'],
       senderId: json['sender_id'],
       content: json['content'],

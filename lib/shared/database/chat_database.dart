@@ -93,6 +93,169 @@ class ChatDatabase {
     }
   }
 
+  /// Save and return assigned local Id (also updates message.id)
+  static Future<int> saveMessageAndReturnId(LocalMessage message) async {
+    await saveMessage(message);
+    return message.id;
+  }
+
+  /// Try to adopt a server message into an existing optimistic local row.
+  /// If a matching optimistic message is found, we upgrade it with server fields
+  /// and do NOT insert a new row. Returns true if adopted, false otherwise.
+  static Future<bool> adoptServerMessage(LocalMessage serverMessage) async {
+    return await _isar.writeTxn(() async {
+      // 1) Try match by clientMessageId first (best-effort, in-memory scan to avoid codegen dependency)
+      if (serverMessage.clientMessageId != null) {
+        final allInConv = await _isar.localMessages
+            .where()
+            .conversationIdEqualTo(serverMessage.conversationId)
+            .findAll();
+        final optimistic = allInConv.firstWhere(
+          (m) => m.clientMessageId == serverMessage.clientMessageId,
+          orElse: () => LocalMessage(
+            serverId: null,
+            clientMessageId: null,
+            conversationId: '',
+            senderId: '',
+            content: null,
+            messageType: LocalMessageType.text,
+            replyToId: null,
+            replyToContent: null,
+            createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+            updatedAt: null,
+            readAt: null,
+            deliveredAt: null,
+            isFromMe: false,
+            readStatus: 'sent',
+            isSynced: true,
+            needsUpload: false,
+            attachmentUrl: null,
+            attachmentType: null,
+            attachmentSize: null,
+            thumbnailPath: null,
+            metadataJson: null,
+            reactions: null,
+          ),
+        );
+        // Check sentinel
+        if (optimistic.conversationId.isNotEmpty) {
+          final upgraded = optimistic.copyWith(
+            serverId: serverMessage.serverId,
+            isSynced: true,
+            readStatus: serverMessage.readStatus ?? optimistic.readStatus,
+            createdAt: serverMessage.createdAt,
+            updatedAt: serverMessage.updatedAt,
+            deliveredAt: serverMessage.deliveredAt,
+            readAt: serverMessage.readAt,
+            metadataJson: serverMessage.metadataJson,
+            attachmentUrl: serverMessage.attachmentUrl,
+            attachmentType: serverMessage.attachmentType,
+            attachmentSize: serverMessage.attachmentSize,
+            thumbnailPath: serverMessage.thumbnailPath,
+            reactions: serverMessage.reactions,
+          );
+          await _isar.localMessages.put(upgraded);
+          print(
+              '🔄 [DATABASE] Adopted by clientMessageId ${serverMessage.clientMessageId}');
+          return true;
+        }
+      }
+
+      // If a row with this serverId already exists, ensure it's marked synced and exit
+      final existingServer = await _isar.localMessages
+          .where()
+          .serverIdEqualTo(serverMessage.serverId ?? '')
+          .findFirst();
+      if (existingServer != null) {
+        final updated = existingServer.copyWith(
+          isSynced: true,
+          readStatus: existingServer.readStatus ?? 'sent',
+          updatedAt: serverMessage.updatedAt ?? existingServer.updatedAt,
+          deliveredAt: serverMessage.deliveredAt ?? existingServer.deliveredAt,
+          readAt: serverMessage.readAt ?? existingServer.readAt,
+        );
+        await _isar.localMessages.put(updated);
+        return true;
+      }
+
+      // Find candidates: same conversation, no serverId, same author and content
+      final candidates = await _isar.localMessages
+          .where()
+          .conversationIdEqualTo(serverMessage.conversationId)
+          .filter()
+          .serverIdIsNull()
+          .and()
+          .isFromMeEqualTo(serverMessage.isFromMe)
+          .and()
+          .contentEqualTo(serverMessage.content)
+          .findAll();
+
+      LocalMessage? best;
+      Duration bestDiff = const Duration(days: 3650);
+      for (final m in candidates) {
+        final diff = m.createdAt.difference(serverMessage.createdAt).abs();
+        if (diff < bestDiff) {
+          best = m;
+          bestDiff = diff;
+        }
+      }
+
+      // Accept if reasonably close (<= 60s)
+      if (best != null && bestDiff.inSeconds <= 60) {
+        final upgraded = best.copyWith(
+          serverId: serverMessage.serverId,
+          isSynced: true,
+          readStatus: serverMessage.readStatus ?? best.readStatus,
+          createdAt: serverMessage.createdAt,
+          updatedAt: serverMessage.updatedAt,
+          deliveredAt: serverMessage.deliveredAt,
+          readAt: serverMessage.readAt,
+          metadataJson: serverMessage.metadataJson,
+          attachmentUrl: serverMessage.attachmentUrl,
+          attachmentType: serverMessage.attachmentType,
+          attachmentSize: serverMessage.attachmentSize,
+          thumbnailPath: serverMessage.thumbnailPath,
+          reactions: serverMessage.reactions,
+        );
+        await _isar.localMessages.put(upgraded);
+        print(
+            '🔄 [DATABASE] Adopted server message ${serverMessage.serverId} into optimistic local ${best.id}');
+        return true;
+      }
+
+      // No adopt candidate; insert new server row directly within this txn (no nested txn)
+      try {
+        await _isar.localMessages.put(serverMessage);
+        print(
+            '🆕 [DATABASE] Inserted server message ${serverMessage.serverId}');
+        return false;
+      } catch (e) {
+        // Handle race: unique index may be taken by another concurrent save
+        final isUnique = e.toString().contains('Unique index violated');
+        if (isUnique && serverMessage.serverId != null) {
+          final existing = await _isar.localMessages
+              .where()
+              .serverIdEqualTo(serverMessage.serverId!)
+              .findFirst();
+          if (existing != null) {
+            final updated = existing.copyWith(
+              isSynced: true,
+              readStatus: existing.readStatus ?? 'sent',
+              updatedAt: serverMessage.updatedAt ?? existing.updatedAt,
+              deliveredAt: serverMessage.deliveredAt ?? existing.deliveredAt,
+              readAt: serverMessage.readAt ?? existing.readAt,
+            );
+            await _isar.localMessages.put(updated);
+            print(
+                'ℹ️ [DATABASE] Race on insert resolved by updating existing ${existing.serverId}');
+            return true;
+          }
+        }
+        rethrow;
+      }
+    });
+  }
+
   /// Save multiple messages (batch operation for sync)
   static Future<void> saveMessages(List<LocalMessage> messages) async {
     // Important: use the single-save path to leverage duplicate checks
@@ -136,6 +299,53 @@ class ChatDatabase {
         .limit(limit)
         .findAll();
     return desc.reversed.toList(growable: false);
+  }
+
+  /// Watch messages for a conversation as a stream.
+  /// Emits updates whenever the underlying data changes.
+  /// Results are in chronological order (oldest first) for UI rendering.
+  static Stream<List<LocalMessage>> watchMessages(
+    String conversationId, {
+    int? limit,
+  }) {
+    final query = _isar.localMessages
+        .where()
+        .conversationIdEqualTo(conversationId)
+        .sortByCreatedAt();
+
+    // Isar doesn't support limit directly on watch queries; consumers can trim.
+    return query.watch(fireImmediately: true).map((messages) {
+      if (limit != null && messages.length > limit) {
+        return messages.sublist(messages.length - limit);
+      }
+      return messages;
+    });
+  }
+
+  /// Get pending optimistic messages for a conversation (unsynced or 'sending').
+  static Future<List<LocalMessage>> getPendingMessagesForConversation(
+      String conversationId) async {
+    final unsynced = await _isar.localMessages
+        .where()
+        .conversationIdEqualTo(conversationId)
+        .filter()
+        .isSyncedEqualTo(false)
+        .findAll();
+
+    // Include any rows marked 'sending' defensively
+    final sending = await _isar.localMessages
+        .where()
+        .conversationIdEqualTo(conversationId)
+        .filter()
+        .readStatusEqualTo('sending')
+        .findAll();
+
+    // Merge by id
+    final byId = <int, LocalMessage>{};
+    for (final m in [...unsynced, ...sending]) {
+      byId[m.id] = m;
+    }
+    return byId.values.toList();
   }
 
   /// Get latest message for conversation (for conversation list)
@@ -378,40 +588,74 @@ class ChatDatabase {
   /// Mark message as synced
   static Future<void> markMessageSynced(String localId, String serverId) async {
     await _isar.writeTxn(() async {
-      // First check if a message with this serverId already exists
+      // If a row with this serverId already exists, merge by removing the optimistic one
       final existingByServerId = await _isar.localMessages
           .where()
           .serverIdEqualTo(serverId)
           .findFirst();
 
+      // Try to get the optimistic (local) message row by local id
+      final intLocalId = int.tryParse(localId);
+      final optimisticLocal =
+          intLocalId != null ? await _isar.localMessages.get(intLocalId) : null;
+
       if (existingByServerId != null) {
-        // Message with this serverId already exists, don't create duplicate
-        print(
-            '🐛 [DATABASE] Message with serverId $serverId already exists, skipping sync update');
+        // Ensure server row is marked synced and has at least 'sent' status
+        final updatedServerRow = existingByServerId.copyWith(
+          isSynced: true,
+          readStatus: existingByServerId.readStatus ?? 'sent',
+        );
+        await _isar.localMessages.put(updatedServerRow);
+
+        // Remove optimistic duplicate if present
+        if (optimisticLocal != null &&
+            optimisticLocal.id != updatedServerRow.id) {
+          await _isar.localMessages.delete(optimisticLocal.id);
+          print(
+              '🧹 [DATABASE] Deleted optimistic duplicate localId=$localId in favor of serverId=$serverId');
+        }
         return;
       }
 
-      // Find the local message to update
-      final localMessage = await _isar.localMessages.get(int.parse(localId));
-      if (localMessage != null) {
-        // Double-check that we're not creating a duplicate
-        if (localMessage.serverId != null &&
-            localMessage.serverId != serverId) {
+      // No server row exists yet: upgrade the optimistic row to the server-backed row
+      if (optimisticLocal != null) {
+        // If optimistic already has a different serverId, keep first serverId
+        if (optimisticLocal.serverId != null &&
+            optimisticLocal.serverId != serverId) {
           print(
-              '⚠️ [DATABASE] Local message already has different serverId: ${localMessage.serverId} vs $serverId');
-          return;
+              '⚠️ [DATABASE] Optimistic message already linked to different serverId: ${optimisticLocal.serverId} vs $serverId');
+        } else {
+          final updated = optimisticLocal.copyWith(
+            serverId: serverId,
+            isSynced: true,
+            readStatus: 'sent',
+          );
+          await _isar.localMessages.put(updated);
+          print('✅ [DATABASE] Marked message as synced: $localId -> $serverId');
         }
-
-        final updated = localMessage.copyWith(
-          serverId: serverId,
-          isSynced: true,
-          readStatus: 'sent', // Update status to sent
-        );
-        await _isar.localMessages.put(updated);
-        print('✅ [DATABASE] Marked message as synced: $localId -> $serverId');
       } else {
-        print('⚠️ [DATABASE] Local message not found for sync: $localId');
+        print(
+            '⚠️ [DATABASE] Local optimistic message not found for sync: $localId');
       }
+    });
+  }
+
+  /// Mark a local optimistic message as failed to prevent infinite retries.
+  /// Sets readStatus='failed', isSynced=true, and assigns a synthetic failed_* serverId.
+  static Future<void> markMessageFailed(String localId) async {
+    await _isar.writeTxn(() async {
+      final intLocalId = int.tryParse(localId);
+      if (intLocalId == null) return;
+      final message = await _isar.localMessages.get(intLocalId);
+      if (message == null) return;
+      final updated = message.copyWith(
+        isSynced: true, // stop pending sync loops
+        readStatus: 'failed',
+        serverId: message.serverId ??
+            'failed_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      await _isar.localMessages.put(updated);
+      print('🚫 [DATABASE] Marked message as failed: localId=$localId');
     });
   }
 

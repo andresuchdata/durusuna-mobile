@@ -93,6 +93,14 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       // Mark as read when entering chat page
       _markOnChatPageEnter();
 
+      // Reconcile any leftover pending messages on initial open
+      Future.microtask(() async {
+        try {
+          final chatService = ref.read(localChatServiceProvider);
+          await chatService.reconcilePendingOnOpen(widget.conversation.id);
+        } catch (_) {}
+      });
+
       // Handle message highlighting and scrolling if requested
       if (widget.highlightMessageId != null && widget.scrollToMessage) {
         _scrollToHighlightedMessage();
