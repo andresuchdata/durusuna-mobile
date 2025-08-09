@@ -327,23 +327,32 @@ class LocalMessagesNotifier
         if (mounted) {
           bool messageUpdated = false;
           final updated = messages.map((msg) {
-            // Replace optimistic message with server message
-            if (msg.createdAt == optimisticMessage.createdAt &&
-                msg.content == optimisticMessage.content &&
-                msg.isFromMe) {
+            // Replace optimistic (unsynced) message with the server message using a tolerant match
+            final timeClose = msg.createdAt
+                    .difference(optimisticMessage.createdAt)
+                    .abs()
+                    .inSeconds <=
+                5;
+            final isCandidate = msg.serverId == null &&
+                msg.isFromMe &&
+                timeClose &&
+                msg.content == optimisticMessage.content;
+
+            if (isCandidate) {
               messageUpdated = true;
               print(
                   '🔄 [BACKGROUND] Replacing optimistic message ${msg.id} with server message ${serverMessage.serverId}');
-              return serverMessage.copyWith(
-                  readStatus: 'sent'); // Change from 'sending' to 'sent'
+              return serverMessage.copyWith(readStatus: 'sent');
             }
             return msg;
           }).toList();
 
-          if (!messageUpdated) {
+          // Avoid adding duplicate if server message already present
+          final alreadyPresent =
+              updated.any((m) => m.serverId == serverMessage.serverId);
+          if (!messageUpdated && !alreadyPresent) {
             print(
                 '⚠️ [BACKGROUND] Could not find optimistic message to replace! Adding server message to end.');
-            // If we couldn't replace the optimistic message, add the server message
             updated.add(serverMessage.copyWith(readStatus: 'sent'));
           }
 

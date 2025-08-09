@@ -95,9 +95,14 @@ class ChatDatabase {
 
   /// Save multiple messages (batch operation for sync)
   static Future<void> saveMessages(List<LocalMessage> messages) async {
-    await _isar.writeTxn(() async {
-      await _isar.localMessages.putAll(messages);
-    });
+    // Important: use the single-save path to leverage duplicate checks
+    for (final message in messages) {
+      try {
+        await saveMessage(message);
+      } catch (_) {
+        // Ignore duplicates or transient errors for individual items
+      }
+    }
   }
 
   /// Get messages for conversation (instant loading)

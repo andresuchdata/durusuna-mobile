@@ -412,7 +412,8 @@ class LocalChatService {
   Future<void> _syncMessagesFromServer(String conversationId,
       {int limit = 50}) async {
     try {
-      // Get last sync time for this conversation
+      // Get last sync time for this conversation based on latest local message
+      // This prevents the server from re-sending messages we already have locally
       final lastSyncTime = await _getLastMessageSyncTime(conversationId);
 
       final queryParams = <String, dynamic>{
@@ -460,13 +461,7 @@ class LocalChatService {
         }
       }
 
-      // Update last sync time
-      if (localMessages.isNotEmpty) {
-        await _updateLastMessageSyncTime(
-          conversationId,
-          localMessages.last.createdAt,
-        );
-      }
+      // No explicit last-sync persistence needed since we derive it from DB
     } catch (e) {
       throw LocalChatException('Failed to sync messages from server: $e');
     }
@@ -615,13 +610,18 @@ class LocalChatService {
   // ========== HELPER METHODS ==========
 
   Future<DateTime?> _getLastMessageSyncTime(String conversationId) async {
-    // Implement based on your sync tracking needs
-    return null;
+    try {
+      // Use the latest local message timestamp as the watermark
+      final latest = await ChatDatabase.getLatestMessage(conversationId);
+      return latest?.createdAt;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _updateLastMessageSyncTime(
       String conversationId, DateTime time) async {
-    // Implement based on your sync tracking needs
+    // No-op: We compute last sync time dynamically from local DB
   }
 
   // ========== REAL-TIME INTEGRATION ==========
