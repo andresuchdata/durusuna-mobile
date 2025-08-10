@@ -325,7 +325,7 @@ class LocalMessageBubble extends StatelessWidget {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 6, top: 2),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: isMe
             ? Colors.white.withValues(alpha: 0.9)
@@ -335,7 +335,15 @@ class LocalMessageBubble extends StatelessWidget {
           left: BorderSide(color: leftColor, width: 4),
         ),
       ),
-      child: inner,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.25,
+        ),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: inner,
+        ),
+      ),
     );
   }
 
@@ -345,7 +353,7 @@ class LocalMessageBubble extends StatelessWidget {
       children: [
         if (isSelectionMode) ...[
           Container(
-            margin: const EdgeInsets.only(left: 8, right: 8),
+            margin: const EdgeInsets.only(left: 2, right: 2),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               width: 24,
@@ -422,8 +430,7 @@ class LocalMessageBubble extends StatelessWidget {
                           constraints: BoxConstraints(
                             maxWidth: MediaQuery.of(context).size.width * 0.75,
                           ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 8),
+                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? (isMe
@@ -465,7 +472,7 @@ class LocalMessageBubble extends StatelessWidget {
                                   (senderName?.isNotEmpty ?? false))
                                 Padding(
                                   padding:
-                                      const EdgeInsets.only(bottom: 4, top: 2),
+                                      const EdgeInsets.only(bottom: 4, top: 0),
                                   child: Text(
                                     senderName!,
                                     style: TextStyle(
