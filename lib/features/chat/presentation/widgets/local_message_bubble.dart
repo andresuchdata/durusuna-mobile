@@ -399,9 +399,9 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                                     _buildQuotedPreview(context),
                                   // Main content and meta with normal horizontal padding
                                   Padding(
-                                    padding: EdgeInsets.only(
-                                      left: widget.isMe ? 6 : 12,
-                                      right: widget.isMe ? 12 : 6,
+                                    padding: const EdgeInsets.only(
+                                      left: 6,
+                                      right: 6,
                                       top: 0,
                                       bottom: 0,
                                     ),
@@ -483,21 +483,19 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
       onTap: widget.onAddReaction,
       onLongPress: widget.onAddReaction,
       child: Container(
-        padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(16),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color:
-                Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
-            width: 0.5,
+                Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
+            width: 0.4,
           ),
         ),
         child: Icon(
           Icons.sentiment_satisfied_alt_outlined,
-          size: 14,
-          color:
-              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45),
+          size: 13,
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
         ),
       ),
     );
