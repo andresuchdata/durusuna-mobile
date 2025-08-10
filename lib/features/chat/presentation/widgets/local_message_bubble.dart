@@ -104,13 +104,32 @@ class LocalMessageBubble extends StatelessWidget {
 
   bool get _shouldShowAvatar => isGroup && !isMe;
 
+  // Deterministic color by userId (for quoted sender sidebar)
+  Color _colorForUserId(String userId) {
+    final seed = userId.hashCode;
+    const palette = <Color>[
+      Color(0xFF0F9D58), // green
+      Color(0xFF4285F4), // blue
+      Color(0xFFDB4437), // red
+      Color(0xFFF4B400), // yellow
+      Color(0xFF8E24AA), // purple
+      Color(0xFF039BE5), // light blue
+      Color(0xFF43A047), // dark green
+      Color(0xFFF4511E), // deep orange
+    ];
+    return palette[seed.abs() % palette.length];
+  }
+
   // Build quoted message preview. Falls back to fetching quoted content
   // by replyToId if replyToContent is missing.
   Widget _buildQuotedPreview(BuildContext context) {
     if ((message.replyToContent?.isNotEmpty ?? false)) {
+      // Use sender color if group; otherwise default primary
+      final leftColor = isGroup ? _senderColor(context) : AppTheme.primaryColor;
       return _quotedContainer(
         context,
         message.replyToContent!,
+        leftColor: leftColor,
       );
     }
 
@@ -123,18 +142,23 @@ class LocalMessageBubble extends StatelessWidget {
       future: ChatDatabase.getMessageByServerId(message.replyToId!),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _quotedContainer(context, '...');
+          final leftColor =
+              isGroup ? _senderColor(context) : AppTheme.primaryColor;
+          return _quotedContainer(context, '...', leftColor: leftColor);
         }
         final quoted = snapshot.data;
         if (quoted == null || (quoted.content?.isEmpty ?? true)) {
           return const SizedBox.shrink();
         }
-        return _quotedContainer(context, quoted.content!);
+        final leftColor =
+            isGroup ? _colorForUserId(quoted.senderId) : AppTheme.primaryColor;
+        return _quotedContainer(context, quoted.content!, leftColor: leftColor);
       },
     );
   }
 
-  Widget _quotedContainer(BuildContext context, String text) {
+  Widget _quotedContainer(BuildContext context, String text,
+      {required Color leftColor}) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 6, top: 2),
@@ -145,11 +169,8 @@ class LocalMessageBubble extends StatelessWidget {
             ? Colors.white.withValues(alpha: 0.9)
             : AppTheme.primaryColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: const Border(
-          left: BorderSide(
-            color: AppTheme.primaryColor,
-            width: 4,
-          ),
+        border: Border(
+          left: BorderSide(color: leftColor, width: 4),
         ),
       ),
       child: Text(
