@@ -14,6 +14,10 @@ if [ "$DEVICE_NAME" != "" ]; then
       DEVICE_ID="--device-id=RR8Y201QSAX"
       echo "🎯 Targeting device: A16 (RR8Y201QSAX)"
       ;;
+    "A16-wireless")
+      DEVICE_ID="--device-id=adb-RR8Y201QSAX-inG6U4._adb-tls-connect._tcp"
+      echo "🎯 Targeting device: A16 Wireless (adb-RR8Y201QSAX-inG6U4._adb-tls-connect._tcp)"
+      ;;
     "iPhone")
       DEVICE_ID="--device-id=5F1AE46A-C2C6-4F14-B765-3D4A4907D284"
       echo "🎯 Targeting device: iPhone (5F1AE46A-C2C6-4F14-B765-3D4A4907D284)"
@@ -32,7 +36,7 @@ if [ "$DEVICE_NAME" != "" ]; then
       ;;
     *)
       echo "❌ Error: Unknown device '$DEVICE_NAME'"
-      echo "Available devices: A16, iPhone, mac, chrome"
+      echo "Available devices: A16, A16-wireless, iPhone, mac, chrome"
       exit 1
       ;;
   esac

@@ -535,6 +535,30 @@ class ChatDatabase {
     }
   }
 
+  // Update reactions JSON for a message by serverId or local id
+  static Future<void> updateMessageReactions({
+    String? serverId,
+    int? localId,
+    required String reactionsJson,
+  }) async {
+    await _isar.writeTxn(() async {
+      LocalMessage? target;
+      if (serverId != null) {
+        target = await _isar.localMessages
+            .where()
+            .serverIdEqualTo(serverId)
+            .findFirst();
+      } else if (localId != null) {
+        target = await _isar.localMessages.get(localId);
+      }
+
+      if (target != null) {
+        final updated = target.copyWith(reactions: reactionsJson);
+        await _isar.localMessages.put(updated);
+      }
+    });
+  }
+
   /// Delete message locally (and remove from pending sync)
   static Future<void> deleteMessage(String messageId) async {
     await _isar.writeTxn(() async {

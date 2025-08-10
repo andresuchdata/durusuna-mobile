@@ -857,6 +857,23 @@ class LocalChatService {
     }
   }
 
+  // ========== REACTIONS ==========
+
+  /// Toggle a reaction on server and return the updated reactions map
+  Future<Map<String, dynamic>> toggleReactionOnServer(
+      String messageServerId, String emoji) async {
+    try {
+      final response = await _apiService.post(
+        '${ApiConstants.messages}/$messageServerId/reactions',
+        data: {'emoji': emoji},
+      );
+      final reactions = response.data['reactions'] as Map<String, dynamic>;
+      return reactions;
+    } catch (e) {
+      throw LocalChatException('Failed to toggle reaction: $e');
+    }
+  }
+
   // _syncConversationUpdatesFromServer disabled
 
   // ========== HELPER METHODS ==========

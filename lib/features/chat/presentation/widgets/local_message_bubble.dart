@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/local_message.dart';
 import '../../../../shared/database/chat_database.dart';
 import '../../../../shared/models/user.dart';
+import '../../../../shared/helpers/link_text.dart';
+import 'quote_preview.dart';
+import 'dart:async';
 
-class LocalMessageBubble extends StatelessWidget {
+class LocalMessageBubble extends StatefulWidget {
   final LocalMessage message;
   final bool isMe;
   final bool isGroup;
@@ -15,6 +16,8 @@ class LocalMessageBubble extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback? onDoubleTap;
+  final VoidCallback? onAddReaction;
 
   // Future: These can be configurable via user settings
   final Color? customSentBubbleColor;
@@ -32,6 +35,8 @@ class LocalMessageBubble extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
     required this.onLongPress,
+    this.onDoubleTap,
+    this.onAddReaction,
     this.customSentBubbleColor,
     this.customReceivedBubbleColor,
     this.senderName,
@@ -39,17 +44,25 @@ class LocalMessageBubble extends StatelessWidget {
     this.participants,
   });
 
+  @override
+  State<LocalMessageBubble> createState() => _LocalMessageBubbleState();
+}
+
+class _LocalMessageBubbleState extends State<LocalMessageBubble> {
+  bool _showReactionTrigger = false;
+  Timer? _triggerHideTimer;
+
   /// Get the bubble color based on theme and customization
   Color _getBubbleColor(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (isMe) {
+    if (widget.isMe) {
       // Use custom color if provided, otherwise use theme color
-      return customSentBubbleColor ??
+      return widget.customSentBubbleColor ??
           (isDark ? AppTheme.messageBubbleMeDark : AppTheme.messageBubbleMe);
     } else {
       // Use custom color if provided, otherwise use theme color
-      return customReceivedBubbleColor ??
+      return widget.customReceivedBubbleColor ??
           (isDark
               ? AppTheme.messageBubbleOtherDark
               : AppTheme.messageBubbleOther);
@@ -60,7 +73,7 @@ class LocalMessageBubble extends StatelessWidget {
   Color _getTextColor(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (isMe) {
+    if (widget.isMe) {
       // For sent messages: white text on dark bubbles, black text on light bubbles
       return isDark ? Colors.white : Colors.black;
     } else {
@@ -73,7 +86,7 @@ class LocalMessageBubble extends StatelessWidget {
   Color _getMetaTextColor(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (isMe) {
+    if (widget.isMe) {
       // For sent messages: semi-transparent version of text color
       return isDark
           ? Colors.white.withValues(alpha: 0.7)
@@ -86,13 +99,13 @@ class LocalMessageBubble extends StatelessWidget {
 
   // Deterministic high-contrast color for sender names in group chats
   Color _senderColor(BuildContext context) {
-    if (!isGroup || isMe) {
+    if (!widget.isGroup || widget.isMe) {
       return Theme.of(context).brightness == Brightness.dark
           ? AppTheme.darkTextSecondary
           : AppTheme.textSecondary;
     }
 
-    final seed = message.senderId.hashCode;
+    final seed = widget.message.senderId.hashCode;
     // Palette tuned for contrast on light/dark backgrounds
     const palette = <Color>[
       Color(0xFF0F9D58), // green
@@ -107,92 +120,37 @@ class LocalMessageBubble extends StatelessWidget {
     return palette[seed.abs() % palette.length];
   }
 
-  bool get _shouldShowAvatar => isGroup && !isMe;
+  bool get _shouldShowAvatar => widget.isGroup && !widget.isMe;
 
   User? _findParticipant(String userId) {
     try {
-      return participants?.firstWhere((u) => u.id == userId);
+      return widget.participants?.firstWhere((u) => u.id == userId);
     } catch (_) {
       return null;
     }
   }
 
-  String _initialsFromName(String name) {
-    final parts = name.trim().split(' ').where((w) => w.isNotEmpty).toList();
-    if (parts.isEmpty) return 'U';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
+  // Removed initials helper since quote preview no longer shows avatars
 
-  // Insert zero-width spaces after common URL delimiters to allow soft wrapping
-  String _wrapLinksForBreaking(String input) {
-    if (input.isEmpty) return input;
-    const breakChars = ['/', '?', '&', '=', '.', '-', '_', ':'];
-    final buffer = StringBuffer();
-    for (int i = 0; i < input.length; i++) {
-      final ch = input[i];
-      buffer.write(ch);
-      if (breakChars.contains(ch)) {
-        buffer.write('\u200B'); // zero-width space for wrapping
-      }
-    }
-    return buffer.toString();
-  }
+  // Delegate to shared helper
+  String _wrapLinksForBreaking(String input) =>
+      LinkTextHelper.wrapLinksForBreaking(input);
 
-  // Build linkified rich text for message/quote content
+  // Delegate linkified text creation to shared helper
   Widget _buildLinkifiedText(
     BuildContext context,
     String text,
-    TextStyle baseStyle,
-  ) {
-    final linkRegExp =
-        RegExp(r'((https?:\/\/|www\.)[^\s]+)', caseSensitive: false);
-    final spans = <InlineSpan>[];
-    int currentIndex = 0;
-    final matches = linkRegExp.allMatches(text).toList();
-
-    for (final match in matches) {
-      if (match.start > currentIndex) {
-        final nonLink = text.substring(currentIndex, match.start);
-        spans.add(
-            TextSpan(text: _wrapLinksForBreaking(nonLink), style: baseStyle));
-      }
-
-      final urlText = text.substring(match.start, match.end);
-      final display = _wrapLinksForBreaking(urlText);
-      final uri =
-          Uri.parse(urlText.startsWith('http') ? urlText : 'https://$urlText');
-      final linkStyle = baseStyle.copyWith(
-        color: const Color.fromARGB(255, 37, 77, 189),
-        decoration: TextDecoration.underline,
-        fontWeight: FontWeight.w600,
+    TextStyle baseStyle, {
+    int? maxLines,
+    TextOverflow overflow = TextOverflow.fade,
+  }) =>
+      LinkTextHelper.buildLinkifiedText(
+        context,
+        text,
+        baseStyle,
+        maxLines: maxLines,
+        overflow: overflow,
       );
-      spans.add(TextSpan(
-        text: display,
-        style: linkStyle,
-        recognizer: TapGestureRecognizer()
-          ..onTap = () async {
-            try {
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            } catch (_) {}
-          },
-      ));
-      currentIndex = match.end;
-    }
-
-    if (currentIndex < text.length) {
-      spans.add(TextSpan(
-        text: _wrapLinksForBreaking(text.substring(currentIndex)),
-        style: baseStyle,
-      ));
-    }
-
-    return Text.rich(
-      TextSpan(children: spans),
-      softWrap: true,
-      maxLines: null,
-    );
-  }
 
   // Deterministic color by userId (for quoted sender sidebar)
   Color _colorForUserId(String userId) {
@@ -213,145 +171,66 @@ class LocalMessageBubble extends StatelessWidget {
   // Build quoted message preview. Falls back to fetching quoted content
   // by replyToId if replyToContent is missing.
   Widget _buildQuotedPreview(BuildContext context) {
-    if ((message.replyToContent?.isNotEmpty ?? false)) {
+    if ((widget.message.replyToContent?.isNotEmpty ?? false)) {
       // Use sender color if group; otherwise default primary
-      final leftColor = isGroup ? _senderColor(context) : AppTheme.primaryColor;
-      return _quotedContainer(
-        context,
-        _wrapLinksForBreaking(message.replyToContent!),
+      final leftColor =
+          widget.isGroup ? _senderColor(context) : AppTheme.primaryColor;
+      return QuotePreview(
+        isMe: widget.isMe,
+        isGroup: widget.isGroup,
         leftColor: leftColor,
+        text: _wrapLinksForBreaking(widget.message.replyToContent!),
+        quotedName: widget.isGroup ? widget.senderName : null,
       );
     }
 
-    if (message.replyToId == null || message.replyToId!.isEmpty) {
+    if (widget.message.replyToId == null || widget.message.replyToId!.isEmpty) {
       return const SizedBox.shrink();
     }
 
     // Use a FutureBuilder to lazily fetch the quoted message content by id
     return FutureBuilder<LocalMessage?>(
-      future: ChatDatabase.getMessageByServerId(message.replyToId!),
+      future: ChatDatabase.getMessageByServerId(widget.message.replyToId!),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           final leftColor =
-              isGroup ? _senderColor(context) : AppTheme.primaryColor;
-          return _quotedContainer(context, '...', leftColor: leftColor);
+              widget.isGroup ? _senderColor(context) : AppTheme.primaryColor;
+          return QuotePreview(
+            isMe: widget.isMe,
+            isGroup: widget.isGroup,
+            leftColor: leftColor,
+            text: '...',
+            quotedName: widget.isGroup ? widget.senderName : null,
+          );
         }
         final quoted = snapshot.data;
         if (quoted == null || (quoted.content?.isEmpty ?? true)) {
           return const SizedBox.shrink();
         }
-        final leftColor =
-            isGroup ? _colorForUserId(quoted.senderId) : AppTheme.primaryColor;
+        final leftColor = widget.isGroup
+            ? _colorForUserId(quoted.senderId)
+            : AppTheme.primaryColor;
         final user = _findParticipant(quoted.senderId);
         final quotedName = user?.displayName;
-        final quotedAvatarUrl = user?.avatarUrl;
-        return _quotedContainer(
-          context,
-          _wrapLinksForBreaking(quoted.content!),
+        // Avatar not used in quote preview; intentionally ignored
+        return QuotePreview(
+          isMe: widget.isMe,
+          isGroup: widget.isGroup,
           leftColor: leftColor,
+          text: _wrapLinksForBreaking(quoted.content!),
           quotedName: quotedName,
-          quotedAvatarUrl: quotedAvatarUrl,
         );
       },
     );
   }
 
-  Widget _quotedContainer(
-    BuildContext context,
-    String text, {
-    required Color leftColor,
-    String? quotedName,
-    String? quotedAvatarUrl,
-  }) {
-    final baseTextStyle = TextStyle(
-      fontSize: 13,
-      color: Theme.of(context).brightness == Brightness.dark
-          ? AppTheme.darkTextPrimary
-          : AppTheme.textPrimary,
-      height: 1.25,
-    );
-
-    final nameStyle = baseTextStyle.copyWith(
-      fontWeight: FontWeight.w700,
-      color: quotedName != null && isGroup
-          ? leftColor
-          : (Theme.of(context).brightness == Brightness.dark
-              ? AppTheme.darkTextSecondary
-              : AppTheme.textSecondary),
-    );
-
-    Widget inner = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if ((quotedName?.isNotEmpty ?? false))
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(quotedName!, style: nameStyle),
-          ),
-        _buildLinkifiedText(context, text, baseTextStyle),
-      ],
-    );
-
-    if (isGroup && (quotedName?.isNotEmpty ?? false)) {
-      final initials = _initialsFromName(quotedName!);
-      inner = Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 10,
-            backgroundColor: leftColor,
-            backgroundImage:
-                (quotedAvatarUrl != null && quotedAvatarUrl.isNotEmpty)
-                    ? NetworkImage(quotedAvatarUrl)
-                    : null,
-            child: (quotedAvatarUrl == null || quotedAvatarUrl.isEmpty)
-                ? Text(
-                    initials,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  )
-                : null,
-          ),
-          const SizedBox(width: 8),
-          Expanded(child: inner),
-        ],
-      );
-    }
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 6, top: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: isMe
-            ? Colors.white.withValues(alpha: 0.9)
-            : AppTheme.primaryColor.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border(
-          left: BorderSide(color: leftColor, width: 4),
-        ),
-      ),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.25,
-        ),
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: inner,
-        ),
-      ),
-    );
-  }
+  // Quote rendering is handled by QuotePreview widget
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        if (isSelectionMode) ...[
+        if (widget.isSelectionMode) ...[
           Container(
             margin: const EdgeInsets.only(left: 2, right: 2),
             child: AnimatedContainer(
@@ -360,15 +239,17 @@ class LocalMessageBubble extends StatelessWidget {
               height: 24,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isSelected ? AppTheme.primaryColor : Colors.transparent,
+                color: widget.isSelected
+                    ? AppTheme.primaryColor
+                    : Colors.transparent,
                 border: Border.all(
-                  color: isSelected
+                  color: widget.isSelected
                       ? AppTheme.primaryColor
                       : AppTheme.textTertiary,
                   width: 2,
                 ),
               ),
-              child: isSelected
+              child: widget.isSelected
                   ? const Icon(
                       Icons.check,
                       size: 16,
@@ -382,71 +263,99 @@ class LocalMessageBubble extends StatelessWidget {
         // Message bubble
         Expanded(
           child: GestureDetector(
-            onTap: onTap,
-            onLongPress: onLongPress,
+            onTap: () {
+              widget.onTap();
+              setState(() => _showReactionTrigger = true);
+              _triggerHideTimer?.cancel();
+              _triggerHideTimer = Timer(const Duration(seconds: 2), () {
+                if (mounted) setState(() => _showReactionTrigger = false);
+              });
+            },
+            onLongPress: widget.onLongPress,
+            onDoubleTap: widget.onDoubleTap,
             child: Container(
               margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment:
-                    isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                mainAxisAlignment: widget.isMe
+                    ? MainAxisAlignment.end
+                    : MainAxisAlignment.start,
                 children: [
-                  if (_shouldShowAvatar && !isSelectionMode) ...[
+                  if (_shouldShowAvatar && !widget.isSelectionMode) ...[
                     CircleAvatar(
                       radius: 14,
                       backgroundColor: AppTheme.primaryColor,
-                      backgroundImage: (senderAvatarUrl != null &&
-                              senderAvatarUrl!.isNotEmpty)
-                          ? NetworkImage(senderAvatarUrl!)
+                      backgroundImage: (widget.senderAvatarUrl != null &&
+                              widget.senderAvatarUrl!.isNotEmpty)
+                          ? NetworkImage(widget.senderAvatarUrl!)
                           : null,
-                      child:
-                          (senderAvatarUrl == null || senderAvatarUrl!.isEmpty)
-                              ? Text(
-                                  (senderName?.trim().isNotEmpty == true)
-                                      ? senderName!
-                                          .trim()
-                                          .split(' ')
-                                          .where((w) => w.isNotEmpty)
-                                          .take(2)
-                                          .map((w) => w[0].toUpperCase())
-                                          .join()
-                                      : 'U',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 11,
-                                  ),
-                                )
-                              : null,
+                      child: (widget.senderAvatarUrl == null ||
+                              widget.senderAvatarUrl!.isEmpty)
+                          ? Text(
+                              (widget.senderName?.trim().isNotEmpty == true)
+                                  ? widget.senderName!
+                                      .trim()
+                                      .split(' ')
+                                      .where((w) => w.isNotEmpty)
+                                      .take(2)
+                                      .map((w) => w[0].toUpperCase())
+                                      .join()
+                                  : 'U',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                              ),
+                            )
+                          : null,
                     ),
                     const SizedBox(width: 8),
                   ],
                   Flexible(
                     child: Align(
-                      alignment:
-                          isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      alignment: widget.isMe
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
                       child: IntrinsicWidth(
                         child: Container(
                           constraints: BoxConstraints(
                             maxWidth: MediaQuery.of(context).size.width * 0.75,
                           ),
-                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                          padding: EdgeInsets.fromLTRB(
+                            2.0,
+                            (() {
+                              final hasQuote =
+                                  (widget.message.replyToContent?.isNotEmpty ??
+                                          false) ||
+                                      (widget.message.replyToId != null &&
+                                          widget.message.replyToId!.isNotEmpty);
+                              final showsSenderLabel = (_shouldShowAvatar &&
+                                  (widget.senderName?.isNotEmpty ?? false));
+                              if (hasQuote) return 2.0;
+                              if (!widget.isMe) {
+                                return showsSenderLabel ? 2.0 : 8.0;
+                              }
+                              return 8.0;
+                            })(),
+                            4.0,
+                            8.0,
+                          ),
                           decoration: BoxDecoration(
-                            color: isSelected
-                                ? (isMe
+                            color: widget.isSelected
+                                ? (widget.isMe
                                     ? _getBubbleColor(context)
                                         .withValues(alpha: 0.8)
                                     : Colors.grey[300])
                                 : _getBubbleColor(context),
-                            borderRadius: BorderRadius.circular(16),
-                            border: message.readStatus == 'failed'
+                            borderRadius: BorderRadius.circular(8),
+                            border: widget.message.readStatus == 'failed'
                                 ? Border.all(
                                     color: AppTheme.errorColor, width: 1)
-                                : isSelected
+                                : widget.isSelected
                                     ? Border.all(
                                         color: AppTheme.primaryColor, width: 2)
                                     : null,
-                            boxShadow: isSelected
+                            boxShadow: widget.isSelected
                                 ? [
                                     BoxShadow(
                                       color: AppTheme.primaryColor
@@ -464,58 +373,96 @@ class LocalMessageBubble extends StatelessWidget {
                                     ),
                                   ],
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Stack(
                             children: [
-                              if (_shouldShowAvatar &&
-                                  (senderName?.isNotEmpty ?? false))
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.only(bottom: 4, top: 0),
-                                  child: Text(
-                                    senderName!,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: _senderColor(context),
+                              // Bubble content
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (_shouldShowAvatar &&
+                                      (widget.senderName?.isNotEmpty ?? false))
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          bottom: 4, top: 2, left: 2, right: 2),
+                                      child: Text(
+                                        widget.senderName!,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: _senderColor(context),
+                                        ),
+                                      ),
+                                    ),
+                                  if (widget.message.replyToId != null ||
+                                      widget.message.replyToContent != null)
+                                    _buildQuotedPreview(context),
+                                  // Main content and meta with normal horizontal padding
+                                  Padding(
+                                    padding: EdgeInsets.only(
+                                      left: widget.isMe ? 6 : 22,
+                                      right: widget.isMe ? 22 : 6,
+                                      top: 0,
+                                      bottom: 0,
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildLinkifiedText(
+                                          context,
+                                          widget.message.content ?? '',
+                                          TextStyle(
+                                            color: _getTextColor(context),
+                                            fontSize: 15,
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Align(
+                                          alignment: widget.isMe
+                                              ? Alignment.centerRight
+                                              : Alignment.centerLeft,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                '${widget.message.createdAt.hour.toString().padLeft(2, '0')}:${widget.message.createdAt.minute.toString().padLeft(2, '0')}',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: _getMetaTextColor(
+                                                      context),
+                                                ),
+                                              ),
+                                              if (widget.isMe) ...[
+                                                const SizedBox(width: 4),
+                                                _buildStatusIcon(
+                                                    widget.message.readStatus,
+                                                    context),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (!widget.isSelectionMode)
+                                Positioned(
+                                  bottom: 4,
+                                  right: 4,
+                                  child: IgnorePointer(
+                                    ignoring: !_showReactionTrigger,
+                                    child: AnimatedOpacity(
+                                      duration:
+                                          const Duration(milliseconds: 150),
+                                      opacity: _showReactionTrigger ? 1.0 : 0.0,
+                                      child: _buildReactionTrigger(),
                                     ),
                                   ),
                                 ),
-                              _buildQuotedPreview(context),
-                              // Main content
-                              _buildLinkifiedText(
-                                context,
-                                message.content ?? '',
-                                TextStyle(
-                                  color: _getTextColor(context),
-                                  fontSize: 15,
-                                  height: 1.3,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Align(
-                                alignment: isMe
-                                    ? Alignment.centerRight
-                                    : Alignment.centerLeft,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: _getMetaTextColor(context),
-                                      ),
-                                    ),
-                                    if (isMe) ...[
-                                      const SizedBox(width: 4),
-                                      _buildStatusIcon(
-                                          message.readStatus, context),
-                                    ],
-                                  ],
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -528,6 +475,31 @@ class LocalMessageBubble extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildReactionTrigger() {
+    return GestureDetector(
+      onTap: widget.onAddReaction,
+      onLongPress: widget.onAddReaction,
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color:
+                Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+            width: 0.5,
+          ),
+        ),
+        child: Icon(
+          Icons.sentiment_satisfied_alt_outlined,
+          size: 14,
+          color:
+              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45),
+        ),
+      ),
     );
   }
 
