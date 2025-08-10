@@ -459,9 +459,7 @@ class LocalMessageBubble extends StatelessWidget {
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: isMe
-                                ? CrossAxisAlignment.end
-                                : CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (_shouldShowAvatar &&
                                   (senderName?.isNotEmpty ?? false))
@@ -489,22 +487,27 @@ class LocalMessageBubble extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: _getMetaTextColor(context),
+                              Align(
+                                alignment: isMe
+                                    ? Alignment.centerRight
+                                    : Alignment.centerLeft,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: _getMetaTextColor(context),
+                                      ),
                                     ),
-                                  ),
-                                  if (isMe) ...[
-                                    const SizedBox(width: 4),
-                                    _buildStatusIcon(
-                                        message.readStatus, context),
+                                    if (isMe) ...[
+                                      const SizedBox(width: 4),
+                                      _buildStatusIcon(
+                                          message.readStatus, context),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
                             ],
                           ),
