@@ -41,9 +41,22 @@ final recentClassUpdatesProvider =
 // Provider for class students (preview - limited to first 5)
 final classStudentsProvider =
     FutureProvider.family<List<User>, String>((ref, classId) async {
-  // This would fetch students from your backend
-  // For now, return mock data or empty list
-  return [];
+  final service = ref.read(classManagementServiceProvider);
+  return await service.getClassStudents(classId);
+});
+
+// Provider for class counts (students, teachers, etc.)
+final classCountsProvider =
+    FutureProvider.family<ClassCounts, String>((ref, classId) async {
+  final service = ref.read(classManagementServiceProvider);
+  return await service.getClassCounts(classId);
+});
+
+// Provider for class teachers (preview - limited to first 3)
+final classTeachersProvider =
+    FutureProvider.family<List<User>, String>((ref, classId) async {
+  final service = ref.read(classManagementServiceProvider);
+  return await service.getClassTeachers(classId);
 });
 
 // Provider for class assignments (preview - limited to 3 most recent)
@@ -135,6 +148,9 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
             return CustomScrollView(
               slivers: [
                 _buildSliverAppBar(subjects),
+                SliverToBoxAdapter(
+                  child: _buildClassStatistics(),
+                ),
                 SliverToBoxAdapter(
                   child: _buildClassUpdatesPreview(),
                 ),
@@ -556,6 +572,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
   Widget _buildStudentListPreview() {
     final studentsAsync =
         ref.watch(classStudentsProvider(widget.classModel.id));
+    final countsAsync = ref.watch(classCountsProvider(widget.classModel.id));
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -578,12 +595,30 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Students (${widget.classModel.studentsCount ?? 0})',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                countsAsync.when(
+                  loading: () => Text(
+                    'Students (${widget.classModel.studentsCount ?? 0})',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  error: (error, stack) => Text(
+                    'Students (${widget.classModel.studentsCount ?? 0})',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  data: (counts) => Text(
+                    'Students (${counts.studentCount})',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
                 ),
                 TextButton(
@@ -735,13 +770,35 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Subjects (${subjects.length})',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Subjects (${subjects.length})',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final countsAsync = ref
+                            .watch(classCountsProvider(widget.classModel.id));
+                        return countsAsync.when(
+                          loading: () => const SizedBox.shrink(),
+                          error: (error, stack) => const SizedBox.shrink(),
+                          data: (counts) => Text(
+                            '${counts.teacherCount} teachers assigned',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
                 if (hasMore)
                   TextButton(
@@ -1049,6 +1106,159 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildClassStatistics() {
+    final countsAsync = ref.watch(classCountsProvider(widget.classModel.id));
+    final subjectsAsync =
+        ref.watch(classSubjectsProvider(widget.classModel.id));
+    final updatesAsync =
+        ref.watch(recentClassUpdatesProvider(widget.classModel.id));
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Class Overview',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            countsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stack) => _buildStatisticsGrid(
+                studentCount: widget.classModel.studentsCount ?? 0,
+                teacherCount: widget.classModel.teachersCount ?? 0,
+                totalMembers: (widget.classModel.studentsCount ?? 0) +
+                    (widget.classModel.teachersCount ?? 0),
+                subjectCount: subjectsAsync.valueOrNull?.length ?? 0,
+                updatesCount: updatesAsync.valueOrNull?.length ?? 0,
+              ),
+              data: (counts) => _buildStatisticsGrid(
+                studentCount: counts.studentCount,
+                teacherCount: counts.teacherCount,
+                totalMembers: counts.totalMembers,
+                subjectCount: subjectsAsync.valueOrNull?.length ?? 0,
+                updatesCount: updatesAsync.valueOrNull?.length ?? 0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatisticsGrid({
+    required int studentCount,
+    required int teacherCount,
+    required int totalMembers,
+    required int subjectCount,
+    required int updatesCount,
+  }) {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      childAspectRatio: 3.0, // Increased from 2.5 to provide more height
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      children: [
+        _buildStatCard(
+          icon: Icons.people,
+          title: 'Students',
+          count: studentCount,
+          color: Colors.blue,
+        ),
+        _buildStatCard(
+          icon: Icons.person,
+          title: 'Teachers',
+          count: teacherCount,
+          color: Colors.green,
+        ),
+        _buildStatCard(
+          icon: Icons.book,
+          title: 'Subjects',
+          count: subjectCount,
+          color: Colors.orange,
+        ),
+        _buildStatCard(
+          icon: Icons.announcement,
+          title: 'Updates',
+          count: updatesCount,
+          color: Colors.purple,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard({
+    required IconData icon,
+    required String title,
+    required int count,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: color,
+            size: 24,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min, // Use minimum space needed
+              children: [
+                Text(
+                  count.toString(),
+                  style: TextStyle(
+                    fontSize: 18, // Slightly reduced from 20 to save space
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 2), // Small spacing between texts
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: color.withValues(alpha: 0.8),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -17,6 +17,7 @@ import '../widgets/chat_action_bar.dart';
 import '../widgets/local_message_bubble.dart';
 import '../widgets/reaction_bar.dart';
 import 'dart:convert';
+import 'dart:async';
 import '../../../../shared/widgets/reactions_widget.dart';
 import '../widgets/chat_top_user_panel.dart';
 
@@ -43,6 +44,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _messageController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  StreamSubscription<bool>? _connectionSubscription;
 
   // Track online status of the other user dynamically
   late bool _isOtherUserOnline;
@@ -178,50 +180,30 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       final currentUserId = ref.read(authStateProvider).user?.id;
 
       return Padding(
-        padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
+        padding: const EdgeInsets.only(left: 12, right: 12, top: 0),
         child: Align(
           alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-          child: ReactionsWidget(
-            reactions: reactions,
-            currentUserId: currentUserId,
-            onReactionTap: (emoji) async {
-              try {
-                if (message.serverId == null) return;
-                final reactionsMap = await ref
-                    .read(localChatServiceProvider)
-                    .toggleReactionOnServer(message.serverId!, emoji);
-                await ChatDatabase.updateMessageReactions(
-                  serverId: message.serverId,
-                  reactionsJson: jsonEncode(reactionsMap),
-                );
-              } catch (_) {}
-            },
-            onAddReaction: () {
-              _hideReactionBar();
-              showDialog(
-                context: context,
-                builder: (_) => Dialog(
-                  backgroundColor: Colors.transparent,
-                  insetPadding: const EdgeInsets.all(24),
-                  child: ReactionPicker(
-                    onEmojiSelected: (emoji) async {
-                      try {
-                        if (message.serverId == null) return;
-                        final reactionsMap = await ref
-                            .read(localChatServiceProvider)
-                            .toggleReactionOnServer(message.serverId!, emoji);
-                        await ChatDatabase.updateMessageReactions(
-                          serverId: message.serverId,
-                          reactionsJson: jsonEncode(reactionsMap),
-                        );
-                      } catch (_) {}
-                    },
-                    onClose: () => Navigator.of(context).pop(),
-                  ),
-                ),
-              );
-            },
-            isMyMessage: isMe,
+          child: Transform.translate(
+            // Pull the chips upward so they sit on the bubble's bottom border
+            offset: const Offset(0, -8),
+            child: ReactionsWidget(
+              reactions: reactions,
+              currentUserId: currentUserId,
+              onReactionTap: (emoji) async {
+                try {
+                  if (message.serverId == null) return;
+                  final reactionsMap = await ref
+                      .read(localChatServiceProvider)
+                      .toggleReactionOnServer(message.serverId!, emoji);
+                  await ChatDatabase.updateMessageReactions(
+                    serverId: message.serverId,
+                    reactionsJson: jsonEncode(reactionsMap),
+                  );
+                } catch (_) {}
+              },
+              onAddReaction: null, // plus chip removed from UI
+              isMyMessage: isMe,
+            ),
           ),
         ),
       );
@@ -267,6 +249,19 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
       // Mark as read when entering chat page
       _markOnChatPageEnter();
+      // Listen to connection state via stream and re-join when connected
+      _connectionSubscription?.cancel();
+      _connectionSubscription =
+          ref.read(realtimeConnectionProvider.stream).listen((isConnected) {
+        if (isConnected) {
+          try {
+            final rs = ref.read(realtimeServiceProvider);
+            rs.joinConversation(widget.conversation.id);
+            debugPrint(
+                '🔊 [UI] Re-joined room on connect: ${widget.conversation.id}');
+          } catch (_) {}
+        }
+      });
 
       // Reconcile any leftover pending messages on initial open
       Future.delayed(const Duration(milliseconds: 250), () async {
@@ -318,12 +313,14 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     _scrollController.dispose();
     _messageController.dispose();
     _focusNode.dispose();
+    _connectionSubscription?.cancel();
     _messageKeys.clear(); // Clear message keys to prevent memory leaks
 
     // Leave conversation room and clear current conversation ID
     try {
       final realtimeService = ref.read(realtimeServiceProvider);
       realtimeService.leaveConversation(widget.conversation.id);
+      // Safe to clear provider here
       ref.read(currentConversationProvider.notifier).state = null;
     } catch (e) {
       // Error in dispose
@@ -334,12 +331,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   @override
   void deactivate() {
-    // Clear current conversation when leaving page
-    try {
-      ref.read(currentConversationProvider.notifier).state = null;
-    } catch (e) {
-      // Error in deactivate
-    }
+    // Avoid modifying providers during lifecycle; handled in dispose()
     super.deactivate();
   }
 
@@ -1103,6 +1095,20 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                 senderName: _getSenderDisplayName(message),
                 senderAvatarUrl: _getSenderAvatarUrl(message),
                 participants: widget.conversation.participants,
+                reactionsJson: message.reactions,
+                currentUserId: authState.user?.id,
+                onReactionTap: (emoji) async {
+                  try {
+                    if (message.serverId == null) return;
+                    final reactionsMap = await ref
+                        .read(localChatServiceProvider)
+                        .toggleReactionOnServer(message.serverId!, emoji);
+                    await ChatDatabase.updateMessageReactions(
+                      serverId: message.serverId,
+                      reactionsJson: jsonEncode(reactionsMap),
+                    );
+                  } catch (_) {}
+                },
                 onTap: () {
                   if (_isSelectionMode) {
                     _toggleMessageSelection(message);

@@ -4,6 +4,7 @@ import '../database/chat_database.dart';
 import '../models/local_message.dart';
 import '../providers/local_chat_providers.dart';
 import '../services/chat_service.dart';
+import '../models/message.dart' as remote;
 import 'realtime_service.dart';
 import '../../core/storage/storage_service.dart';
 
@@ -256,6 +257,17 @@ class RealtimeDispatcher {
       if (adopted) {
         print(
             '✅ RealtimeDispatcher: Own message adopted successfully via real-time: ${realtimeMessage.message.id}');
+        // Update conversations list (legacy provider) so ConversationsPage shows latest
+        try {
+          final converted =
+              _convertLocalToRemote(realtimeMessage.message, isFromMe: true);
+          _ref!
+              .read(conversationsProvider.notifier)
+              .updateConversationLastMessage(
+                realtimeMessage.conversationId,
+                converted,
+              );
+        } catch (_) {}
         return; // Don't refresh - the stream will update automatically
       }
 
@@ -272,6 +284,17 @@ class RealtimeDispatcher {
 
       print(
           '✅ RealtimeDispatcher: Own message status updated to "sent": ${realtimeMessage.message.id}');
+      // Also update conversations list with the latest message for own sends
+      try {
+        final converted =
+            _convertLocalToRemote(realtimeMessage.message, isFromMe: true);
+        _ref!
+            .read(conversationsProvider.notifier)
+            .updateConversationLastMessage(
+              realtimeMessage.conversationId,
+              converted,
+            );
+      } catch (_) {}
     } catch (e) {
       if (e.toString().contains('Unique index violated') ||
           e.toString().contains('not found')) {
@@ -316,6 +339,15 @@ class RealtimeDispatcher {
           realtimeMessage.conversationId,
           localMessage,
         );
+
+    // Also update legacy conversations provider so ConversationsPage reflects last message/unread
+    try {
+      final converted = _convertLocalToRemote(localMessage, isFromMe: false);
+      _ref!.read(conversationsProvider.notifier).updateConversationLastMessage(
+            realtimeMessage.conversationId,
+            converted,
+          );
+    } catch (_) {}
   }
 
   /// Update UI providers for incoming messages
@@ -337,6 +369,42 @@ class RealtimeDispatcher {
     } else {
       // Refresh list for unread badge updates
       _ref!.read(localConversationsProvider.notifier).refresh();
+    }
+  }
+
+  // Convert LocalMessage to remote.Message for conversationsProvider updates
+  remote.Message _convertLocalToRemote(LocalMessage m,
+      {required bool isFromMe}) {
+    final remoteType = _mapType(m.messageType);
+    return remote.Message(
+      id: m.serverId ?? m.id.toString(),
+      conversationId: m.conversationId,
+      senderId: m.senderId,
+      content: m.content,
+      messageType: remoteType,
+      isFromMe: isFromMe,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt ?? m.createdAt,
+      readStatus: remote.ReadStatus.sent,
+    );
+  }
+
+  remote.MessageType _mapType(LocalMessageType t) {
+    switch (t) {
+      case LocalMessageType.text:
+        return remote.MessageType.text;
+      case LocalMessageType.image:
+        return remote.MessageType.image;
+      case LocalMessageType.video:
+        return remote.MessageType.video;
+      case LocalMessageType.audio:
+        return remote.MessageType.audio;
+      case LocalMessageType.file:
+        return remote.MessageType.file;
+      case LocalMessageType.emoji:
+        return remote.MessageType.emoji;
+      case LocalMessageType.location:
+        return remote.MessageType.text;
     }
   }
 

@@ -85,6 +85,7 @@ class LocalMessage {
   });
 
   LocalMessage copyWith({
+    Id? id,
     String? serverId,
     String? clientMessageId,
     String? conversationId,
@@ -108,7 +109,7 @@ class LocalMessage {
     String? metadataJson,
     String? reactions,
   }) {
-    return LocalMessage(
+    final updated = LocalMessage(
       serverId: serverId ?? this.serverId,
       clientMessageId: clientMessageId ?? this.clientMessageId,
       conversationId: conversationId ?? this.conversationId,
@@ -132,6 +133,9 @@ class LocalMessage {
       metadataJson: metadataJson ?? this.metadataJson,
       reactions: reactions ?? this.reactions,
     );
+    // Preserve existing Isar primary key unless explicitly overridden
+    updated.id = id ?? this.id;
+    return updated;
   }
 }
 

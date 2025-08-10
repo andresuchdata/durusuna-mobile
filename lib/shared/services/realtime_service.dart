@@ -130,7 +130,6 @@ class RealtimeService with WidgetsBindingObserver {
     _socket = null;
     _isConnected = false;
     _currentUserId = null;
-    _joinedConversations.clear(); // Clear tracked conversations on disconnect
     _connectionController.add(false);
     _stopConnectionCheck();
   }
@@ -266,6 +265,8 @@ class RealtimeService with WidgetsBindingObserver {
       _isConnected = true;
       _connectionController.add(true);
       _setupUserPresence();
+      // Ensure we join any conversations that were requested before connect
+      _rejoinAllConversations();
       _flushPendingPresenceRequests();
     });
 
@@ -471,9 +472,14 @@ class RealtimeService with WidgetsBindingObserver {
 
   /// Join a conversation room for real-time updates
   void joinConversation(String conversationId) {
+    // Track the intent to be joined regardless of current connection state
+    _joinedConversations.add(conversationId);
     if (_socket?.connected == true) {
+      print('🔊 RealtimeService: Joining conversation room $conversationId');
       _socket!.emit('conversation:join', {'conversationId': conversationId});
-      _joinedConversations.add(conversationId); // Track joined conversation
+    } else {
+      print(
+          '🕒 RealtimeService: Queued join for conversation $conversationId (will send on connect)');
     }
   }
 
@@ -487,8 +493,10 @@ class RealtimeService with WidgetsBindingObserver {
 
   /// Re-join all previously joined conversations (after reconnect)
   void _rejoinAllConversations() {
+    print('🔁 RealtimeService: Rejoining ${_joinedConversations.length} rooms');
     for (final conversationId in _joinedConversations) {
       if (_socket?.connected == true) {
+        print('🔊 RealtimeService: Re-join conversation $conversationId');
         _socket!.emit('conversation:join', {'conversationId': conversationId});
       }
     }

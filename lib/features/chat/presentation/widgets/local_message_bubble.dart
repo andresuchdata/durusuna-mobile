@@ -7,6 +7,8 @@ import '../../../../shared/models/user.dart';
 import '../../../../shared/helpers/link_text.dart';
 import 'quote_preview.dart';
 import 'dart:async';
+import 'dart:convert';
+import '../../../../shared/widgets/reactions_widget.dart';
 
 class LocalMessageBubble extends StatefulWidget {
   final LocalMessage message;
@@ -18,6 +20,9 @@ class LocalMessageBubble extends StatefulWidget {
   final VoidCallback onLongPress;
   final VoidCallback? onDoubleTap;
   final VoidCallback? onAddReaction;
+  final String? reactionsJson;
+  final String? currentUserId;
+  final void Function(String emoji)? onReactionTap;
 
   // Future: These can be configurable via user settings
   final Color? customSentBubbleColor;
@@ -42,6 +47,9 @@ class LocalMessageBubble extends StatefulWidget {
     this.senderName,
     this.senderAvatarUrl,
     this.participants,
+    this.reactionsJson,
+    this.currentUserId,
+    this.onReactionTap,
   });
 
   @override
@@ -51,6 +59,7 @@ class LocalMessageBubble extends StatefulWidget {
 class _LocalMessageBubbleState extends State<LocalMessageBubble> {
   bool _showReactionTrigger = false;
   Timer? _triggerHideTimer;
+  static const double _reactionTriggerSize = 22.0;
 
   /// Get the bubble color based on theme and customization
   Color _getBubbleColor(BuildContext context) {
@@ -66,6 +75,26 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
           (isDark
               ? AppTheme.messageBubbleOtherDark
               : AppTheme.messageBubbleOther);
+    }
+  }
+
+  Widget _buildReactionsChips() {
+    try {
+      final raw = widget.reactionsJson;
+      if (raw == null || raw.isEmpty) return const SizedBox.shrink();
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic> || decoded.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      return ReactionsWidget(
+        reactions: decoded,
+        currentUserId: widget.currentUserId,
+        onReactionTap: (emoji) => widget.onReactionTap?.call(emoji),
+        onAddReaction: null, // no plus
+        isMyMessage: widget.isMe,
+      );
+    } catch (_) {
+      return const SizedBox.shrink();
     }
   }
 
@@ -452,12 +481,22 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                                   ),
                                 ],
                               ),
+                              // Reactions along the bottom border of the bubble
                               if (!widget.isSelectionMode)
                                 Positioned(
-                                  bottom: -6,
+                                  bottom:
+                                      -14, // center of 28px chips sits on border
+                                  left: widget.isMe ? null : 8,
+                                  right: widget.isMe ? 8 : null,
+                                  child: _buildReactionsChips(),
+                                ),
+                              if (!widget.isSelectionMode)
+                                Positioned(
+                                  // Align the trigger so that its vertical center sits on the bubble's bottom edge
+                                  bottom: -_reactionTriggerSize / 2,
                                   // For sender (my message), place trigger at bottom-left; otherwise bottom-right
-                                  left: widget.isMe ? -2 : null,
-                                  right: widget.isMe ? null : -2,
+                                  left: widget.isMe ? -4 : null,
+                                  right: widget.isMe ? null : -4,
                                   child: IgnorePointer(
                                     ignoring: !_showReactionTrigger,
                                     child: AnimatedOpacity(
@@ -488,19 +527,27 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
       onTap: widget.onAddReaction,
       onLongPress: widget.onAddReaction,
       child: Container(
+        width: _reactionTriggerSize,
+        height: _reactionTriggerSize,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12),
+          color: Colors.white,
+          shape: BoxShape.circle,
           border: Border.all(
-            color:
-                Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
-            width: 0.4,
+            color: Colors.black12,
+            width: 1,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(18),
+              blurRadius: 3,
+              offset: const Offset(0, 1),
+            ),
+          ],
         ),
         child: Icon(
-          Icons.sentiment_satisfied_alt_outlined,
-          size: 15,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+          Icons.add_reaction_outlined,
+          size: 14,
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
         ),
       ),
     );

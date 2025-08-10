@@ -77,30 +77,44 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       // Clear any currently viewed conversation before starting chat
       ref.read(currentConversationProvider.notifier).state = null;
 
-      // First check if conversation already exists
+      // Ensure we have fresh conversations snapshot
       await ref.read(conversationsProvider.notifier).loadConversations();
       final conversations = ref.read(conversationsProvider).conversations;
 
-      // Look for existing conversation with this user
-      final existingConversation = conversations
-          .cast<Conversation?>()
-          .firstWhere(
-            (conv) =>
-                conv != null && conv.participants.any((p) => p.id == user.id),
-            orElse: () => null,
-          );
+      // Prefer existing direct chat with this user
+      Conversation? existingDirect =
+          conversations.cast<Conversation?>().firstWhere(
+                (conv) =>
+                    conv != null &&
+                    conv.type == 'direct' &&
+                    ((conv.otherUser?.id == user.id) ||
+                        conv.participants.any((p) => p.id == user.id)),
+                orElse: () => null,
+              );
+
+      // If no direct, check if the user is in any existing group chat
+      Conversation? existingGroup;
+      if (existingDirect == null) {
+        existingGroup = conversations.cast<Conversation?>().firstWhere(
+              (conv) =>
+                  conv != null &&
+                  conv.type == 'group' &&
+                  conv.participants.any((p) => p.id == user.id),
+              orElse: () => null,
+            );
+      }
 
       final Conversation conversation;
-      if (existingConversation != null) {
-        // Use existing conversation
-        conversation = existingConversation;
+      if (existingDirect != null) {
+        conversation = existingDirect;
+      } else if (existingGroup != null) {
+        // Open the group chat instead of creating a new 1:1
+        conversation = existingGroup;
       } else {
-        // Create a new conversation object for new chat
-        // The actual backend conversation will be created when first message is sent
+        // Create a new direct conversation placeholder
         final conversationId = 'new_${user.id}';
-
         conversation = Conversation(
-          id: conversationId, // Special ID format for new conversations
+          id: conversationId,
           type: 'direct',
           createdBy: user.id,
           createdAt: DateTime.now(),
