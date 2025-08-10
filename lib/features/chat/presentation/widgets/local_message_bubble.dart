@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/local_message.dart';
+import '../../../../shared/database/chat_database.dart';
 
 class LocalMessageBubble extends StatelessWidget {
   final LocalMessage message;
   final bool isMe;
+  final bool isGroup;
   final bool isSelectionMode;
   final bool isSelected;
   final VoidCallback onTap;
@@ -14,17 +16,22 @@ class LocalMessageBubble extends StatelessWidget {
   // Future: These can be configurable via user settings
   final Color? customSentBubbleColor;
   final Color? customReceivedBubbleColor;
+  final String? senderName;
+  final String? senderAvatarUrl;
 
   const LocalMessageBubble({
     super.key,
     required this.message,
     required this.isMe,
+    required this.isGroup,
     required this.isSelectionMode,
     required this.isSelected,
     required this.onTap,
     required this.onLongPress,
     this.customSentBubbleColor,
     this.customReceivedBubbleColor,
+    this.senderName,
+    this.senderAvatarUrl,
   });
 
   /// Get the bubble color based on theme and customization
@@ -72,6 +79,94 @@ class LocalMessageBubble extends StatelessWidget {
     }
   }
 
+  // Deterministic high-contrast color for sender names in group chats
+  Color _senderColor(BuildContext context) {
+    if (!isGroup || isMe) {
+      return Theme.of(context).brightness == Brightness.dark
+          ? AppTheme.darkTextSecondary
+          : AppTheme.textSecondary;
+    }
+
+    final seed = message.senderId.hashCode;
+    // Palette tuned for contrast on light/dark backgrounds
+    const palette = <Color>[
+      Color(0xFF0F9D58), // green
+      Color(0xFF4285F4), // blue
+      Color(0xFFDB4437), // red
+      Color(0xFFF4B400), // yellow
+      Color(0xFF8E24AA), // purple
+      Color(0xFF039BE5), // light blue
+      Color(0xFF43A047), // dark green
+      Color(0xFFF4511E), // deep orange
+    ];
+    return palette[seed.abs() % palette.length];
+  }
+
+  bool get _shouldShowAvatar => isGroup && !isMe;
+
+  // Build quoted message preview. Falls back to fetching quoted content
+  // by replyToId if replyToContent is missing.
+  Widget _buildQuotedPreview(BuildContext context) {
+    if ((message.replyToContent?.isNotEmpty ?? false)) {
+      return _quotedContainer(
+        context,
+        message.replyToContent!,
+      );
+    }
+
+    if (message.replyToId == null || message.replyToId!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Use a FutureBuilder to lazily fetch the quoted message content by id
+    return FutureBuilder<LocalMessage?>(
+      future: ChatDatabase.getMessageByServerId(message.replyToId!),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _quotedContainer(context, '...');
+        }
+        final quoted = snapshot.data;
+        if (quoted == null || (quoted.content?.isEmpty ?? true)) {
+          return const SizedBox.shrink();
+        }
+        return _quotedContainer(context, quoted.content!);
+      },
+    );
+  }
+
+  Widget _quotedContainer(BuildContext context, String text) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 6, top: 2),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        // Lighter background for sender so text can remain dark/gray
+        color: isMe
+            ? Colors.white.withValues(alpha: 0.9)
+            : AppTheme.primaryColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: const Border(
+          left: BorderSide(
+            color: AppTheme.primaryColor,
+            width: 4,
+          ),
+        ),
+      ),
+      child: Text(
+        text,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 13,
+          color: Theme.of(context).brightness == Brightness.dark
+              ? AppTheme.darkTextPrimary
+              : AppTheme.textPrimary,
+          height: 1.25,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -111,75 +206,140 @@ class LocalMessageBubble extends StatelessWidget {
             onLongPress: onLongPress,
             child: Container(
               margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
-              child: Align(
-                alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.75,
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? (isMe
-                            ? _getBubbleColor(context).withValues(alpha: 0.8)
-                            : Colors.grey[300])
-                        : _getBubbleColor(context),
-                    borderRadius: BorderRadius.circular(16),
-                    border: message.readStatus == 'failed'
-                        ? Border.all(color: AppTheme.errorColor, width: 1)
-                        : isSelected
-                            ? Border.all(color: AppTheme.primaryColor, width: 2)
-                            : null,
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color:
-                                  AppTheme.primaryColor.withValues(alpha: 0.3),
-                              blurRadius: 8,
-                              spreadRadius: 2,
-                            ),
-                          ]
-                        : [
-                            // Subtle shadow for all message bubbles
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
-                              blurRadius: 3,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        message.content ?? '',
-                        style: TextStyle(
-                          color: _getTextColor(context),
-                          fontSize: 15,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment:
+                    isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                children: [
+                  if (_shouldShowAvatar && !isSelectionMode) ...[
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: AppTheme.primaryColor,
+                      backgroundImage: (senderAvatarUrl != null &&
+                              senderAvatarUrl!.isNotEmpty)
+                          ? NetworkImage(senderAvatarUrl!)
+                          : null,
+                      child:
+                          (senderAvatarUrl == null || senderAvatarUrl!.isEmpty)
+                              ? Text(
+                                  (senderName?.trim().isNotEmpty == true)
+                                      ? senderName!
+                                          .trim()
+                                          .split(' ')
+                                          .where((w) => w.isNotEmpty)
+                                          .take(2)
+                                          .map((w) => w[0].toUpperCase())
+                                          .join()
+                                      : 'U',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 11,
+                                  ),
+                                )
+                              : null,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Flexible(
+                    child: Align(
+                      alignment:
+                          isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: IntrinsicWidth(
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * 0.75,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? (isMe
+                                    ? _getBubbleColor(context)
+                                        .withValues(alpha: 0.8)
+                                    : Colors.grey[300])
+                                : _getBubbleColor(context),
+                            borderRadius: BorderRadius.circular(16),
+                            border: message.readStatus == 'failed'
+                                ? Border.all(
+                                    color: AppTheme.errorColor, width: 1)
+                                : isSelected
+                                    ? Border.all(
+                                        color: AppTheme.primaryColor, width: 2)
+                                    : null,
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: AppTheme.primaryColor
+                                          .withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : [
+                                    BoxShadow(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.08),
+                                      blurRadius: 3,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: isMe
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            children: [
+                              if (_shouldShowAvatar &&
+                                  (senderName?.isNotEmpty ?? false))
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(bottom: 4, top: 2),
+                                  child: Text(
+                                    senderName!,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: _senderColor(context),
+                                    ),
+                                  ),
+                                ),
+                              _buildQuotedPreview(context),
+                              // Main content
+                              Text(
+                                message.content ?? '',
+                                style: TextStyle(
+                                  color: _getTextColor(context),
+                                  fontSize: 15,
+                                  height: 1.3,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: _getMetaTextColor(context),
+                                    ),
+                                  ),
+                                  if (isMe) ...[
+                                    const SizedBox(width: 4),
+                                    _buildStatusIcon(
+                                        message.readStatus, context),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      if (isMe) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // time
-                            Text(
-                              '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: _getMetaTextColor(context),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            _buildStatusIcon(message.readStatus, context),
-                          ],
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
