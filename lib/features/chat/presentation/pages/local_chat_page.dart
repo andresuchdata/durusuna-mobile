@@ -8,6 +8,7 @@ import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/models/local_message.dart';
 import '../../../../shared/models/conversation.dart';
+import '../../../../shared/models/user.dart';
 import '../../../../shared/providers/local_chat_providers.dart';
 import '../../../../shared/services/local_chat_service.dart';
 import '../../../../shared/database/chat_database.dart';
@@ -65,14 +66,25 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     _hideReactionBar();
     final overlay = Overlay.of(context);
     // Overlay is non-null in material apps; guard kept minimal
-    final top = anchorRect.top - 56;
-    final left = (anchorRect.left + anchorRect.right) / 2 - 120;
+    // Position reaction bar near the trigger. If it's my message, place to the left.
+    final currentUserId = ref.read(authStateProvider).user?.id;
+    final isMe = currentUserId != null && message.senderId == currentUserId;
+    final screenSize = MediaQuery.of(context).size;
+    final estimatedBarWidth = 240.0;
+    final top = anchorRect.bottom - 56;
+    double left = isMe
+        ? (anchorRect.left - estimatedBarWidth)
+        : (anchorRect.right - estimatedBarWidth / 2);
+    // Clamp to viewport
+    if (left < 8) left = 8;
+    if (left + estimatedBarWidth > screenSize.width - 8) {
+      left = screenSize.width - estimatedBarWidth - 8;
+    }
     _reactionOverlay = OverlayEntry(
       builder: (_) {
         final clampedTop =
             top.clamp(8.0, MediaQuery.of(context).size.height - 80);
-        final clampedLeft =
-            left.clamp(8.0, MediaQuery.of(context).size.width - 240);
+        final clampedLeft = left;
         return Stack(
           children: [
             Positioned.fill(
@@ -88,19 +100,26 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
               child: ReactionBar(
                 emojis: const ['👍', '❤️', '😂', '😮', '😢', '🙏'],
                 onSelect: (emoji) async {
+                  debugPrint(
+                      '[Reaction] select: $emoji msg=${message.serverId ?? message.id}');
                   _hideReactionBar();
                   try {
                     if (message.serverId == null) return;
                     final reactionsMap = await ref
                         .read(localChatServiceProvider)
                         .toggleReactionOnServer(message.serverId!, emoji);
+                    debugPrint('[Reaction] server updated: $reactionsMap');
                     await ChatDatabase.updateMessageReactions(
                       serverId: message.serverId,
                       reactionsJson: jsonEncode(reactionsMap),
                     );
-                  } catch (_) {}
+                  } catch (e) {
+                    debugPrint('[Reaction] ERROR toggling reaction: $e');
+                  }
                 },
                 onOpenPicker: () {
+                  debugPrint('[Reaction] open picker for msg=' +
+                      (message.serverId ?? message.id.toString()));
                   _hideReactionBar();
                   showDialog(
                     context: context,
@@ -109,17 +128,24 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                       insetPadding: const EdgeInsets.all(24),
                       child: ReactionPicker(
                         onEmojiSelected: (emoji) async {
+                          debugPrint(
+                              '[Reaction] picker select: $emoji msg=${message.serverId ?? message.id}');
                           try {
                             if (message.serverId == null) return;
                             final reactionsMap = await ref
                                 .read(localChatServiceProvider)
                                 .toggleReactionOnServer(
                                     message.serverId!, emoji);
+                            debugPrint(
+                                '[Reaction] server updated: $reactionsMap');
                             await ChatDatabase.updateMessageReactions(
                               serverId: message.serverId,
                               reactionsJson: jsonEncode(reactionsMap),
                             );
-                          } catch (_) {}
+                          } catch (e) {
+                            debugPrint(
+                                '[Reaction] ERROR toggling reaction from picker: $e');
+                          }
                         },
                         onClose: () => Navigator.of(context).pop(),
                       ),
@@ -491,9 +517,32 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   void _showProfileCard() {
-    // TODO: Implement profile card
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile card coming soon')),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final isGroup = widget.conversation.type == 'group';
+        final name = _getDisplayName();
+        final avatarUrl = _getAvatarUrl();
+        final initials = _getInitials();
+        final description = isGroup
+            ? (widget.conversation.description ?? 'No description')
+            : (widget.conversation.otherUser?.email ?? '');
+
+        return _ProfileCardSheet(
+          isGroup: isGroup,
+          name: name,
+          avatarUrl: avatarUrl,
+          initials: initials,
+          description: description,
+          participants: widget.conversation.participants,
+          isOnline: widget.conversation.isOnline,
+          lastSeenLabel: widget.conversation.lastActivity != null
+              ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
+              : null,
+        );
+      },
     );
   }
 
@@ -1273,4 +1322,184 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   // void _copyMessage(LocalMessage message) {}
 
   // Status icon logic moved to LocalMessageBubble
+}
+
+class _ProfileCardSheet extends StatelessWidget {
+  final bool isGroup;
+  final String name;
+  final String avatarUrl;
+  final String initials;
+  final String description;
+  final List<User> users;
+  final bool isOnline;
+  final String? lastSeenLabel;
+
+  const _ProfileCardSheet({
+    required this.isGroup,
+    required this.name,
+    required this.avatarUrl,
+    required this.initials,
+    required this.description,
+    required List<User> participants,
+    required this.isOnline,
+    required this.lastSeenLabel,
+  }) : users = participants;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DraggableScrollableSheet(
+      initialChildSize: 0.5,
+      minChildSize: 0.35,
+      maxChildSize: 0.9,
+      builder: (context, controller) {
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(30),
+                blurRadius: 12,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: CustomScrollView(
+            controller: controller,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          CircleAvatar(
+                            radius: 40,
+                            backgroundColor: AppTheme.primaryColor,
+                            backgroundImage: avatarUrl.isNotEmpty
+                                ? NetworkImage(avatarUrl)
+                                : null,
+                            child: avatarUrl.isEmpty
+                                ? Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          if (!isGroup && isOnline)
+                            Container(
+                              margin:
+                                  const EdgeInsets.only(right: 4, bottom: 4),
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                shape: BoxShape.circle,
+                                border:
+                                    Border.all(color: Colors.white, width: 3),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        name,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      if (!isGroup && (lastSeenLabel != null))
+                        Text(
+                          isOnline ? 'Online' : lastSeenLabel!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isOnline
+                                ? AppTheme.successColor
+                                : AppTheme.textSecondary,
+                          ),
+                        ),
+                      if (isGroup && description.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          description,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              fontSize: 13, color: AppTheme.textSecondary),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      if (isGroup)
+                        const Row(
+                          children: [
+                            Text(
+                              'Participants',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              if (isGroup)
+                SliverList.separated(
+                  itemBuilder: (context, index) {
+                    final user = users[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppTheme.primaryColor,
+                        backgroundImage: (user.avatarUrl?.isNotEmpty ?? false)
+                            ? NetworkImage(user.avatarUrl!)
+                            : null,
+                        child: (user.avatarUrl == null ||
+                                user.avatarUrl!.isEmpty)
+                            ? Text(
+                                _initialsFrom(user.firstName, user.lastName),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600),
+                              )
+                            : null,
+                      ),
+                      title: Text('${user.firstName} ${user.lastName}'.trim()),
+                      subtitle: Text(user.email),
+                    );
+                  },
+                  separatorBuilder: (context, _) => const Divider(height: 1),
+                  itemCount: users.length,
+                ),
+              SliverToBoxAdapter(
+                  child: SizedBox(
+                      height: MediaQuery.of(context).padding.bottom + 16)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _initialsFrom(String first, String last) {
+    final a = first.isNotEmpty ? first[0].toUpperCase() : '';
+    final b = last.isNotEmpty ? last[0].toUpperCase() : '';
+    return (a + b).isNotEmpty ? (a + b) : 'U';
+  }
 }

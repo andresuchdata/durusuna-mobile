@@ -17,15 +17,15 @@ class ReactionBar extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          color: Colors.white.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x22000000),
-              blurRadius: 10,
-              offset: Offset(0, 4),
+              color: Color(0x14000000),
+              blurRadius: 8,
+              offset: Offset(0, 3),
             ),
           ],
         ),
@@ -34,13 +34,8 @@ class ReactionBar extends StatelessWidget {
           children: [
             ...emojis
                 .map((e) => _EmojiButton(emoji: e, onTap: () => onSelect(e))),
-            const SizedBox(width: 4),
-            IconButton(
-              iconSize: 20,
-              padding: EdgeInsets.zero,
-              onPressed: onOpenPicker,
-              icon: const Icon(Icons.add_reaction_outlined),
-            )
+            const SizedBox(width: 2),
+            _PlusButton(onTap: onOpenPicker),
           ],
         ),
       ),
@@ -58,13 +53,34 @@ class _EmojiButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+        margin: const EdgeInsets.symmetric(horizontal: 1),
         child: Text(
           emoji,
-          style: const TextStyle(fontSize: 18),
+          style: const TextStyle(fontSize: 16),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlusButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _PlusButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        child: const Icon(
+          Icons.add_rounded,
+          size: 18,
+          color: Colors.black54,
         ),
       ),
     );

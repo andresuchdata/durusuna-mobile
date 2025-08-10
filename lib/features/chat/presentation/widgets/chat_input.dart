@@ -138,33 +138,52 @@ class _ChatInputState extends State<ChatInput> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Left side - Emoji button integrated into input
-                _buildEmojiButton(),
-
-                const SizedBox(width: 8),
-
                 // Main text input container
                 Expanded(
                   child: Container(
-                    constraints: const BoxConstraints(
-                      minHeight: 44,
-                      maxHeight: 120,
-                    ),
+                    constraints:
+                        const BoxConstraints(minHeight: 40, maxHeight: 100),
                     decoration: BoxDecoration(
                       color: isDark
                           ? const Color(0xFF2C2C2C)
                           : const Color(0xFFF5F5F5),
                       borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: widget.focusNode.hasFocus
-                            ? AppTheme.primaryColor.withValues(alpha: 0.3)
-                            : Colors.transparent,
-                        width: 1.5,
-                      ),
+                      border: Border.all(color: Colors.transparent, width: 0),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
+                        // Inline emoji button inside the input
+                        Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _showEmojiPicker = !_showEmojiPicker;
+                              });
+                              if (_showEmojiPicker) {
+                                widget.focusNode.unfocus();
+                              } else {
+                                widget.focusNode.requestFocus();
+                              }
+                            },
+                            icon: Icon(
+                              _showEmojiPicker
+                                  ? Icons.keyboard_outlined
+                                  : Icons.sentiment_satisfied_alt_outlined,
+                              size: 20,
+                            ),
+                            color: _showEmojiPicker
+                                ? AppTheme.primaryColor
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.6),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 28),
+                          ),
+                        ),
                         // Text field
                         Expanded(
                           child: TextField(
@@ -182,9 +201,7 @@ class _ChatInputState extends State<ChatInput> {
                               ),
                               border: InputBorder.none,
                               contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
+                                  horizontal: 6, vertical: 10),
                             ),
                             maxLines: 5,
                             minLines: 1,
@@ -197,14 +214,28 @@ class _ChatInputState extends State<ChatInput> {
                           ),
                         ),
 
-                        // Attachment button inside input
-                        _buildAttachmentButton(),
+                        // Camera icon inside input (no border)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6, bottom: 2),
+                          child: IconButton(
+                            onPressed: widget.onAttachment,
+                            icon: const Icon(
+                              Icons.camera_alt_outlined,
+                              size: 20,
+                            ),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.6),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 28),
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ),
-
-                const SizedBox(width: 8),
 
                 // Send/Voice button
                 AnimatedSwitcher(
@@ -228,56 +259,7 @@ class _ChatInputState extends State<ChatInput> {
     );
   }
 
-  Widget _buildEmojiButton() {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: _showEmojiPicker
-            ? AppTheme.primaryColor.withValues(alpha: 0.1)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: IconButton(
-        onPressed: () {
-          setState(() {
-            _showEmojiPicker = !_showEmojiPicker;
-          });
-          if (_showEmojiPicker) {
-            widget.focusNode.unfocus();
-          } else {
-            widget.focusNode.requestFocus();
-          }
-        },
-        icon: Icon(
-          _showEmojiPicker
-              ? Icons.keyboard_outlined
-              : Icons.sentiment_satisfied_alt_outlined,
-          size: 22,
-        ),
-        color: _showEmojiPicker
-            ? AppTheme.primaryColor
-            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-      ),
-    );
-  }
-
-  Widget _buildAttachmentButton() {
-    return Container(
-      width: 40,
-      height: 40,
-      margin: const EdgeInsets.only(right: 4, bottom: 2),
-      child: IconButton(
-        onPressed: widget.onAttachment,
-        icon: const Icon(
-          Icons.camera_alt_outlined,
-          size: 20,
-        ),
-        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-        padding: EdgeInsets.zero,
-      ),
-    );
-  }
+  // Deprecated: replaced by inline icons within the input row
 
   Widget _buildSendButton() {
     return Container(

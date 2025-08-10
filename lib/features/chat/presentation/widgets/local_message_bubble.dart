@@ -319,6 +319,8 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                       child: IntrinsicWidth(
                         child: Container(
                           constraints: BoxConstraints(
+                            // Ensure small but sufficient width for timestamp/status/reaction
+                            minWidth: 64,
                             maxWidth: MediaQuery.of(context).size.width * 0.75,
                           ),
                           padding: EdgeInsets.fromLTRB(
@@ -453,7 +455,9 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                               if (!widget.isSelectionMode)
                                 Positioned(
                                   bottom: -6,
-                                  right: -2,
+                                  // For sender (my message), place trigger at bottom-left; otherwise bottom-right
+                                  left: widget.isMe ? -2 : null,
+                                  right: widget.isMe ? null : -2,
                                   child: IgnorePointer(
                                     ignoring: !_showReactionTrigger,
                                     child: AnimatedOpacity(
@@ -495,7 +499,7 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
         ),
         child: Icon(
           Icons.sentiment_satisfied_alt_outlined,
-          size: 13,
+          size: 15,
           color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
         ),
       ),
