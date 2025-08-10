@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
-import '../models/message.dart';
+import '../models/local_message.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/storage/storage_service.dart';
 import 'auth_service.dart';
@@ -646,7 +646,7 @@ class RealtimeService with WidgetsBindingObserver {
 // === Event Models ===
 
 class RealtimeMessage {
-  final Message message;
+  final LocalMessage message;
   final String action; // 'created', 'updated', 'deleted'
   final String conversationId;
 
@@ -657,8 +657,12 @@ class RealtimeMessage {
   });
 
   factory RealtimeMessage.fromJson(Map<String, dynamic> json) {
+    final currentUserId = StorageService.getUser()?['id'];
     return RealtimeMessage(
-      message: Message.fromJson(json['message']),
+      message: LocalMessageExtension.fromApiJson(
+        json['message'],
+        isFromMe: json['message']['sender_id'] == currentUserId,
+      ),
       action: json['action'],
       conversationId: json['conversationId'],
     );

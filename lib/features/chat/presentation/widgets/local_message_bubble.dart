@@ -11,6 +11,10 @@ class LocalMessageBubble extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
+  // Future: These can be configurable via user settings
+  final Color? customSentBubbleColor;
+  final Color? customReceivedBubbleColor;
+
   const LocalMessageBubble({
     super.key,
     required this.message,
@@ -19,7 +23,54 @@ class LocalMessageBubble extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
     required this.onLongPress,
+    this.customSentBubbleColor,
+    this.customReceivedBubbleColor,
   });
+
+  /// Get the bubble color based on theme and customization
+  Color _getBubbleColor(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (isMe) {
+      // Use custom color if provided, otherwise use theme color
+      return customSentBubbleColor ??
+          (isDark ? AppTheme.messageBubbleMeDark : AppTheme.messageBubbleMe);
+    } else {
+      // Use custom color if provided, otherwise use theme color
+      return customReceivedBubbleColor ??
+          (isDark
+              ? AppTheme.messageBubbleOtherDark
+              : AppTheme.messageBubbleOther);
+    }
+  }
+
+  /// Get the text color based on bubble background
+  Color _getTextColor(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (isMe) {
+      // For sent messages: white text on dark bubbles, black text on light bubbles
+      return isDark ? Colors.white : Colors.black;
+    } else {
+      // For received messages: always use primary text color
+      return isDark ? AppTheme.darkTextPrimary : AppTheme.textPrimary;
+    }
+  }
+
+  /// Get the timestamp and status icon color
+  Color _getMetaTextColor(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (isMe) {
+      // For sent messages: semi-transparent version of text color
+      return isDark
+          ? Colors.white.withValues(alpha: 0.7)
+          : Colors.black.withValues(alpha: 0.7);
+    } else {
+      // For received messages: tertiary text color
+      return isDark ? AppTheme.darkTextSecondary : AppTheme.textTertiary;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,9 +122,9 @@ class LocalMessageBubble extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: isSelected
                         ? (isMe
-                            ? AppTheme.primaryColor.withValues(alpha: 0.8)
+                            ? _getBubbleColor(context).withValues(alpha: 0.8)
                             : Colors.grey[300])
-                        : (isMe ? AppTheme.primaryColor : Colors.grey[200]),
+                        : _getBubbleColor(context),
                     borderRadius: BorderRadius.circular(16),
                     border: message.readStatus == 'failed'
                         ? Border.all(color: AppTheme.errorColor, width: 1)
@@ -89,7 +140,14 @@ class LocalMessageBubble extends StatelessWidget {
                               spreadRadius: 2,
                             ),
                           ]
-                        : null,
+                        : [
+                            // Subtle shadow for all message bubbles
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 3,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -97,7 +155,8 @@ class LocalMessageBubble extends StatelessWidget {
                       Text(
                         message.content ?? '',
                         style: TextStyle(
-                          color: isMe ? Colors.white : AppTheme.textPrimary,
+                          color: _getTextColor(context),
+                          fontSize: 15,
                         ),
                       ),
                       if (isMe) ...[
@@ -110,13 +169,11 @@ class LocalMessageBubble extends StatelessWidget {
                               '${message.createdAt.hour.toString().padLeft(2, '0')}:${message.createdAt.minute.toString().padLeft(2, '0')}',
                               style: TextStyle(
                                 fontSize: 10,
-                                color: isMe
-                                    ? Colors.white.withValues(alpha: 0.7)
-                                    : AppTheme.textTertiary,
+                                color: _getMetaTextColor(context),
                               ),
                             ),
                             const SizedBox(width: 4),
-                            _buildStatusIcon(message.readStatus),
+                            _buildStatusIcon(message.readStatus, context),
                           ],
                         ),
                       ],
@@ -131,7 +188,10 @@ class LocalMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusIcon(String? status) {
+  Widget _buildStatusIcon(String? status, BuildContext context) {
+    // Get the appropriate color for status icons
+    final metaColor = _getMetaTextColor(context);
+
     switch (status) {
       case 'sending':
         return SizedBox(
@@ -139,28 +199,26 @@ class LocalMessageBubble extends StatelessWidget {
           height: 12,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              Colors.white.withValues(alpha: 0.7),
-            ),
+            valueColor: AlwaysStoppedAnimation<Color>(metaColor),
           ),
         );
       case 'sent':
         return Icon(
           Icons.check,
           size: 12,
-          color: Colors.white.withValues(alpha: 0.7),
+          color: metaColor,
         );
       case 'delivered':
         return Icon(
           Icons.done_all,
           size: 12,
-          color: Colors.white.withValues(alpha: 0.7),
+          color: metaColor,
         );
       case 'read':
         return Icon(
           Icons.done_all,
           size: 12,
-          color: Colors.lightBlue[300],
+          color: Colors.lightBlue[300], // Keep blue for read status
         );
       case 'failed':
         return const Icon(
@@ -172,7 +230,7 @@ class LocalMessageBubble extends StatelessWidget {
         return Icon(
           Icons.schedule,
           size: 12,
-          color: Colors.white.withValues(alpha: 0.7),
+          color: metaColor,
         );
     }
   }

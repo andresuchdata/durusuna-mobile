@@ -232,6 +232,31 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     ref
         .read(localConversationsProvider.notifier)
         .markAsRead(widget.conversation.id);
+
+    // Also send read receipts for unread messages from other users
+    _sendReadReceiptsForUnreadMessages();
+  }
+
+  void _sendReadReceiptsForUnreadMessages() {
+    // Get current messages and send read receipts for unread ones from other users
+    final messagesAsync =
+        ref.read(localMessagesProvider(widget.conversation.id));
+    messagesAsync.whenData((messages) {
+      final unreadFromOthers = messages
+          .where((msg) =>
+              !msg.isFromMe &&
+              msg.serverId != null &&
+              (msg.readStatus == 'sent' || msg.readStatus == 'delivered'))
+          .map((msg) => msg.serverId!)
+          .toList();
+
+      if (unreadFromOthers.isNotEmpty) {
+        print(
+            '📖 Sending read receipts for ${unreadFromOthers.length} unread messages');
+        final realtimeService = ref.read(realtimeServiceProvider);
+        realtimeService.markAsRead(unreadFromOthers, widget.conversation.id);
+      }
+    });
   }
 
   PreferredSizeWidget _buildAppBar() {
@@ -685,7 +710,9 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     });
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? AppTheme.chatBackgroundDark
+          : AppTheme.chatBackgroundLight,
       appBar: _buildAppBar(),
       body: Column(
         children: [
@@ -721,7 +748,9 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
               if (_replyingToMessage != null)
                 Container(
                   padding: const EdgeInsets.all(8),
-                  color: AppTheme.backgroundColor,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? AppTheme.chatBackgroundDark
+                      : AppTheme.chatBackgroundLight,
                   child: Row(
                     children: [
                       Expanded(

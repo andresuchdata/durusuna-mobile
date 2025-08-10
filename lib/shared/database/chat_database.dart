@@ -103,13 +103,21 @@ class ChatDatabase {
   /// If a matching optimistic message is found, we upgrade it with server fields
   /// and do NOT insert a new row. Returns true if adopted, false otherwise.
   static Future<bool> adoptServerMessage(LocalMessage serverMessage) async {
+    print(
+        '🔄 [DATABASE] adoptServerMessage called for serverId: ${serverMessage.serverId}, clientMessageId: ${serverMessage.clientMessageId}, content: "${serverMessage.content}"');
+
     return await _isar.writeTxn(() async {
       // 1) Try match by clientMessageId first (best-effort, in-memory scan to avoid codegen dependency)
       if (serverMessage.clientMessageId != null) {
+        print(
+            '🔍 [DATABASE] Looking for optimistic message with clientMessageId: ${serverMessage.clientMessageId}');
         final allInConv = await _isar.localMessages
             .where()
             .conversationIdEqualTo(serverMessage.conversationId)
             .findAll();
+        print(
+            '🔍 [DATABASE] Found ${allInConv.length} messages in conversation for adoption check');
+
         final optimistic = allInConv.firstWhere(
           (m) => m.clientMessageId == serverMessage.clientMessageId,
           orElse: () => LocalMessage(
@@ -139,6 +147,8 @@ class ChatDatabase {
         );
         // Check sentinel
         if (optimistic.conversationId.isNotEmpty) {
+          print(
+              '🔄 [DATABASE] Found matching optimistic message (localId: ${optimistic.id}, readStatus: ${optimistic.readStatus}) - upgrading to server message');
           final upgraded = optimistic.copyWith(
             serverId: serverMessage.serverId,
             isSynced: true,
@@ -156,8 +166,11 @@ class ChatDatabase {
           );
           await _isar.localMessages.put(upgraded);
           print(
-              '🔄 [DATABASE] Adopted by clientMessageId ${serverMessage.clientMessageId}');
+              '✅ [DATABASE] Adopted by clientMessageId ${serverMessage.clientMessageId} - updated readStatus from "${optimistic.readStatus}" to "${upgraded.readStatus}"');
           return true;
+        } else {
+          print(
+              '🔍 [DATABASE] No optimistic message found with clientMessageId: ${serverMessage.clientMessageId}');
         }
       }
 

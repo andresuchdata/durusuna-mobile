@@ -2,8 +2,6 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/chat_database.dart';
 import '../models/local_message.dart';
-
-import '../models/message.dart';
 import '../providers/local_chat_providers.dart';
 import '../services/chat_service.dart';
 import 'realtime_service.dart';
@@ -74,7 +72,8 @@ class RealtimeDispatcher {
 
   /// Handle incoming messages with deduplication and circuit breaker
   Future<void> _handleMessage(RealtimeMessage realtimeMessage) async {
-    final messageId = realtimeMessage.message.id;
+    final messageId = realtimeMessage.message.serverId ??
+        realtimeMessage.message.id.toString();
     final senderId = realtimeMessage.message.senderId;
     final conversationId = realtimeMessage.conversationId;
 
@@ -153,19 +152,32 @@ class RealtimeDispatcher {
   /// Handle own messages (update status only - DO NOT save new message)
   Future<void> _handleOwnMessage(RealtimeMessage realtimeMessage) async {
     print(
-        '🔄 RealtimeDispatcher: Updating own message status: ${realtimeMessage.message.id}');
+        '🔄 RealtimeDispatcher: Updating own message status: ${realtimeMessage.message.id}, clientMessageId: ${realtimeMessage.message.clientMessageId}');
 
     try {
-      // CRITICAL: Only update status, never save as new message for own messages
-      // This prevents duplicates when user sends message and receives real-time echo
-      await ChatDatabase.updateMessageStatus(
-        realtimeMessage.message.id,
-        readStatus: 'sent',
-      );
+      // CRITICAL: For own messages, try to adopt the server message first
+      // This is more reliable than just updating status
+      final localMessage = realtimeMessage.message;
 
-      // Notify specific conversation provider to refresh (lightweight update)
-      final conversationId = realtimeMessage.conversationId;
-      _ref.read(localMessagesProvider(conversationId).notifier).refresh();
+      print(
+          '🔄 RealtimeDispatcher: Attempting to adopt own message via real-time handler');
+      final adopted = await ChatDatabase.adoptServerMessage(localMessage);
+      if (adopted) {
+        print(
+            '✅ RealtimeDispatcher: Own message adopted successfully via real-time: ${realtimeMessage.message.id}');
+        return; // Don't refresh - the stream will update automatically
+      }
+
+      print(
+          '⚠️ RealtimeDispatcher: Adoption failed, trying status update fallback');
+      // Fallback: try to update status if adoption failed
+      final messageServerId = realtimeMessage.message.serverId;
+      if (messageServerId != null) {
+        await ChatDatabase.updateMessageStatus(
+          messageServerId,
+          readStatus: 'sent',
+        );
+      }
 
       print(
           '✅ RealtimeDispatcher: Own message status updated to "sent": ${realtimeMessage.message.id}');
@@ -173,10 +185,10 @@ class RealtimeDispatcher {
       if (e.toString().contains('Unique index violated') ||
           e.toString().contains('not found')) {
         print(
-            '✅ RealtimeDispatcher: Message status already updated or not found - ${realtimeMessage.message.id}');
-        return; // Not an error - message may not exist locally yet or already correct
+            '✅ RealtimeDispatcher: Message already processed - ${realtimeMessage.message.id}');
+        return; // Not an error - message may already be adopted
       }
-      print('❌ RealtimeDispatcher: Failed to update own message status: $e');
+      print('❌ RealtimeDispatcher: Failed to process own message: $e');
       // Don't rethrow - this is not critical
     }
   }
@@ -187,12 +199,8 @@ class RealtimeDispatcher {
     print(
         '📨 RealtimeDispatcher: Processing incoming message: ${realtimeMessage.message.id}');
 
-    // Convert to local message
-    final localMessage = _convertToLocalMessage(
-      realtimeMessage.message,
-      realtimeMessage.conversationId,
-      currentUserId,
-    );
+    // The message is already a LocalMessage from the updated RealtimeMessage.fromJson
+    final localMessage = realtimeMessage.message;
 
     try {
       // Save to database (ignore duplicates silently)
@@ -212,10 +220,10 @@ class RealtimeDispatcher {
     await _updateUIForIncomingMessage(
         realtimeMessage.conversationId, localMessage);
 
-    // Update global conversations list
-    _ref.read(conversationsProvider.notifier).updateConversationLastMessage(
+    // Update global conversations list - using localMessage (already a LocalMessage)
+    _ref.read(localConversationsProvider.notifier).updateLastMessage(
           realtimeMessage.conversationId,
-          realtimeMessage.message,
+          localMessage,
         );
   }
 
@@ -282,44 +290,7 @@ class RealtimeDispatcher {
     }
   }
 
-  /// Convert Message to LocalMessage
-  LocalMessage _convertToLocalMessage(
-    Message message,
-    String conversationId,
-    String currentUserId,
-  ) {
-    return LocalMessage(
-      serverId: message.id,
-      conversationId: conversationId,
-      senderId: message.senderId,
-      content: message.content,
-      messageType: _convertMessageType(message.messageType),
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
-      isFromMe: message.senderId == currentUserId,
-      isSynced: true, // Real-time messages are already synced
-      readStatus: 'delivered',
-      replyToId: message.replyToId,
-    );
-  }
-
-  /// Convert MessageType to LocalMessageType
-  LocalMessageType _convertMessageType(MessageType messageType) {
-    switch (messageType) {
-      case MessageType.text:
-        return LocalMessageType.text;
-      case MessageType.image:
-        return LocalMessageType.image;
-      case MessageType.file:
-        return LocalMessageType.file;
-      case MessageType.audio:
-        return LocalMessageType.audio;
-      case MessageType.video:
-        return LocalMessageType.video;
-      case MessageType.emoji:
-        return LocalMessageType.emoji;
-    }
-  }
+  // Conversion methods removed - RealtimeMessage now contains LocalMessage directly
 
   /// Start cleanup timer to prevent memory leaks
   void _startCleanupTimer() {

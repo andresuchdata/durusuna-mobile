@@ -6,6 +6,7 @@ import 'dart:io' show Platform;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/widgets/performance_optimized_list.dart';
 import '../../../../shared/services/chat_service.dart';
+import '../../../../shared/services/local_chat_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/conversation.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
@@ -32,6 +33,12 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Force load conversations to ensure provider is active
       ref.read(conversationsProvider.notifier).loadConversations();
+
+      // NEW: Ensure Isar has conversation rows after fresh install/reset
+      // by syncing from server once when this page opens
+      try {
+        ref.read(localChatServiceProvider).syncConversationsNow();
+      } catch (_) {}
 
       // Join all conversation rooms for real-time updates
       _joinAllConversationRooms();

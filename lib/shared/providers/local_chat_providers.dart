@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../services/local_chat_service.dart';
 import '../models/local_conversation.dart';
 import '../models/local_message.dart';
@@ -134,6 +135,7 @@ class LocalMessagesNotifier
   int _currentOffset = 0;
   static const int _pageSize = 50;
   StreamSubscription<List<LocalMessage>>? _streamSub;
+  bool _initialSyncTriggered = false;
 
   LocalMessagesNotifier(this._chatService, this._conversationId, this._ref)
       : super(const AsyncValue.loading()) {
@@ -150,6 +152,25 @@ class LocalMessagesNotifier
         .listen((messages) async {
       print(
           '🔍 [PROVIDER] Stream received ${messages.length} messages for "$_conversationId"');
+
+      // If DB is empty on first open (e.g., after reset), fetch recent messages from server once
+      if (!_initialSyncTriggered && messages.isEmpty) {
+        _initialSyncTriggered = true;
+        print(
+            '🔄 [PROVIDER] Messages empty for "$_conversationId" → triggering initial force sync');
+        print('🔍 [PROVIDER] _chatService type: ${_chatService.runtimeType}');
+        Future.microtask(() async {
+          try {
+            print('🔄 [PROVIDER] Calling forceSyncMessagesFromServer...');
+            await _chatService.forceSyncMessagesFromServer(_conversationId);
+            print(
+                '✅ [PROVIDER] Initial force sync completed for "$_conversationId"');
+          } catch (e, stackTrace) {
+            print('⚠️ Initial force sync failed for $_conversationId: $e');
+            print('⚠️ Stack trace: $stackTrace');
+          }
+        });
+      }
       if (mounted) {
         state = AsyncValue.data(messages);
         _currentOffset = messages.length;
@@ -214,9 +235,14 @@ class LocalMessagesNotifier
     print(
         '🐛 [DEBUG] User check took: ${userCheckTime.difference(startTime).inMilliseconds}ms');
 
+    // Generate a clientMessageId for deterministic merging/dedupe
+    final clientMessageId =
+        '${DateTime.now().millisecondsSinceEpoch}_${currentUser['id']}_${const Uuid().v4()}';
+
     // Create optimistic message with temporary ID
     final optimisticMessage = LocalMessage(
       serverId: null, // Will be set when synced to server
+      clientMessageId: clientMessageId, // Attach client-side ID
       conversationId: _conversationId,
       senderId: currentUser['id'],
       content: content,
@@ -232,75 +258,103 @@ class LocalMessagesNotifier
     print(
         '🐛 [DEBUG] Message creation took: ${messageCreateTime.difference(userCheckTime).inMilliseconds}ms');
 
-    // 🚀 STEP 1: Persist to DB immediately so the stream updates UI and we have stable localId
+    // 🚀 STEP 1: Persist immediately to get a stable localId used for dedupe
+    // This will trigger the stream and update the UI instantly
     try {
-      await _chatService.saveMessageLocally(optimisticMessage);
+      await ChatDatabase.saveMessage(optimisticMessage);
+      print(
+          '🐛 [DEBUG] Optimistic message saved to DB: ${optimisticMessage.id}');
     } catch (e) {
-      print('❌ Failed to save optimistic message locally: $e');
+      print('🐛 [DEBUG] Failed to save optimistic message locally: $e');
+      // If local save fails, mark as failed and return
+      if (mounted) {
+        state.whenData((messages) {
+          final updated = messages.map((msg) {
+            if (msg.clientMessageId == optimisticMessage.clientMessageId) {
+              return msg.copyWith(readStatus: 'failed');
+            }
+            return msg;
+          }).toList();
+          state = AsyncValue.data(updated);
+        });
+      }
+      return;
     }
 
-    // 🚀 STEP 2: Update conversations list
-    print('🐛 [DEBUG] Updating conversations list...');
-    final convUpdateStart = DateTime.now();
-
+    // 🚀 STEP 2: Update conversations list INSTANTLY
     _ref
         .read(localConversationsProvider.notifier)
         .updateLastMessage(_conversationId, optimisticMessage);
 
-    final convUpdateTime = DateTime.now();
-    print(
-        '🐛 [DEBUG] Conversations update took: ${convUpdateTime.difference(convUpdateStart).inMilliseconds}ms');
-
-    // 🚀 STEP 3: Sync to server (fire-and-forget)
-    () async {
-      try {
-        final serverMessage =
-            await _chatService.syncMessageToServer(optimisticMessage);
-        if (serverMessage.serverId != null) {
-          // Prefer adopting into optimistic row to avoid double insertions
-          final adopted = await ChatDatabase.adoptServerMessage(serverMessage);
-          if (!adopted) {
-            await ChatDatabase.markMessageSynced(
-              optimisticMessage.id.toString(),
-              serverMessage.serverId!,
-            );
-          }
-
-          // Hard-dedupe: remove any other optimistic duplicates that match content/time
-          try {
-            final all = await ChatDatabase.getLatestMessages(_conversationId,
-                limit: 100);
-            for (final m in all) {
-              final isSamePending = m.serverId == null &&
-                  m.isFromMe &&
-                  m.id != optimisticMessage.id &&
-                  (m.content ?? '') == (optimisticMessage.content ?? '') &&
-                  (m.createdAt
-                          .difference(optimisticMessage.createdAt)
-                          .abs()
-                          .inSeconds <=
-                      5);
-              if (isSamePending) {
-                await ChatDatabase.deleteMessage(m.id.toString());
-              }
-            }
-          } catch (_) {}
-        }
-      } catch (e) {
-        print('🐛 [BACKGROUND] syncMessageToServer failed: $e');
-        // Mark failed to prevent infinite retry loops
-        await ChatDatabase.removePendingMessage(
-            optimisticMessage.id.toString());
-      }
-    }();
+    // 🚀 STEP 3: Sync to server in background (non-blocking)
+    _syncMessageInBackground(optimisticMessage);
 
     final totalTime = DateTime.now();
     print(
         '🐛 [DEBUG] ✅ sendMessage COMPLETED in: ${totalTime.difference(startTime).inMilliseconds}ms');
-    print('🐛 [DEBUG] 🚀 Message should be visible in UI now!');
   }
 
-  // Removed _sendMessageInBackground in favor of DB-stream-first flow
+  /// Background operation - doesn't block UI
+  void _syncMessageInBackground(LocalMessage optimisticMessage) async {
+    final bgStartTime = DateTime.now();
+    print(
+        '🐛 [BACKGROUND] Starting background sync at ${bgStartTime.millisecondsSinceEpoch}');
+
+    try {
+      // Now sync to server
+      print('🐛 [BACKGROUND] Syncing to server...');
+      final serverStart = DateTime.now();
+
+      final serverMessage =
+          await _chatService.syncMessageToServer(optimisticMessage);
+
+      final serverEnd = DateTime.now();
+      print(
+          '🐛 [BACKGROUND] Server sync took: ${serverEnd.difference(serverStart).inMilliseconds}ms');
+
+      // Persist sync state in local DB (replace local optimistic with real serverId)
+      // This will trigger the stream and update the UI
+      if (serverMessage.serverId != null) {
+        try {
+          final adopted = await ChatDatabase.adoptServerMessage(serverMessage);
+          if (adopted) {
+            print(
+                '🔄 [BACKGROUND] Server message adopted into existing optimistic message.');
+          } else {
+            // Fallback if adoption failed (e.g., optimistic message was deleted)
+            await ChatDatabase.markMessageSynced(
+              optimisticMessage.id.toString(),
+              serverMessage.serverId!,
+            );
+            print(
+                '⚠️ [BACKGROUND] Server message not adopted, marked as synced instead.');
+          }
+        } catch (e) {
+          if (e.toString().contains('Unique index violated')) {
+            print(
+                '✅ [BACKGROUND] Message already adopted by real-time handler - skipping duplicate adoption.');
+            // This is expected when real-time handler beats the background sync
+            // The message is already properly synced, so we're done
+          } else {
+            rethrow; // Re-throw other errors
+          }
+        }
+      }
+
+      // The adoptServerMessage method should handle deduplication via clientMessageId matching
+
+      final totalBgTime = DateTime.now();
+      print(
+          '🐛 [BACKGROUND] ✅ Background sync completed in: ${totalBgTime.difference(bgStartTime).inMilliseconds}ms');
+    } catch (e) {
+      print('🐛 [BACKGROUND] ❌ Background sync FAILED: $e');
+
+      // Mark message as failed for genuine errors
+      await ChatDatabase.markMessageFailed(optimisticMessage.id.toString());
+      print(
+          '🚫 Message marked as failed - will not retry: ${optimisticMessage.id}');
+    }
+  }
 
   Future<void> loadMore() async {
     await _loadMessages(loadMore: true);
@@ -616,17 +670,18 @@ class LocalChatRealtime {
   }
 
   void _initialize() {
-    // Wire realtime messages → local DB via LocalChatService
-    _ref.listen(realtimeMessagesProvider, (prev, next) {
-      next.whenData((rtMessage) {
-        try {
-          final msgJson = rtMessage.message.toJson();
-          _ref.read(localChatServiceProvider).handleRealtimeMessage(msgJson);
-        } catch (e) {
-          // swallow errors to keep stream healthy
-        }
-      });
-    });
+    // DISABLED: Real-time message handling is now done by RealtimeDispatcher
+    // This prevents duplicate processing of messages
+    // _ref.listen(realtimeMessagesProvider, (prev, next) {
+    //   next.whenData((rtMessage) {
+    //     try {
+    //       final msgJson = rtMessage.message.toJson();
+    //       _ref.read(localChatServiceProvider).handleRealtimeMessage(msgJson);
+    //     } catch (e) {
+    //       // swallow errors to keep stream healthy
+    //     }
+    //   });
+    // });
 
     // Wire message status updates → update Isar rows (delivered/read)
     _ref.listen(realtimeMessageStatusProvider, (prev, next) {

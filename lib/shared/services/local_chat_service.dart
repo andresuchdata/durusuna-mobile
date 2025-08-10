@@ -6,6 +6,7 @@ import '../models/local_message.dart';
 import '../models/local_conversation.dart';
 import '../../core/storage/storage_service.dart';
 import 'api_service.dart';
+import '../../core/constants/api_constants.dart';
 import 'realtime_service.dart';
 
 /// Local-first chat service that provides instant loading and background sync
@@ -287,6 +288,15 @@ class LocalChatService {
     });
   }
 
+  /// Public: force sync conversations from server now
+  Future<void> syncConversationsNow() async {
+    try {
+      await _syncConversationsFromServer();
+    } catch (e) {
+      print('Conversations sync failed: $e');
+    }
+  }
+
   Future<void> _triggerMessagesSync(String conversationId) async {
     // Run in background without blocking UI
     Future.microtask(() async {
@@ -306,7 +316,6 @@ class LocalChatService {
       final conversationsList = data['conversations'] as List;
 
       final currentUserId = StorageService.getUser()?['id'];
-      if (currentUserId == null) return;
 
       // Convert and save to local database
       final localConversations = conversationsList
@@ -333,36 +342,66 @@ class LocalChatService {
   Future<void> forceSyncMessagesFromServer(String conversationId) async {
     print(
         '🔄 Force syncing messages from server for conversation: $conversationId');
-    await _syncMessagesFromServer(conversationId, limit: 50);
-
-    // Reconcile pending locals against the newly fetched window
     try {
-      final pending =
-          await ChatDatabase.getPendingMessagesForConversation(conversationId);
-      if (pending.isEmpty) return;
+      // Get last sync time for this conversation based on latest local message
+      final lastLocalMessage =
+          await ChatDatabase.getLatestMessage(conversationId);
+      final lastSyncTime = lastLocalMessage?.createdAt;
 
-      // Attempt tolerant match with existing server rows by content + ~5s time proximity
-      final latest = await ChatDatabase.getLatestMessages(conversationId,
-          limit: 200, offsetFromLatest: 0);
+      final queryParams = <String, dynamic>{
+        'limit': 50, // Default limit
+      };
 
-      for (final p in pending) {
-        final match = latest.firstWhere(
-          (m) =>
-              m.serverId != null &&
-              m.isFromMe == p.isFromMe &&
-              (m.content ?? '') == (p.content ?? '') &&
-              (m.createdAt.difference(p.createdAt).abs().inSeconds <= 5),
-          orElse: () => p,
-        );
+      String path = ApiConstants.getConversationMessages(conversationId);
 
-        if (!identical(match, p) && match.serverId != null) {
-          // Merge: assign serverId to local pending and mark synced
-          await ChatDatabase.markMessageSynced(
-              p.id.toString(), match.serverId!);
-        }
+      if (lastSyncTime != null) {
+        // Use cursor-based pagination if we have a last sync time
+        queryParams['cursor'] = lastSyncTime.toIso8601String();
+        queryParams['loadDirection'] = 'after';
+        print(
+            '🌐 [forceSyncMessagesFromServer] Using cursor: ${queryParams['cursor']}');
+      } else {
+        // If no local messages, fetch the first page
+        queryParams['page'] = 1;
+        print('🌐 [forceSyncMessagesFromServer] Using page: 1');
+      }
+
+      // Get messages from API
+      print(
+          '🌐 [forceSyncMessagesFromServer] GET $path with params: $queryParams');
+      final response = await _apiService.get(
+        path,
+        queryParameters: queryParams,
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      print('🌐 [forceSyncMessagesFromServer] response keys: ${data.keys}');
+      final messagesList = data['messages'] as List;
+      print(
+          '🌐 [forceSyncMessagesFromServer] Got ${messagesList.length} messages');
+
+      final currentUserId = StorageService.getUser()?['id'];
+
+      // Convert and save to local database
+      final localMessages = messagesList
+          .map((json) => LocalMessageExtension.fromApiJson(
+                json,
+                isFromMe: json['sender_id'] == currentUserId,
+              ))
+          .toList();
+
+      // Save all messages with error handling
+      try {
+        await ChatDatabase.saveMessages(localMessages);
+        print(
+            '✅ [forceSyncMessagesFromServer] Saved ${localMessages.length} messages from server for $conversationId');
+      } catch (e) {
+        print(
+            '⚠️ [forceSyncMessagesFromServer] Error saving messages from server: $e');
       }
     } catch (e) {
-      print('⚠️ Reconcile after forceSync failed: $e');
+      print('❌ Force sync messages from server failed: $e');
+      rethrow;
     }
   }
 
@@ -389,33 +428,54 @@ class LocalChatService {
       print(
           '🔄 Reconciling ${pending.length} pending messages for $conversationId');
 
-      // Pull a recent window so we can adopt - but catch any unique violations
-      try {
-        await _syncMessagesFromServer(conversationId, limit: 100);
-      } catch (e) {
-        if (e.toString().contains('Unique index violated')) {
-          print(
-              'ℹ️ Some messages already exist during reconcile sync - continuing');
-        } else {
-          rethrow;
-        }
-      }
+      // STEP 1: Clean up existing duplicates FIRST before syncing more
+      await _cleanupDuplicateMessages(conversationId);
 
-      // Try adopting each recent server message into any optimistic row
-      final recent = await ChatDatabase.getLatestMessages(conversationId,
-          limit: 200, offsetFromLatest: 0);
-      for (final m in recent) {
-        if (m.serverId != null) {
-          try {
-            await ChatDatabase.adoptServerMessage(m);
-          } catch (e) {
-            if (e.toString().contains('Unique index violated')) {
-              // Skip if already exists
-              continue;
-            }
-            print('⚠️ Failed to adopt message ${m.serverId}: $e');
+      // STEP 1.5: Clean up orphaned messages without clientMessageId
+      await _cleanupOrphanedMessages(conversationId);
+
+      // STEP 2: Only sync if we still have pending messages after cleanup
+      final remainingPending =
+          await ChatDatabase.getPendingMessagesForConversation(conversationId);
+
+      if (remainingPending.isNotEmpty) {
+        print(
+            '🔄 ${remainingPending.length} messages still pending after cleanup, syncing from server...');
+
+        // Pull a recent window so we can adopt - but catch any unique violations
+        try {
+          await _syncMessagesFromServer(conversationId,
+              limit: 50); // Reduced limit
+        } catch (e) {
+          if (e.toString().contains('Unique index violated')) {
+            print(
+                'ℹ️ Some messages already exist during reconcile sync - continuing');
+          } else {
+            rethrow;
           }
         }
+
+        // Try adopting each recent server message into any optimistic row
+        final recent = await ChatDatabase.getLatestMessages(conversationId,
+            limit: 100, offsetFromLatest: 0); // Reduced limit
+        for (final m in recent) {
+          if (m.serverId != null) {
+            try {
+              await ChatDatabase.adoptServerMessage(m);
+            } catch (e) {
+              if (e.toString().contains('Unique index violated')) {
+                // Skip if already exists
+                continue;
+              }
+              print('⚠️ Failed to adopt message ${m.serverId}: $e');
+            }
+          }
+        }
+
+        // STEP 3: Clean up again after sync in case new duplicates were created
+        await _cleanupDuplicateMessages(conversationId);
+      } else {
+        print('🔄 No pending messages after cleanup, skipping server sync');
       }
 
       // Any remaining pending older than threshold become failed
@@ -432,6 +492,139 @@ class LocalChatService {
     } catch (e) {
       print('⚠️ reconcilePendingOnOpen failed: $e');
     }
+  }
+
+  /// Clean up duplicate messages with same content in a conversation
+  /// Keep only the best version: delivered > sent > failed > sending
+  Future<void> _cleanupDuplicateMessages(String conversationId) async {
+    try {
+      final allMessages =
+          await ChatDatabase.getLatestMessages(conversationId, limit: 200);
+
+      // Group messages by content and sender
+      final Map<String, List<LocalMessage>> messageGroups = {};
+
+      for (final message in allMessages) {
+        if (message.content?.trim().isNotEmpty == true) {
+          final key = '${message.senderId}_${message.content?.trim()}';
+          messageGroups[key] ??= [];
+          messageGroups[key]!.add(message);
+        }
+      }
+
+      // For each group with multiple messages, keep only the best one
+      for (final group in messageGroups.values) {
+        if (group.length > 1) {
+          print(
+              '🧹 Found ${group.length} duplicate messages with content: "${group.first.content}"');
+
+          // Sort by priority: delivered > sent > failed > sending
+          group.sort((a, b) {
+            final aPriority = _getMessagePriority(a);
+            final bPriority = _getMessagePriority(b);
+            if (aPriority != bPriority) {
+              return bPriority.compareTo(aPriority); // Higher priority first
+            }
+            // If same priority, prefer newer messages
+            return b.createdAt.compareTo(a.createdAt);
+          });
+
+          // Keep the first (highest priority), delete the rest
+          final toKeep = group.first;
+          final toDelete = group.skip(1).toList();
+
+          print(
+              '🧹 Keeping message: ${toKeep.serverId ?? toKeep.id} (${toKeep.readStatus}) at ${toKeep.createdAt}');
+
+          for (final duplicate in toDelete) {
+            print(
+                '🧹 Deleting duplicate: ${duplicate.serverId ?? duplicate.id} (${duplicate.readStatus}) at ${duplicate.createdAt}');
+            await ChatDatabase.deleteMessage(duplicate.id.toString());
+          }
+        }
+      }
+    } catch (e) {
+      print('⚠️ Failed to cleanup duplicate messages: $e');
+    }
+  }
+
+  /// Get priority for message status (higher = better)
+  int _getMessagePriority(LocalMessage message) {
+    // Prefer messages with serverId (synced to server)
+    if (message.serverId != null) {
+      switch (message.readStatus) {
+        case 'read':
+          return 100;
+        case 'delivered':
+          return 90;
+        case 'sent':
+          return 80;
+        default:
+          return 70;
+      }
+    } else {
+      // Local-only messages
+      // CRITICAL: Old messages without clientMessageId should be deprioritized
+      if (message.clientMessageId == null) {
+        switch (message.readStatus) {
+          case 'failed':
+            return 2; // Very low priority
+          case 'sending':
+            return 1; // Lowest priority (likely orphaned)
+          default:
+            return 0;
+        }
+      } else {
+        // Newer messages with clientMessageId
+        switch (message.readStatus) {
+          case 'failed':
+            return 20;
+          case 'sending':
+            return 10;
+          default:
+            return 5;
+        }
+      }
+    }
+  }
+
+  /// Clean up orphaned messages without clientMessageId that are stuck in "sending"
+  Future<void> _cleanupOrphanedMessages(String conversationId) async {
+    try {
+      final allMessages =
+          await ChatDatabase.getLatestMessages(conversationId, limit: 200);
+
+      // Find old messages without clientMessageId that are stuck
+      final orphaned = allMessages
+          .where((message) =>
+                  message.clientMessageId == null &&
+                  message.serverId == null &&
+                  message.readStatus == 'sending' &&
+                  DateTime.now().difference(message.createdAt).inMinutes >
+                      2 // Older than 2 minutes
+              )
+          .toList();
+
+      if (orphaned.isNotEmpty) {
+        print(
+            '🧹 Found ${orphaned.length} orphaned messages without clientMessageId');
+
+        for (final orphan in orphaned) {
+          print(
+              '🧹 Marking orphaned message as failed: "${orphan.content}" (age: ${DateTime.now().difference(orphan.createdAt).inMinutes}min)');
+          await ChatDatabase.markMessageFailed(orphan.id.toString());
+        }
+      }
+    } catch (e) {
+      print('⚠️ Failed to cleanup orphaned messages: $e');
+    }
+  }
+
+  /// Manual cleanup for testing - can be called directly
+  Future<void> manualCleanupDuplicates(String conversationId) async {
+    print('🧹 Manual cleanup requested for $conversationId');
+    await _cleanupDuplicateMessages(conversationId);
+    await _cleanupOrphanedMessages(conversationId);
   }
 
   /// Delete single message on server
@@ -476,22 +669,35 @@ class LocalChatService {
       // This prevents the server from re-sending messages we already have locally
       final lastSyncTime = await _getLastMessageSyncTime(conversationId);
 
+      // Backend expects page/limit by default, or cursor + loadDirection for incremental loads
       final queryParams = <String, dynamic>{
         'limit': limit,
+        'page': 1,
       };
 
       if (lastSyncTime != null) {
-        queryParams['after'] = lastSyncTime.toIso8601String();
+        queryParams.remove('page');
+        queryParams['cursor'] = lastSyncTime.toIso8601String();
+        queryParams['loadDirection'] = 'after';
       }
 
       // Get messages from API
+      print('🌐 [_syncMessagesFromServer] GET ' +
+          ApiConstants.getConversationMessages(conversationId) +
+          ' params=' +
+          queryParams.toString());
       final response = await _apiService.get(
-        '/conversations/$conversationId/messages',
+        ApiConstants.getConversationMessages(conversationId),
         queryParameters: queryParams,
       );
+      print('🌐 [_syncMessagesFromServer] response keys: ' +
+          (response.data is Map<String, dynamic>
+              ? (response.data as Map<String, dynamic>).keys.join(',')
+              : 'not a map'));
 
       final data = response.data as Map<String, dynamic>;
-      final messagesList = data['messages'] as List;
+      final messagesList =
+          (data['messages'] ?? data['data'] ?? data['items'] ?? []) as List;
 
       final currentUserId = StorageService.getUser()?['id'];
       if (currentUserId == null) return;
@@ -500,7 +706,9 @@ class LocalChatService {
       final localMessages = messagesList
           .map((json) => LocalMessageExtension.fromApiJson(
                 json,
-                isFromMe: json['sender_id'] == currentUserId,
+                isFromMe: currentUserId != null
+                    ? json['sender_id'] == currentUserId
+                    : false,
               ))
           .toList();
 
