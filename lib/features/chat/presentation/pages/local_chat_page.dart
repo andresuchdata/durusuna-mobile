@@ -859,8 +859,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             // 🚀 Enhanced message bubble with selection support
             RepaintBoundary(
               child: LocalMessageBubble(
+                // Stable key: prefer serverId; fallback to clientMessageId; last resort: local id
                 key: _getMessageKey(message.serverId ??
-                    '${message.createdAt.millisecondsSinceEpoch}_${message.senderId}'),
+                    message.clientMessageId ??
+                    message.id.toString()),
                 message: message,
                 isMe: isMe,
                 isSelectionMode: _isSelectionMode,

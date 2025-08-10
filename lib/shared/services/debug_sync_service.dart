@@ -79,7 +79,7 @@ class DebugSyncService {
               updatedAt: apiMsg.updatedAt,
               isFromMe: apiMsg.senderId == currentUserId,
               isSynced: true, // Already from server
-              readStatus: apiMsg.readStatus ?? 'sent',
+              readStatus: (apiMsg.readStatus as String?) ?? 'sent',
             );
 
             await ChatDatabase.saveMessage(localMsg);

@@ -9,6 +9,7 @@ import '../models/local_user.dart';
 import '../database/chat_database.dart';
 import '../../core/storage/storage_service.dart';
 import '../services/realtime_service.dart';
+import '../services/realtime_dispatcher.dart';
 
 /// Provider for local conversations (instant loading)
 final localConversationsProvider = StateNotifierProvider<
@@ -264,6 +265,15 @@ class LocalMessagesNotifier
       await ChatDatabase.saveMessage(optimisticMessage);
       print(
           '🐛 [DEBUG] Optimistic message saved to DB: ${optimisticMessage.id}');
+
+      // 🚀 CRITICAL: Register immediately to prevent real-time duplicates using SINGLETON
+      final dispatcher = RealtimeDispatcher.instance;
+      // Register both the composite key AND the content for fallback matching
+      final messageKey =
+          '${optimisticMessage.clientMessageId}_${optimisticMessage.createdAt.microsecondsSinceEpoch}';
+      dispatcher.registerRecentlySent(messageKey);
+      dispatcher.registerRecentlySent(
+          optimisticMessage.content ?? ''); // Content fallback
     } catch (e) {
       print('🐛 [DEBUG] Failed to save optimistic message locally: $e');
       // If local save fails, mark as failed and return
@@ -295,10 +305,12 @@ class LocalMessagesNotifier
   }
 
   /// Background operation - doesn't block UI
-  void _syncMessageInBackground(LocalMessage optimisticMessage) async {
+  Future<void> _syncMessageInBackground(LocalMessage optimisticMessage) async {
     final bgStartTime = DateTime.now();
     print(
         '🐛 [BACKGROUND] Starting background sync at ${bgStartTime.millisecondsSinceEpoch}');
+
+    // Message already registered earlier to prevent real-time duplicates
 
     try {
       // Now sync to server
@@ -315,29 +327,53 @@ class LocalMessagesNotifier
       // Persist sync state in local DB (replace local optimistic with real serverId)
       // This will trigger the stream and update the UI
       if (serverMessage.serverId != null) {
-        try {
-          final adopted = await ChatDatabase.adoptServerMessage(serverMessage);
-          if (adopted) {
-            print(
-                '🔄 [BACKGROUND] Server message adopted into existing optimistic message.');
-          } else {
-            // Fallback if adoption failed (e.g., optimistic message was deleted)
-            await ChatDatabase.markMessageSynced(
-              optimisticMessage.id.toString(),
-              serverMessage.serverId!,
-            );
-            print(
-                '⚠️ [BACKGROUND] Server message not adopted, marked as synced instead.');
+        // First check if a message with this serverId already exists (from real-time handler)
+        final existingServerMessage =
+            await ChatDatabase.getMessageByServerId(serverMessage.serverId!);
+        if (existingServerMessage != null) {
+          print(
+              '✅ [BACKGROUND] Server message ${serverMessage.serverId} already exists - skipping adoption');
+          return; // Server message already processed by real-time handler
+        }
+
+        // Check if the optimistic message still exists and needs adoption
+        final optimisticStillExists =
+            await ChatDatabase.getMessage(optimisticMessage.id.toString());
+        print(
+            '🔍 [BACKGROUND] Checking optimistic message ${optimisticMessage.id}: serverId=${optimisticStillExists?.serverId}, exists=${optimisticStillExists != null}');
+
+        if (optimisticStillExists?.serverId == null) {
+          print(
+              '🔄 [BACKGROUND] Optimistic message needs adoption - proceeding');
+          // Only try adoption if the optimistic message still exists and hasn't been adopted yet
+          try {
+            final adopted =
+                await ChatDatabase.adoptServerMessage(serverMessage);
+            if (adopted) {
+              print(
+                  '🔄 [BACKGROUND] Server message adopted into existing optimistic message.');
+            } else {
+              // Fallback if adoption failed (e.g., optimistic message was deleted)
+              await ChatDatabase.markMessageSynced(
+                optimisticMessage.id.toString(),
+                serverMessage.serverId!,
+              );
+              print(
+                  '⚠️ [BACKGROUND] Server message not adopted, marked as synced instead.');
+            }
+          } catch (e) {
+            if (e.toString().contains('Unique index violated')) {
+              print(
+                  '✅ [BACKGROUND] Message already adopted by real-time handler - skipping duplicate adoption.');
+              // This is expected when real-time handler beats the background sync
+              // The message is already properly synced, so we're done
+            } else {
+              rethrow; // Re-throw other errors
+            }
           }
-        } catch (e) {
-          if (e.toString().contains('Unique index violated')) {
-            print(
-                '✅ [BACKGROUND] Message already adopted by real-time handler - skipping duplicate adoption.');
-            // This is expected when real-time handler beats the background sync
-            // The message is already properly synced, so we're done
-          } else {
-            rethrow; // Re-throw other errors
-          }
+        } else {
+          print(
+              '✅ [BACKGROUND] Optimistic message already adopted by real-time handler - skipping background adoption.');
         }
       }
 
@@ -562,13 +598,11 @@ class LocalMessagesNotifier
 /// Provider for local contacts/users
 final localContactsProvider =
     StateNotifierProvider<LocalContactsNotifier, AsyncValue<List<LocalUser>>>(
-  (ref) => LocalContactsNotifier(ref.read(localChatServiceProvider)),
+  (ref) => LocalContactsNotifier(),
 );
 
 class LocalContactsNotifier extends StateNotifier<AsyncValue<List<LocalUser>>> {
-  final LocalChatService _chatService; // retained for future expansion
-
-  LocalContactsNotifier(this._chatService) : super(const AsyncValue.loading()) {
+  LocalContactsNotifier() : super(const AsyncValue.loading()) {
     _loadContacts();
   }
 
@@ -709,3 +743,10 @@ class LocalChatRealtime {
 
   // _handleRealtimeMessage no longer needed; DB-stream handles updates
 }
+
+/// Provider for RealtimeDispatcher (Singleton)
+final realtimeDispatcherProvider = Provider<RealtimeDispatcher>((ref) {
+  final dispatcher = RealtimeDispatcher.instance;
+  dispatcher.initialize(ref);
+  return dispatcher;
+});

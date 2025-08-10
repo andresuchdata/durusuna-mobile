@@ -167,6 +167,26 @@ class ChatDatabase {
           await _isar.localMessages.put(upgraded);
           print(
               '✅ [DATABASE] Adopted by clientMessageId ${serverMessage.clientMessageId} - updated readStatus from "${optimistic.readStatus}" to "${upgraded.readStatus}"');
+          // Cleanup any other optimistic duplicates (same content, same sender) after adoption
+          try {
+            final duplicates = await _isar.localMessages
+                .where()
+                .conversationIdEqualTo(serverMessage.conversationId)
+                .filter()
+                .serverIdIsNull()
+                .and()
+                .isFromMeEqualTo(true)
+                .and()
+                .contentEqualTo(serverMessage.content)
+                .findAll();
+            for (final dup in duplicates) {
+              if (dup.id != upgraded.id) {
+                await _isar.localMessages.delete(dup.id);
+                print(
+                    '🧹 [DATABASE] Deleted optimistic duplicate ${dup.id} after clientMessageId adoption');
+              }
+            }
+          } catch (_) {}
           return true;
         } else {
           print(
@@ -188,6 +208,24 @@ class ChatDatabase {
           readAt: serverMessage.readAt ?? existingServer.readAt,
         );
         await _isar.localMessages.put(updated);
+        // Cleanup any leftover optimistic duplicates with same content
+        try {
+          final duplicates = await _isar.localMessages
+              .where()
+              .conversationIdEqualTo(serverMessage.conversationId)
+              .filter()
+              .serverIdIsNull()
+              .and()
+              .isFromMeEqualTo(true)
+              .and()
+              .contentEqualTo(serverMessage.content)
+              .findAll();
+          for (final dup in duplicates) {
+            await _isar.localMessages.delete(dup.id);
+            print(
+                '🧹 [DATABASE] Deleted optimistic duplicate ${dup.id} (server row already existed)');
+          }
+        } catch (_) {}
         return true;
       }
 
@@ -233,6 +271,26 @@ class ChatDatabase {
         await _isar.localMessages.put(upgraded);
         print(
             '🔄 [DATABASE] Adopted server message ${serverMessage.serverId} into optimistic local ${best.id}');
+        // Cleanup any other optimistic duplicates (same content, same sender)
+        try {
+          final duplicates = await _isar.localMessages
+              .where()
+              .conversationIdEqualTo(serverMessage.conversationId)
+              .filter()
+              .serverIdIsNull()
+              .and()
+              .isFromMeEqualTo(true)
+              .and()
+              .contentEqualTo(serverMessage.content)
+              .findAll();
+          for (final dup in duplicates) {
+            if (dup.id != upgraded.id) {
+              await _isar.localMessages.delete(dup.id);
+              print(
+                  '🧹 [DATABASE] Deleted optimistic duplicate ${dup.id} after content/time adoption');
+            }
+          }
+        } catch (_) {}
         return true;
       }
 
@@ -241,6 +299,24 @@ class ChatDatabase {
         await _isar.localMessages.put(serverMessage);
         print(
             '🆕 [DATABASE] Inserted server message ${serverMessage.serverId}');
+        // Cleanup any leftover optimistic duplicates (same content, same sender)
+        try {
+          final duplicates = await _isar.localMessages
+              .where()
+              .conversationIdEqualTo(serverMessage.conversationId)
+              .filter()
+              .serverIdIsNull()
+              .and()
+              .isFromMeEqualTo(true)
+              .and()
+              .contentEqualTo(serverMessage.content)
+              .findAll();
+          for (final dup in duplicates) {
+            await _isar.localMessages.delete(dup.id);
+            print(
+                '🧹 [DATABASE] Deleted optimistic duplicate ${dup.id} after server insert');
+          }
+        } catch (_) {}
         return false;
       } catch (e) {
         // Handle race: unique index may be taken by another concurrent save
@@ -284,6 +360,21 @@ class ChatDatabase {
   /// Get all messages (for debugging)
   static Future<List<LocalMessage>> getAllMessages() async {
     return await _isar.localMessages.where().findAll();
+  }
+
+  /// Get message by local ID
+  static Future<LocalMessage?> getMessage(String localId) async {
+    final intLocalId = int.tryParse(localId);
+    if (intLocalId == null) return null;
+    return await _isar.localMessages.get(intLocalId);
+  }
+
+  /// Get message by server ID
+  static Future<LocalMessage?> getMessageByServerId(String serverId) async {
+    return await _isar.localMessages
+        .where()
+        .serverIdEqualTo(serverId)
+        .findFirst();
   }
 
   /// Get messages for conversation (instant loading)

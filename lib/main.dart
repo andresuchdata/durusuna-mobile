@@ -10,6 +10,7 @@ import 'core/storage/storage_service.dart';
 import 'core/utils/global_auth_handler.dart';
 import 'core/utils/platform_optimization.dart';
 import 'shared/providers/app_providers.dart';
+import 'shared/providers/local_chat_providers.dart';
 import 'shared/services/realtime_service.dart';
 
 import 'shared/services/realtime_dispatcher.dart';
