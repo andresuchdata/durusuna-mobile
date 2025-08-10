@@ -400,8 +400,8 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                                   // Main content and meta with normal horizontal padding
                                   Padding(
                                     padding: EdgeInsets.only(
-                                      left: widget.isMe ? 6 : 22,
-                                      right: widget.isMe ? 22 : 6,
+                                      left: widget.isMe ? 6 : 12,
+                                      right: widget.isMe ? 12 : 6,
                                       top: 0,
                                       bottom: 0,
                                     ),
@@ -451,8 +451,8 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                               ),
                               if (!widget.isSelectionMode)
                                 Positioned(
-                                  bottom: 4,
-                                  right: 4,
+                                  bottom: 2,
+                                  right: 2,
                                   child: IgnorePointer(
                                     ignoring: !_showReactionTrigger,
                                     child: AnimatedOpacity(
