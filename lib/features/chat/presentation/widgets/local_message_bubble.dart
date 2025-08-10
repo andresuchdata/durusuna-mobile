@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/local_message.dart';
 import '../../../../shared/database/chat_database.dart';
+import '../../../../shared/models/user.dart';
 
 class LocalMessageBubble extends StatelessWidget {
   final LocalMessage message;
@@ -18,6 +21,7 @@ class LocalMessageBubble extends StatelessWidget {
   final Color? customReceivedBubbleColor;
   final String? senderName;
   final String? senderAvatarUrl;
+  final List<User>? participants;
 
   const LocalMessageBubble({
     super.key,
@@ -32,6 +36,7 @@ class LocalMessageBubble extends StatelessWidget {
     this.customReceivedBubbleColor,
     this.senderName,
     this.senderAvatarUrl,
+    this.participants,
   });
 
   /// Get the bubble color based on theme and customization
@@ -104,6 +109,91 @@ class LocalMessageBubble extends StatelessWidget {
 
   bool get _shouldShowAvatar => isGroup && !isMe;
 
+  User? _findParticipant(String userId) {
+    try {
+      return participants?.firstWhere((u) => u.id == userId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _initialsFromName(String name) {
+    final parts = name.trim().split(' ').where((w) => w.isNotEmpty).toList();
+    if (parts.isEmpty) return 'U';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
+  // Insert zero-width spaces after common URL delimiters to allow soft wrapping
+  String _wrapLinksForBreaking(String input) {
+    if (input.isEmpty) return input;
+    const breakChars = ['/', '?', '&', '=', '.', '-', '_', ':'];
+    final buffer = StringBuffer();
+    for (int i = 0; i < input.length; i++) {
+      final ch = input[i];
+      buffer.write(ch);
+      if (breakChars.contains(ch)) {
+        buffer.write('\u200B'); // zero-width space for wrapping
+      }
+    }
+    return buffer.toString();
+  }
+
+  // Build linkified rich text for message/quote content
+  Widget _buildLinkifiedText(
+    BuildContext context,
+    String text,
+    TextStyle baseStyle,
+  ) {
+    final linkRegExp =
+        RegExp(r'((https?:\/\/|www\.)[^\s]+)', caseSensitive: false);
+    final spans = <InlineSpan>[];
+    int currentIndex = 0;
+    final matches = linkRegExp.allMatches(text).toList();
+
+    for (final match in matches) {
+      if (match.start > currentIndex) {
+        final nonLink = text.substring(currentIndex, match.start);
+        spans.add(
+            TextSpan(text: _wrapLinksForBreaking(nonLink), style: baseStyle));
+      }
+
+      final urlText = text.substring(match.start, match.end);
+      final display = _wrapLinksForBreaking(urlText);
+      final uri =
+          Uri.parse(urlText.startsWith('http') ? urlText : 'https://$urlText');
+      final linkStyle = baseStyle.copyWith(
+        color: const Color.fromARGB(255, 37, 77, 189),
+        decoration: TextDecoration.underline,
+        fontWeight: FontWeight.w600,
+      );
+      spans.add(TextSpan(
+        text: display,
+        style: linkStyle,
+        recognizer: TapGestureRecognizer()
+          ..onTap = () async {
+            try {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            } catch (_) {}
+          },
+      ));
+      currentIndex = match.end;
+    }
+
+    if (currentIndex < text.length) {
+      spans.add(TextSpan(
+        text: _wrapLinksForBreaking(text.substring(currentIndex)),
+        style: baseStyle,
+      ));
+    }
+
+    return Text.rich(
+      TextSpan(children: spans),
+      softWrap: true,
+      maxLines: null,
+    );
+  }
+
   // Deterministic color by userId (for quoted sender sidebar)
   Color _colorForUserId(String userId) {
     final seed = userId.hashCode;
@@ -128,7 +218,7 @@ class LocalMessageBubble extends StatelessWidget {
       final leftColor = isGroup ? _senderColor(context) : AppTheme.primaryColor;
       return _quotedContainer(
         context,
-        message.replyToContent!,
+        _wrapLinksForBreaking(message.replyToContent!),
         leftColor: leftColor,
       );
     }
@@ -152,19 +242,91 @@ class LocalMessageBubble extends StatelessWidget {
         }
         final leftColor =
             isGroup ? _colorForUserId(quoted.senderId) : AppTheme.primaryColor;
-        return _quotedContainer(context, quoted.content!, leftColor: leftColor);
+        final user = _findParticipant(quoted.senderId);
+        final quotedName = user?.displayName;
+        final quotedAvatarUrl = user?.avatarUrl;
+        return _quotedContainer(
+          context,
+          _wrapLinksForBreaking(quoted.content!),
+          leftColor: leftColor,
+          quotedName: quotedName,
+          quotedAvatarUrl: quotedAvatarUrl,
+        );
       },
     );
   }
 
-  Widget _quotedContainer(BuildContext context, String text,
-      {required Color leftColor}) {
+  Widget _quotedContainer(
+    BuildContext context,
+    String text, {
+    required Color leftColor,
+    String? quotedName,
+    String? quotedAvatarUrl,
+  }) {
+    final baseTextStyle = TextStyle(
+      fontSize: 13,
+      color: Theme.of(context).brightness == Brightness.dark
+          ? AppTheme.darkTextPrimary
+          : AppTheme.textPrimary,
+      height: 1.25,
+    );
+
+    final nameStyle = baseTextStyle.copyWith(
+      fontWeight: FontWeight.w700,
+      color: quotedName != null && isGroup
+          ? leftColor
+          : (Theme.of(context).brightness == Brightness.dark
+              ? AppTheme.darkTextSecondary
+              : AppTheme.textSecondary),
+    );
+
+    Widget inner = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if ((quotedName?.isNotEmpty ?? false))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(quotedName!, style: nameStyle),
+          ),
+        _buildLinkifiedText(context, text, baseTextStyle),
+      ],
+    );
+
+    if (isGroup && (quotedName?.isNotEmpty ?? false)) {
+      final initials = _initialsFromName(quotedName!);
+      inner = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 10,
+            backgroundColor: leftColor,
+            backgroundImage:
+                (quotedAvatarUrl != null && quotedAvatarUrl.isNotEmpty)
+                    ? NetworkImage(quotedAvatarUrl)
+                    : null,
+            child: (quotedAvatarUrl == null || quotedAvatarUrl.isEmpty)
+                ? Text(
+                    initials,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: inner),
+        ],
+      );
+    }
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 6, top: 2),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        // Lighter background for sender so text can remain dark/gray
         color: isMe
             ? Colors.white.withValues(alpha: 0.9)
             : AppTheme.primaryColor.withValues(alpha: 0.08),
@@ -173,18 +335,7 @@ class LocalMessageBubble extends StatelessWidget {
           left: BorderSide(color: leftColor, width: 4),
         ),
       ),
-      child: Text(
-        text,
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 13,
-          color: Theme.of(context).brightness == Brightness.dark
-              ? AppTheme.darkTextPrimary
-              : AppTheme.textPrimary,
-          height: 1.25,
-        ),
-      ),
+      child: inner,
     );
   }
 
@@ -328,9 +479,10 @@ class LocalMessageBubble extends StatelessWidget {
                                 ),
                               _buildQuotedPreview(context),
                               // Main content
-                              Text(
+                              _buildLinkifiedText(
+                                context,
                                 message.content ?? '',
-                                style: TextStyle(
+                                TextStyle(
                                   color: _getTextColor(context),
                                   fontSize: 15,
                                   height: 1.3,

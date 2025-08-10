@@ -405,6 +405,39 @@ class LocalChatService {
     }
   }
 
+  /// Fetch latest messages page from server regardless of local cursor
+  /// Useful when conversation list shows a newer last message that isn't in local DB
+  Future<void> fetchLatestFromServer(String conversationId,
+      {int limit = 10}) async {
+    try {
+      final path = ApiConstants.getConversationMessages(conversationId);
+      final response = await _apiService.get(
+        path,
+        queryParameters: {
+          'page': 1,
+          'limit': limit,
+        },
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final messagesList = data['messages'] as List? ?? const [];
+      final currentUserId = StorageService.getUser()?['id'];
+      if (currentUserId == null) return;
+
+      final localMessages = messagesList
+          .map((json) => LocalMessageExtension.fromApiJson(
+                json,
+                isFromMe: json['sender_id'] == currentUserId,
+              ))
+          .toList();
+
+      await ChatDatabase.saveMessages(localMessages);
+    } catch (e) {
+      // Swallow errors; this is a best-effort helper
+      print('fetchLatestFromServer failed: $e');
+    }
+  }
+
   /// Reconcile pending items when opening a chat: adopt server copies, fail stale
   Future<void> reconcilePendingOnOpen(String conversationId,
       {Duration staleAfter = const Duration(seconds: 45)}) async {

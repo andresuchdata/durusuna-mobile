@@ -11,6 +11,7 @@ import '../../../../shared/models/local_message.dart';
 import '../../../../shared/models/conversation.dart';
 import '../../../../shared/providers/local_chat_providers.dart';
 import '../../../../shared/services/local_chat_service.dart';
+import '../../../../shared/database/chat_database.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/chat_action_bar.dart';
 import '../widgets/local_message_bubble.dart';
@@ -98,6 +99,28 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         try {
           final chatService = ref.read(localChatServiceProvider);
           await chatService.reconcilePendingOnOpen(widget.conversation.id);
+        } catch (_) {}
+      });
+
+      // Ensure the most recent messages are present when opening chat, even if local DB isn't empty
+      Future.delayed(const Duration(milliseconds: 400), () async {
+        try {
+          final latestLocal =
+              await ChatDatabase.getLatestMessage(widget.conversation.id);
+          final DateTime? conversationTime =
+              widget.conversation.lastMessageAt ??
+                  widget.conversation.lastMessage?.createdAt;
+          if (conversationTime != null &&
+              (latestLocal == null ||
+                  conversationTime.isAfter(latestLocal.createdAt))) {
+            final chatService = ref.read(localChatServiceProvider);
+            // Try cursor-based first
+            await chatService
+                .forceSyncMessagesFromServer(widget.conversation.id);
+            // Fallback direct latest fetch in case cursor yields no new items
+            await chatService.fetchLatestFromServer(widget.conversation.id,
+                limit: 20);
+          }
         } catch (_) {}
       });
 
@@ -893,6 +916,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                     .contains(message.serverId ?? message.id.toString()),
                 senderName: _getSenderDisplayName(message),
                 senderAvatarUrl: _getSenderAvatarUrl(message),
+                participants: widget.conversation.participants,
                 onTap: () {
                   if (_isSelectionMode) {
                     _toggleMessageSelection(message);
