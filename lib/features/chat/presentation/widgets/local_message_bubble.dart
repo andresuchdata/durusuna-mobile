@@ -374,6 +374,7 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                                   ],
                           ),
                           child: Stack(
+                            clipBehavior: Clip.none,
                             children: [
                               // Bubble content
                               Column(
@@ -451,8 +452,8 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                               ),
                               if (!widget.isSelectionMode)
                                 Positioned(
-                                  bottom: 2,
-                                  right: 2,
+                                  bottom: -6,
+                                  right: -2,
                                   child: IgnorePointer(
                                     ignoring: !_showReactionTrigger,
                                     child: AnimatedOpacity(

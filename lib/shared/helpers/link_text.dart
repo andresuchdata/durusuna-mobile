@@ -57,7 +57,7 @@ class LinkTextHelper {
           Uri.parse(urlText.startsWith('http') ? urlText : 'https://$urlText');
       final linkStyle = baseStyle.copyWith(
         color: const Color.fromARGB(255, 37, 77, 189),
-        decoration: TextDecoration.underline,
+        decoration: TextDecoration.none,
         fontWeight: FontWeight.w600,
       );
       spans.add(TextSpan(
