@@ -208,6 +208,28 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     }
   }
 
+  String? _getSenderDisplayName(LocalMessage message) {
+    if (widget.conversation.type != 'group' || message.isFromMe) return null;
+    try {
+      final participant = widget.conversation.participants
+          .firstWhere((p) => p.id == message.senderId);
+      return '${participant.firstName} ${participant.lastName}'.trim();
+    } catch (_) {
+      return 'Unknown';
+    }
+  }
+
+  String? _getSenderAvatarUrl(LocalMessage message) {
+    if (widget.conversation.type != 'group' || message.isFromMe) return null;
+    try {
+      final participant = widget.conversation.participants
+          .firstWhere((p) => p.id == message.senderId);
+      return participant.avatarUrl;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Track if we've already marked as read when at bottom to avoid multiple calls
   bool _hasMarkedAsReadAtBottom = false;
 
@@ -865,9 +887,12 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                     message.id.toString()),
                 message: message,
                 isMe: isMe,
+                isGroup: widget.conversation.type == 'group',
                 isSelectionMode: _isSelectionMode,
                 isSelected: _selectedMessageIds
                     .contains(message.serverId ?? message.id.toString()),
+                senderName: _getSenderDisplayName(message),
+                senderAvatarUrl: _getSenderAvatarUrl(message),
                 onTap: () {
                   if (_isSelectionMode) {
                     _toggleMessageSelection(message);
