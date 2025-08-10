@@ -117,89 +117,125 @@ class _ChatInputState extends State<ChatInput> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       children: [
-        // Chat input row
+        // Chat input row with sleek design
         Container(
-          padding: const EdgeInsets.all(16),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(top: BorderSide(color: AppTheme.borderColor)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1F1F1F) : Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, -2),
+              ),
+            ],
           ),
           child: SafeArea(
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Attachment button
-                IconButton(
-                  onPressed: widget.onAttachment,
-                  icon: const Icon(Icons.attach_file),
-                  color: AppTheme.primaryColor,
-                ),
-
-                // Text input
+                // Main text input container
                 Expanded(
                   child: Container(
+                    constraints:
+                        const BoxConstraints(minHeight: 40, maxHeight: 100),
                     decoration: BoxDecoration(
-                      color: AppTheme.backgroundColor,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppTheme.borderColor),
+                      color: isDark
+                          ? const Color(0xFF2C2C2C)
+                          : const Color(0xFFF5F5F5),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: Colors.transparent, width: 0),
                     ),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
+                        // Inline emoji button inside the input
+                        Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _showEmojiPicker = !_showEmojiPicker;
+                              });
+                              if (_showEmojiPicker) {
+                                widget.focusNode.unfocus();
+                              } else {
+                                widget.focusNode.requestFocus();
+                              }
+                            },
+                            icon: Icon(
+                              _showEmojiPicker
+                                  ? Icons.keyboard_outlined
+                                  : Icons.sentiment_satisfied_alt_outlined,
+                              size: 20,
+                            ),
+                            color: _showEmojiPicker
+                                ? AppTheme.primaryColor
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.6),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 28),
+                          ),
+                        ),
                         // Text field
                         Expanded(
                           child: TextField(
                             controller: widget.controller,
                             focusNode: widget.focusNode,
-                            decoration: const InputDecoration(
-                              hintText: 'Type a message...',
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: isDark ? Colors.white : Colors.black87,
                             ),
-                            maxLines: 4,
+                            decoration: InputDecoration(
+                              hintText: 'Type a message...',
+                              hintStyle: TextStyle(
+                                fontSize: 16,
+                                color: isDark ? Colors.white54 : Colors.black54,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 10),
+                            ),
+                            maxLines: 5,
                             minLines: 1,
                             textCapitalization: TextCapitalization.sentences,
                             onTap: () {
-                              // Hide emoji picker when text field is tapped
                               if (_showEmojiPicker) {
-                                setState(() {
-                                  _showEmojiPicker = false;
-                                });
+                                setState(() => _showEmojiPicker = false);
                               }
                             },
                           ),
                         ),
 
-                        // Emoji button
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _showEmojiPicker = !_showEmojiPicker;
-                            });
-                            if (_showEmojiPicker) {
-                              widget.focusNode.unfocus();
-                            } else {
-                              widget.focusNode.requestFocus();
-                            }
-                          },
-                          icon: Icon(
-                            _showEmojiPicker
-                                ? Icons.keyboard
-                                : Icons.emoji_emotions_outlined,
+                        // Camera icon inside input (no border)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6, bottom: 2),
+                          child: IconButton(
+                            onPressed: widget.onAttachment,
+                            icon: const Icon(
+                              Icons.camera_alt_outlined,
+                              size: 20,
+                            ),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.6),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 28),
                           ),
-                          color: _showEmojiPicker
-                              ? AppTheme.primaryColor
-                              : AppTheme.textSecondary,
                         ),
                       ],
                     ),
                   ),
                 ),
-
-                const SizedBox(width: 8),
 
                 // Send/Voice button
                 AnimatedSwitcher(
@@ -223,22 +259,32 @@ class _ChatInputState extends State<ChatInput> {
     );
   }
 
+  // Deprecated: replaced by inline icons within the input row
+
   Widget _buildSendButton() {
     return Container(
       key: const ValueKey('send'),
-      width: 48,
-      height: 48,
-      decoration: const BoxDecoration(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
         color: AppTheme.primaryColor,
-        shape: BoxShape.circle,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryColor.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: IconButton(
         onPressed: _handleSend,
         icon: const Icon(
-          Icons.send,
+          Icons.send_rounded,
           color: Colors.white,
           size: 20,
         ),
+        padding: EdgeInsets.zero,
       ),
     );
   }
@@ -246,11 +292,18 @@ class _ChatInputState extends State<ChatInput> {
   Widget _buildVoiceButton() {
     return Container(
       key: const ValueKey('voice'),
-      width: 48,
-      height: 48,
-      decoration: const BoxDecoration(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
         color: AppTheme.primaryColor,
-        shape: BoxShape.circle,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryColor.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: IconButton(
         onPressed: () {
@@ -260,10 +313,11 @@ class _ChatInputState extends State<ChatInput> {
           );
         },
         icon: const Icon(
-          Icons.mic,
+          Icons.mic_rounded,
           color: Colors.white,
           size: 20,
         ),
+        padding: EdgeInsets.zero,
       ),
     );
   }

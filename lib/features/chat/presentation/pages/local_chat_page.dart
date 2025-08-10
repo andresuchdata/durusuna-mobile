@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
@@ -9,11 +8,16 @@ import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/models/local_message.dart';
 import '../../../../shared/models/conversation.dart';
+import '../../../../shared/models/user.dart';
 import '../../../../shared/providers/local_chat_providers.dart';
 import '../../../../shared/services/local_chat_service.dart';
+import '../../../../shared/database/chat_database.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/chat_action_bar.dart';
 import '../widgets/local_message_bubble.dart';
+import '../widgets/reaction_bar.dart';
+import 'dart:convert';
+import '../../../../shared/widgets/reactions_widget.dart';
 import '../widgets/chat_top_user_panel.dart';
 
 /// Local-first chat page with instant loading and offline support
@@ -54,6 +58,177 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   // Selection mode state
   final Set<String> _selectedMessageIds = {};
   bool _isSelectionMode = false;
+
+  // UI: show floating reaction bar
+  OverlayEntry? _reactionOverlay;
+  void _showReactionBar(
+      BuildContext context, Rect anchorRect, LocalMessage message) {
+    _hideReactionBar();
+    final overlay = Overlay.of(context);
+    // Overlay is non-null in material apps; guard kept minimal
+    // Position reaction bar near the trigger. If it's my message, place to the left.
+    final currentUserId = ref.read(authStateProvider).user?.id;
+    final isMe = currentUserId != null && message.senderId == currentUserId;
+    final screenSize = MediaQuery.of(context).size;
+    final estimatedBarWidth = 240.0;
+    final top = anchorRect.bottom - 56;
+    double left = isMe
+        ? (anchorRect.left - estimatedBarWidth)
+        : (anchorRect.right - estimatedBarWidth / 2);
+    // Clamp to viewport
+    if (left < 8) left = 8;
+    if (left + estimatedBarWidth > screenSize.width - 8) {
+      left = screenSize.width - estimatedBarWidth - 8;
+    }
+    _reactionOverlay = OverlayEntry(
+      builder: (_) {
+        final clampedTop =
+            top.clamp(8.0, MediaQuery.of(context).size.height - 80);
+        final clampedLeft = left;
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _hideReactionBar,
+                onSecondaryTap: _hideReactionBar,
+              ),
+            ),
+            Positioned(
+              top: clampedTop,
+              left: clampedLeft,
+              child: ReactionBar(
+                emojis: const ['👍', '❤️', '😂', '😮', '😢', '🙏'],
+                onSelect: (emoji) async {
+                  debugPrint(
+                      '[Reaction] select: $emoji msg=${message.serverId ?? message.id}');
+                  _hideReactionBar();
+                  try {
+                    if (message.serverId == null) return;
+                    final reactionsMap = await ref
+                        .read(localChatServiceProvider)
+                        .toggleReactionOnServer(message.serverId!, emoji);
+                    debugPrint('[Reaction] server updated: $reactionsMap');
+                    await ChatDatabase.updateMessageReactions(
+                      serverId: message.serverId,
+                      reactionsJson: jsonEncode(reactionsMap),
+                    );
+                  } catch (e) {
+                    debugPrint('[Reaction] ERROR toggling reaction: $e');
+                  }
+                },
+                onOpenPicker: () {
+                  debugPrint('[Reaction] open picker for msg=' +
+                      (message.serverId ?? message.id.toString()));
+                  _hideReactionBar();
+                  showDialog(
+                    context: context,
+                    builder: (_) => Dialog(
+                      backgroundColor: Colors.transparent,
+                      insetPadding: const EdgeInsets.all(24),
+                      child: ReactionPicker(
+                        onEmojiSelected: (emoji) async {
+                          debugPrint(
+                              '[Reaction] picker select: $emoji msg=${message.serverId ?? message.id}');
+                          try {
+                            if (message.serverId == null) return;
+                            final reactionsMap = await ref
+                                .read(localChatServiceProvider)
+                                .toggleReactionOnServer(
+                                    message.serverId!, emoji);
+                            debugPrint(
+                                '[Reaction] server updated: $reactionsMap');
+                            await ChatDatabase.updateMessageReactions(
+                              serverId: message.serverId,
+                              reactionsJson: jsonEncode(reactionsMap),
+                            );
+                          } catch (e) {
+                            debugPrint(
+                                '[Reaction] ERROR toggling reaction from picker: $e');
+                          }
+                        },
+                        onClose: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlay.insert(_reactionOverlay!);
+  }
+
+  void _hideReactionBar() {
+    _reactionOverlay?.remove();
+    _reactionOverlay = null;
+  }
+
+  Widget _buildReactionChips(LocalMessage message, bool isMe) {
+    try {
+      final reactionsJson = message.reactions;
+      final reactions = reactionsJson == null || reactionsJson.isEmpty
+          ? <String, dynamic>{}
+          : (jsonDecode(reactionsJson) as Map<String, dynamic>);
+
+      if (reactions.isEmpty) return const SizedBox.shrink();
+
+      final currentUserId = ref.read(authStateProvider).user?.id;
+
+      return Padding(
+        padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
+        child: Align(
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: ReactionsWidget(
+            reactions: reactions,
+            currentUserId: currentUserId,
+            onReactionTap: (emoji) async {
+              try {
+                if (message.serverId == null) return;
+                final reactionsMap = await ref
+                    .read(localChatServiceProvider)
+                    .toggleReactionOnServer(message.serverId!, emoji);
+                await ChatDatabase.updateMessageReactions(
+                  serverId: message.serverId,
+                  reactionsJson: jsonEncode(reactionsMap),
+                );
+              } catch (_) {}
+            },
+            onAddReaction: () {
+              _hideReactionBar();
+              showDialog(
+                context: context,
+                builder: (_) => Dialog(
+                  backgroundColor: Colors.transparent,
+                  insetPadding: const EdgeInsets.all(24),
+                  child: ReactionPicker(
+                    onEmojiSelected: (emoji) async {
+                      try {
+                        if (message.serverId == null) return;
+                        final reactionsMap = await ref
+                            .read(localChatServiceProvider)
+                            .toggleReactionOnServer(message.serverId!, emoji);
+                        await ChatDatabase.updateMessageReactions(
+                          serverId: message.serverId,
+                          reactionsJson: jsonEncode(reactionsMap),
+                        );
+                      } catch (_) {}
+                    },
+                    onClose: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              );
+            },
+            isMyMessage: isMe,
+          ),
+        ),
+      );
+    } catch (e) {
+      return const SizedBox.shrink();
+    }
+  }
 
   // State for replying to a message
   LocalMessage? _replyingToMessage;
@@ -98,6 +273,28 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         try {
           final chatService = ref.read(localChatServiceProvider);
           await chatService.reconcilePendingOnOpen(widget.conversation.id);
+        } catch (_) {}
+      });
+
+      // Ensure the most recent messages are present when opening chat, even if local DB isn't empty
+      Future.delayed(const Duration(milliseconds: 400), () async {
+        try {
+          final latestLocal =
+              await ChatDatabase.getLatestMessage(widget.conversation.id);
+          final DateTime? conversationTime =
+              widget.conversation.lastMessageAt ??
+                  widget.conversation.lastMessage?.createdAt;
+          if (conversationTime != null &&
+              (latestLocal == null ||
+                  conversationTime.isAfter(latestLocal.createdAt))) {
+            final chatService = ref.read(localChatServiceProvider);
+            // Try cursor-based first
+            await chatService
+                .forceSyncMessagesFromServer(widget.conversation.id);
+            // Fallback direct latest fetch in case cursor yields no new items
+            await chatService.fetchLatestFromServer(widget.conversation.id,
+                limit: 20);
+          }
         } catch (_) {}
       });
 
@@ -320,9 +517,32 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   void _showProfileCard() {
-    // TODO: Implement profile card
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile card coming soon')),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final isGroup = widget.conversation.type == 'group';
+        final name = _getDisplayName();
+        final avatarUrl = _getAvatarUrl();
+        final initials = _getInitials();
+        final description = isGroup
+            ? (widget.conversation.description ?? 'No description')
+            : (widget.conversation.otherUser?.email ?? '');
+
+        return _ProfileCardSheet(
+          isGroup: isGroup,
+          name: name,
+          avatarUrl: avatarUrl,
+          initials: initials,
+          description: description,
+          participants: widget.conversation.participants,
+          isOnline: widget.conversation.isOnline,
+          lastSeenLabel: widget.conversation.lastActivity != null
+              ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
+              : null,
+        );
+      },
     );
   }
 
@@ -536,17 +756,6 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
       // Feedback is already handled in deleteBatchMessages method
     });
-  }
-
-  /// Handle delete of a single message
-  Future<void> _handleDeleteMessage(LocalMessage message) async {
-    final notifier =
-        ref.read(localMessagesProvider(widget.conversation.id).notifier);
-
-    // Use batch delete for consistency (single message batch)
-    await notifier.deleteBatchMessages([message], context);
-
-    // Feedback is already handled in deleteBatchMessages method
   }
 
   void _scrollToBottom({bool animated = true}) {
@@ -893,17 +1102,51 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                     .contains(message.serverId ?? message.id.toString()),
                 senderName: _getSenderDisplayName(message),
                 senderAvatarUrl: _getSenderAvatarUrl(message),
+                participants: widget.conversation.participants,
                 onTap: () {
                   if (_isSelectionMode) {
                     _toggleMessageSelection(message);
-                  } else {
-                    _showMessageOptions(context, message);
                   }
                 },
-                onLongPress: () =>
-                    _isSelectionMode ? null : _enterSelectionMode(message),
+                onLongPress: () {
+                  if (_isSelectionMode) {
+                    _toggleMessageSelection(message);
+                  } else {
+                    _enterSelectionMode(message);
+                  }
+                },
+                onDoubleTap: () {
+                  // Quick react: show bar centered over bubble for now
+                  final key = _getMessageKey(message.serverId ??
+                      message.clientMessageId ??
+                      message.id.toString());
+                  final ctx = key.currentContext;
+                  if (ctx != null) {
+                    final box = ctx.findRenderObject() as RenderBox?;
+                    if (box != null) {
+                      final rect = box.localToGlobal(Offset.zero) & box.size;
+                      _showReactionBar(context, rect, message);
+                    }
+                  }
+                },
+                onAddReaction: () {
+                  final key = _getMessageKey(message.serverId ??
+                      message.clientMessageId ??
+                      message.id.toString());
+                  final ctx = key.currentContext;
+                  if (ctx != null) {
+                    final box = ctx.findRenderObject() as RenderBox?;
+                    if (box != null) {
+                      final rect = box.localToGlobal(Offset.zero) & box.size;
+                      _showReactionBar(context, rect, message);
+                    }
+                  }
+                },
               ),
             ),
+            // Reaction chips below the bubble
+            if (message.reactions != null && message.reactions!.isNotEmpty)
+              _buildReactionChips(message, isMe),
           ],
         );
       },
@@ -1073,90 +1316,190 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     }
   }
 
-  /// Show message options bottom sheet (only when not in selection mode)
-  void _showMessageOptions(BuildContext context, LocalMessage message) {
-    if (_isSelectionMode) return; // Don't show options in selection mode
+  // Removed message options bottom sheet; long-press selects the message.
 
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => SafeArea(
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-
-              // Reply option
-              ListTile(
-                leading: const Icon(Icons.reply),
-                title: const Text('Reply'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _replyToMessage(message);
-                },
-              ),
-
-              // Select option
-              ListTile(
-                leading: const Icon(Icons.check_circle_outline),
-                title: const Text('Select'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _enterSelectionMode(message);
-                },
-              ),
-
-              // Copy option
-              ListTile(
-                leading: const Icon(Icons.copy),
-                title: const Text('Copy'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _copyMessage(message);
-                },
-              ),
-
-              // Delete option (only for own messages or if user is admin)
-              if (message.isFromMe)
-                ListTile(
-                  leading: const Icon(Icons.delete, color: AppTheme.errorColor),
-                  title: const Text('Delete',
-                      style: TextStyle(color: AppTheme.errorColor)),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _handleDeleteMessage(message);
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Copy message content to clipboard
-  void _copyMessage(LocalMessage message) {
-    Clipboard.setData(ClipboardData(text: message.content ?? ''));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Message copied to clipboard'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
+  // (unused)
+  // void _copyMessage(LocalMessage message) {}
 
   // Status icon logic moved to LocalMessageBubble
+}
+
+class _ProfileCardSheet extends StatelessWidget {
+  final bool isGroup;
+  final String name;
+  final String avatarUrl;
+  final String initials;
+  final String description;
+  final List<User> users;
+  final bool isOnline;
+  final String? lastSeenLabel;
+
+  const _ProfileCardSheet({
+    required this.isGroup,
+    required this.name,
+    required this.avatarUrl,
+    required this.initials,
+    required this.description,
+    required List<User> participants,
+    required this.isOnline,
+    required this.lastSeenLabel,
+  }) : users = participants;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DraggableScrollableSheet(
+      initialChildSize: 0.5,
+      minChildSize: 0.35,
+      maxChildSize: 0.9,
+      builder: (context, controller) {
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(30),
+                blurRadius: 12,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: CustomScrollView(
+            controller: controller,
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          CircleAvatar(
+                            radius: 40,
+                            backgroundColor: AppTheme.primaryColor,
+                            backgroundImage: avatarUrl.isNotEmpty
+                                ? NetworkImage(avatarUrl)
+                                : null,
+                            child: avatarUrl.isEmpty
+                                ? Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          if (!isGroup && isOnline)
+                            Container(
+                              margin:
+                                  const EdgeInsets.only(right: 4, bottom: 4),
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                shape: BoxShape.circle,
+                                border:
+                                    Border.all(color: Colors.white, width: 3),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        name,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      if (!isGroup && (lastSeenLabel != null))
+                        Text(
+                          isOnline ? 'Online' : lastSeenLabel!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isOnline
+                                ? AppTheme.successColor
+                                : AppTheme.textSecondary,
+                          ),
+                        ),
+                      if (isGroup && description.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          description,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              fontSize: 13, color: AppTheme.textSecondary),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      if (isGroup)
+                        const Row(
+                          children: [
+                            Text(
+                              'Participants',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              if (isGroup)
+                SliverList.separated(
+                  itemBuilder: (context, index) {
+                    final user = users[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppTheme.primaryColor,
+                        backgroundImage: (user.avatarUrl?.isNotEmpty ?? false)
+                            ? NetworkImage(user.avatarUrl!)
+                            : null,
+                        child: (user.avatarUrl == null ||
+                                user.avatarUrl!.isEmpty)
+                            ? Text(
+                                _initialsFrom(user.firstName, user.lastName),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600),
+                              )
+                            : null,
+                      ),
+                      title: Text('${user.firstName} ${user.lastName}'.trim()),
+                      subtitle: Text(user.email),
+                    );
+                  },
+                  separatorBuilder: (context, _) => const Divider(height: 1),
+                  itemCount: users.length,
+                ),
+              SliverToBoxAdapter(
+                  child: SizedBox(
+                      height: MediaQuery.of(context).padding.bottom + 16)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _initialsFrom(String first, String last) {
+    final a = first.isNotEmpty ? first[0].toUpperCase() : '';
+    final b = last.isNotEmpty ? last[0].toUpperCase() : '';
+    return (a + b).isNotEmpty ? (a + b) : 'U';
+  }
 }
