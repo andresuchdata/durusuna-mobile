@@ -1,4 +1,5 @@
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter/foundation.dart'; // Added for debugPrint
 
 class StorageService {
   static const String _userBox = 'user_box';
@@ -83,6 +84,15 @@ class StorageService {
 
   static Future<void> clearCache() async {
     await _cacheStorage.clear();
+    debugPrint('✅ StorageService: Cache cleared');
+  }
+
+  static Future<void> clearUserData() async {
+    // Clear user authentication data
+    await clearUser();
+    // Clear all cached data that might be user-specific
+    await clearCache();
+    debugPrint('✅ StorageService: All user data cleared');
   }
 
   static Future<void> clearAll() async {

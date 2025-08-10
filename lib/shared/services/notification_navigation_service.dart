@@ -2,14 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/notification.dart';
 import '../models/conversation.dart';
-import '../../features/chat/presentation/pages/chat_page.dart';
-import '../../features/chat/presentation/pages/conversations_page.dart';
+import '../../features/chat/presentation/pages/local_chat_page.dart';
 import '../../features/class_updates/presentation/pages/class_updates_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../main.dart';
 import 'chat_service.dart';
-import 'notification_service.dart';
-import 'api_service.dart';
 
 /// Service responsible for handling notification navigation and deep linking
 class NotificationNavigationService {
@@ -22,7 +19,7 @@ class NotificationNavigationService {
     try {
       // NOTE: markAsRead is handled by the UI layer (NotificationsPage) with optimistic updates
       // We don't call it here to avoid duplicate API calls and provider modification errors
-      
+
       await _navigateBasedOnType(notification);
     } catch (e) {
       debugPrint('Error handling notification action: $e');
@@ -78,7 +75,7 @@ class NotificationNavigationService {
       // Navigate to chat page with message highlighting support
       await Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (context) => ChatPage(
+          builder: (context) => LocalChatPage(
             conversation: conversation,
             highlightMessageId: messageId,
             scrollToMessage: messageId != null,

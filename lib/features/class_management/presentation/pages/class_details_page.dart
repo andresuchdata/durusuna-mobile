@@ -6,12 +6,12 @@ import '../../../../shared/models/user.dart';
 import '../../../../shared/models/class_update.dart';
 import '../../../../shared/services/class_management_service.dart';
 import '../../../../shared/services/class_updates_service.dart'
-    show ClassUpdatesService, classUpdatesServiceProvider;
-import '../../../../shared/services/auth_service.dart';
-import '../../../../shared/widgets/global_app_scaffold.dart';
+    show classUpdatesServiceProvider;
+
 import '../../../../shared/widgets/global_app_drawer.dart';
+import '../../../../shared/widgets/global_bottom_navigation.dart';
 import '../../../../core/utils/date_utils.dart' as app_date_utils;
-import '../widgets/lesson_tile.dart';
+
 import 'subject_details_page.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 
@@ -41,7 +41,6 @@ final recentClassUpdatesProvider =
 // Provider for class students (preview - limited to first 5)
 final classStudentsProvider =
     FutureProvider.family<List<User>, String>((ref, classId) async {
-  final service = ref.read(classManagementServiceProvider);
   // This would fetch students from your backend
   // For now, return mock data or empty list
   return [];
@@ -80,10 +79,14 @@ final classAssignmentsProvider =
 
 class ClassDetailsPage extends ConsumerStatefulWidget {
   final ClassModel classModel;
+  final Widget? bottomNavigationBar;
+  final bool showBackButton;
 
   const ClassDetailsPage({
     super.key,
     required this.classModel,
+    this.bottomNavigationBar,
+    this.showBackButton = true,
   });
 
   @override
@@ -93,14 +96,17 @@ class ClassDetailsPage extends ConsumerStatefulWidget {
 class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
-    final currentUser = authState.user;
     final subjectsAsync =
         ref.watch(classSubjectsProvider(widget.classModel.id));
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      drawer: const GlobalAppDrawer(),
+      drawer: widget.showBackButton ? const GlobalAppDrawer() : null,
+      bottomNavigationBar: widget.bottomNavigationBar ??
+          const GlobalBottomNavigation(
+            currentIndex: 2, // Classes tab
+            isDetailPage: true,
+          ),
       body: SafeArea(
         child: subjectsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -177,6 +183,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
       elevation: 0,
       backgroundColor: AppTheme.primaryColor,
       iconTheme: const IconThemeData(color: Colors.white),
+      automaticallyImplyLeading: widget.showBackButton,
       title: Text(
         widget.classModel.name,
         style: const TextStyle(
@@ -1077,44 +1084,12 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
         builder: (context) => SubjectDetailsPage(
           subject: subject,
           classModel: widget.classModel,
+          bottomNavigationBar: widget.bottomNavigationBar,
+          showBackButton: widget.showBackButton,
         ),
       ),
     );
   }
 
-  void _showLessonDetails(Map<String, dynamic> lesson) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(lesson['title'] ?? 'Lesson'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (lesson['description'] != null) ...[
-              Text(lesson['description']),
-              const SizedBox(height: 8),
-            ],
-            if (lesson['lesson_objectives'] != null) ...[
-              const Text('Objectives:',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              Text(lesson['lesson_objectives']),
-              const SizedBox(height: 8),
-            ],
-            if (lesson['homework_assigned'] != null) ...[
-              const Text('Homework:',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              Text(lesson['homework_assigned']),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
+  // Removed _buildDefaultBottomNavigation method - now using GlobalBottomNavigation
 }

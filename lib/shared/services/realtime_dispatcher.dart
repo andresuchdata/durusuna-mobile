@@ -1,0 +1,423 @@
+import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../database/chat_database.dart';
+import '../models/local_message.dart';
+import '../providers/local_chat_providers.dart';
+import '../services/chat_service.dart';
+import 'realtime_service.dart';
+import '../../core/storage/storage_service.dart';
+
+/// Centralized real-time event dispatcher (SINGLETON)
+/// Single source of truth for all real-time events
+/// Handles deduplication and proper event routing
+class RealtimeDispatcher {
+  static RealtimeDispatcher? _instance;
+  Ref? _ref;
+
+  // Deduplication tracking
+  final Set<String> _processedMessageIds = <String>{};
+  Timer? _cleanupTimer;
+
+  // Track recently sent messages to avoid duplicate adoption
+  final Set<String> _recentlySentMessages = <String>{};
+
+  // Circuit breaker to prevent message loops
+  int _processingErrors = 0;
+  bool _circuitBreakerOpen = false;
+  DateTime? _circuitBreakerOpenTime;
+
+  // Private constructor for singleton
+  RealtimeDispatcher._internal();
+
+  /// Get singleton instance
+  static RealtimeDispatcher get instance {
+    _instance ??= RealtimeDispatcher._internal();
+    return _instance!;
+  }
+
+  /// Initialize with Riverpod ref (call once)
+  void initialize(Ref ref) {
+    if (_ref != null) {
+      print('🔌 RealtimeDispatcher: Already initialized');
+      return;
+    }
+
+    _ref = ref;
+    _setupListeners();
+    _startCleanupTimer();
+    _startSentMessagesCleanup();
+    print('🔌 RealtimeDispatcher: Singleton initialized');
+  }
+
+  /// Register a message as recently sent to avoid duplicate adoption
+  void registerRecentlySent(String messageContent) {
+    _recentlySentMessages.add(messageContent);
+    print(
+        '📝 RealtimeDispatcher: Registered recently sent message: "$messageContent"');
+  }
+
+  void _setupListeners() {
+    if (_ref == null) {
+      print('❌ RealtimeDispatcher: Cannot setup listeners - ref is null');
+      return;
+    }
+
+    // Single message listener - handles all message events
+    _ref!.listen(
+      realtimeMessagesProvider,
+      (previous, next) {
+        next.whenData((realtimeMessage) {
+          _handleMessage(realtimeMessage);
+        });
+      },
+    );
+
+    // Single typing listener
+    _ref!.listen(
+      realtimeTypingProvider,
+      (previous, next) {
+        next.whenData((typingEvent) {
+          _handleTyping(typingEvent);
+        });
+      },
+    );
+
+    // Single presence listener
+    _ref!.listen(
+      realtimePresenceProvider,
+      (previous, next) {
+        next.whenData((presenceEvent) {
+          _handlePresence(presenceEvent);
+        });
+      },
+    );
+
+    // Single status listener
+    _ref!.listen(
+      realtimeMessageStatusProvider,
+      (previous, next) {
+        next.whenData((statusEvent) {
+          _handleMessageStatus(statusEvent);
+        });
+      },
+    );
+  }
+
+  /// Handle incoming messages with deduplication and circuit breaker
+  Future<void> _handleMessage(RealtimeMessage realtimeMessage) async {
+    final messageId = realtimeMessage.message.serverId ??
+        realtimeMessage.message.id.toString();
+    final senderId = realtimeMessage.message.senderId;
+    final conversationId = realtimeMessage.conversationId;
+
+    print(
+        '🔄 RealtimeDispatcher: Received message $messageId from $senderId in conversation $conversationId');
+
+    // CRITICAL: Check for recently sent messages FIRST (before any other processing)
+    final currentUserId = StorageService.getUser()?['id'];
+    final isOwnMessage = senderId == currentUserId;
+
+    if (isOwnMessage) {
+      // Check if this is a recently sent message using multiple strategies
+      final clientMessageId = realtimeMessage.message.clientMessageId;
+      final messageContent = realtimeMessage.message.content ?? '';
+
+      print(
+          '🔍 RealtimeDispatcher: CHECKING OWN MESSAGE - clientMessageId: "$clientMessageId", content: "$messageContent"');
+      print(
+          '🔍 RealtimeDispatcher: Registered keys: ${_recentlySentMessages.toList()}');
+
+      // Strategy 1: Try clientMessageId + timestamp key (if clientMessageId exists)
+      if (clientMessageId != null) {
+        final messageKey =
+            '${clientMessageId}_${realtimeMessage.message.createdAt.microsecondsSinceEpoch}';
+        print('🔍 RealtimeDispatcher: Trying exact key: "$messageKey"');
+        if (_recentlySentMessages.contains(messageKey)) {
+          print(
+              '⏭️ RealtimeDispatcher: EARLY SKIP - clientMessageId key: "$messageKey"');
+          _recentlySentMessages.remove(messageKey);
+          return;
+        }
+      }
+
+      // Strategy 2: Fallback to content-based matching (for cases where server doesn't echo clientMessageId)
+      print(
+          '🔍 RealtimeDispatcher: Trying content fallback for: "$messageContent"');
+      final isRecentContent = _recentlySentMessages.any(
+          (key) => key.contains(messageContent) && messageContent.isNotEmpty);
+      print('🔍 RealtimeDispatcher: Content match result: $isRecentContent');
+      if (isRecentContent) {
+        print(
+            '⏭️ RealtimeDispatcher: EARLY SKIP - content fallback: "$messageContent"');
+        // Remove all keys containing this content
+        _recentlySentMessages
+            .removeWhere((key) => key.contains(messageContent));
+        return;
+      }
+
+      print(
+          '🔍 RealtimeDispatcher: NO MATCH FOUND - message will be processed normally');
+    }
+
+    // Circuit breaker check
+    if (_circuitBreakerOpen) {
+      final now = DateTime.now();
+      final openTime = _circuitBreakerOpenTime!;
+
+      // Check if circuit breaker should be reset (after 1 minute)
+      if (now.difference(openTime).inMinutes >= 1) {
+        print('🔧 RealtimeDispatcher: Circuit breaker reset');
+        _circuitBreakerOpen = false;
+        _processingErrors = 0;
+        _circuitBreakerOpenTime = null;
+      } else {
+        print(
+            '⚡ RealtimeDispatcher: Circuit breaker OPEN - blocking message processing');
+        return; // Block processing while circuit breaker is open
+      }
+    }
+
+    // Deduplication check
+    if (_processedMessageIds.contains(messageId)) {
+      print('🐛 RealtimeDispatcher: Skipping duplicate message: $messageId');
+      return; // Already processed
+    }
+
+    _processedMessageIds.add(messageId);
+
+    try {
+      final currentUserId = StorageService.getUser()?['id'];
+      if (currentUserId == null) {
+        print('❌ RealtimeDispatcher: No current user ID, skipping message');
+        return;
+      }
+
+      final isOwnMessage = senderId == currentUserId;
+      print(
+          '🔍 RealtimeDispatcher: Message $messageId isOwnMessage: $isOwnMessage (currentUserId: $currentUserId, senderId: $senderId)');
+
+      if (isOwnMessage) {
+        // Own message - update optimistic message status only
+        print('🔄 RealtimeDispatcher: Processing own message: $messageId');
+        await _handleOwnMessage(realtimeMessage);
+      } else {
+        // Other user's message - full processing
+        print(
+            '📨 RealtimeDispatcher: Processing OTHER USER message: $messageId');
+        await _handleOtherUserMessage(realtimeMessage, currentUserId);
+      }
+
+      // Reset error counter on successful processing
+      _processingErrors = 0;
+    } catch (e) {
+      print('❌ RealtimeDispatcher: Failed to handle message: $e');
+
+      // Increment error counter
+      _processingErrors++;
+
+      // Open circuit breaker if too many errors
+      if (_processingErrors >= 5) {
+        _circuitBreakerOpen = true;
+        _circuitBreakerOpenTime = DateTime.now();
+        print(
+            '⚡ RealtimeDispatcher: Circuit breaker OPENED after $_processingErrors errors');
+      }
+
+      // Remove from processed set to allow retry (when circuit breaker resets)
+      _processedMessageIds.remove(messageId);
+    }
+  }
+
+  /// Handle own messages (update status only - DO NOT save new message)
+  Future<void> _handleOwnMessage(RealtimeMessage realtimeMessage) async {
+    print(
+        '🔄 RealtimeDispatcher: Updating own message status: ${realtimeMessage.message.id}, clientMessageId: ${realtimeMessage.message.clientMessageId}');
+
+    // Check if this message was recently sent via background sync
+    final clientMessageId = realtimeMessage.message.clientMessageId ?? '';
+    final messageContent = realtimeMessage.message.content ?? '';
+    if (_recentlySentMessages.contains(clientMessageId) ||
+        _recentlySentMessages.contains(messageContent)) {
+      print(
+          '⏭️ RealtimeDispatcher: Skipping adoption for recently sent message: clientId="$clientMessageId", content="$messageContent"');
+      _recentlySentMessages.remove(clientMessageId); // Remove after use
+      _recentlySentMessages.remove(messageContent);
+      return;
+    }
+
+    try {
+      // CRITICAL: For own messages, try to adopt the server message first
+      // This is more reliable than just updating status
+      final localMessage = realtimeMessage.message;
+
+      print(
+          '🔄 RealtimeDispatcher: Attempting to adopt own message via real-time handler');
+      final adopted = await ChatDatabase.adoptServerMessage(localMessage);
+      if (adopted) {
+        print(
+            '✅ RealtimeDispatcher: Own message adopted successfully via real-time: ${realtimeMessage.message.id}');
+        return; // Don't refresh - the stream will update automatically
+      }
+
+      print(
+          '⚠️ RealtimeDispatcher: Adoption failed, trying status update fallback');
+      // Fallback: try to update status if adoption failed
+      final messageServerId = realtimeMessage.message.serverId;
+      if (messageServerId != null) {
+        await ChatDatabase.updateMessageStatus(
+          messageServerId,
+          readStatus: 'sent',
+        );
+      }
+
+      print(
+          '✅ RealtimeDispatcher: Own message status updated to "sent": ${realtimeMessage.message.id}');
+    } catch (e) {
+      if (e.toString().contains('Unique index violated') ||
+          e.toString().contains('not found')) {
+        print(
+            '✅ RealtimeDispatcher: Message already processed - ${realtimeMessage.message.id}');
+        return; // Not an error - message may already be adopted
+      }
+      print('❌ RealtimeDispatcher: Failed to process own message: $e');
+      // Don't rethrow - this is not critical
+    }
+  }
+
+  /// Handle messages from other users (full processing)
+  Future<void> _handleOtherUserMessage(
+      RealtimeMessage realtimeMessage, String currentUserId) async {
+    print(
+        '📨 RealtimeDispatcher: Processing incoming message: ${realtimeMessage.message.id}');
+
+    // The message is already a LocalMessage from the updated RealtimeMessage.fromJson
+    final localMessage = realtimeMessage.message;
+
+    try {
+      // Save to database (ignore duplicates silently)
+      await ChatDatabase.saveMessage(localMessage);
+    } catch (_) {}
+
+    try {
+      // Update conversation last message
+      await ChatDatabase.updateConversationLastMessage(
+        realtimeMessage.conversationId,
+        localMessage,
+        unreadCount: 1,
+      );
+    } catch (_) {}
+
+    // Always refresh UI, even if DB write collided
+    await _updateUIForIncomingMessage(
+        realtimeMessage.conversationId, localMessage);
+
+    // Update global conversations list - using localMessage (already a LocalMessage)
+    _ref!.read(localConversationsProvider.notifier).updateLastMessage(
+          realtimeMessage.conversationId,
+          localMessage,
+        );
+  }
+
+  /// Update UI providers for incoming messages
+  Future<void> _updateUIForIncomingMessage(
+      String conversationId, LocalMessage localMessage) async {
+    // Always refresh messages for that conversation so chat page updates even
+    // if currentConversationProvider hasn't been set yet
+    print(
+        '🔄 [DEBUG] Refreshing localMessagesProvider for conversation $conversationId');
+    _ref!.read(localMessagesProvider(conversationId).notifier).refresh();
+
+    // Check if user is currently viewing this conversation to mark as read
+    final currentConversationId = _ref!.read(currentConversationProvider);
+    print(
+        '🐛 [DEBUG] _updateUIForIncomingMessage: conversationId=$conversationId, currentConversationId=$currentConversationId');
+    if (currentConversationId == conversationId) {
+      await ChatDatabase.markConversationAsRead(conversationId);
+      print('✅ [DEBUG] Conversation marked as read');
+    } else {
+      // Refresh list for unread badge updates
+      _ref!.read(localConversationsProvider.notifier).refresh();
+    }
+  }
+
+  /// Handle typing events
+  void _handleTyping(TypingEvent typingEvent) {
+    // Typing events are handled by individual UI components
+    // No additional processing needed here
+    print(
+        '⌨️ RealtimeDispatcher: Typing event - ${typingEvent.isTyping ? "started" : "stopped"}');
+  }
+
+  /// Handle presence events
+  void _handlePresence(PresenceEvent presenceEvent) {
+    print(
+        '👤 RealtimeDispatcher: Presence event for user ${presenceEvent.userId}: ${presenceEvent.isOnline ? "Online" : "Offline"}');
+
+    // Presence events are handled by individual UI components
+    // The local_chat_page listens to realtimePresenceProvider directly
+    // No additional database processing needed here
+  }
+
+  /// Handle message status events
+  Future<void> _handleMessageStatus(MessageStatusEvent statusEvent) async {
+    print('✅ RealtimeDispatcher: Message status update: ${statusEvent.status}');
+
+    // Update message status in database for all affected messages
+    final conversationId = statusEvent.conversationId;
+    if (conversationId != null) {
+      for (final messageId in statusEvent.messageIds) {
+        await ChatDatabase.updateMessageStatus(
+          messageId,
+          readStatus: statusEvent.status,
+          // TODO: Add readAt and deliveredAt when available in MessageStatusEvent
+        );
+      }
+
+      // Refresh UI if user is viewing this conversation
+      final currentConversationId = _ref!.read(currentConversationProvider);
+      if (currentConversationId == conversationId) {
+        _ref!.read(localMessagesProvider(conversationId).notifier).refresh();
+      }
+    }
+  }
+
+  // Conversion methods removed - RealtimeMessage now contains LocalMessage directly
+
+  /// Start cleanup timer to prevent memory leaks
+  void _startCleanupTimer() {
+    _cleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      _cleanupProcessedMessages();
+    });
+  }
+
+  /// Start cleanup for recently sent messages
+  void _startSentMessagesCleanup() {
+    Timer.periodic(const Duration(minutes: 2), (_) {
+      _cleanupRecentlySentMessages();
+    });
+  }
+
+  /// Clean up recently sent messages (prevent memory leak)
+  void _cleanupRecentlySentMessages() {
+    _recentlySentMessages.clear();
+    print('🧹 RealtimeDispatcher: Cleaned up recently sent messages');
+  }
+
+  /// Clean up old processed message IDs to prevent memory leaks
+  void _cleanupProcessedMessages() {
+    if (_processedMessageIds.length > 1000) {
+      final messagesList = _processedMessageIds.toList();
+      _processedMessageIds.clear();
+      // Keep only the most recent 500 IDs
+      _processedMessageIds.addAll(messagesList.skip(messagesList.length - 500));
+      print('🧹 RealtimeDispatcher: Cleaned up processed message IDs');
+    }
+  }
+
+  /// Dispose resources
+  void dispose() {
+    _cleanupTimer?.cancel();
+    _processedMessageIds.clear();
+    print('🔌 RealtimeDispatcher: Disposed');
+  }
+}

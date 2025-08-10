@@ -5,7 +5,7 @@ import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/models/conversation.dart';
 import '../widgets/contact_tile.dart';
-import 'chat_page.dart';
+import 'local_chat_page.dart';
 
 class ContactsPage extends ConsumerStatefulWidget {
   const ContactsPage({super.key});
@@ -115,7 +115,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
 
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => ChatPage(conversation: conversation),
+          builder: (context) => LocalChatPage(conversation: conversation),
         ),
       );
     } catch (e) {

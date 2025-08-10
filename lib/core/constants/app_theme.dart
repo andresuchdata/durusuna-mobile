@@ -30,6 +30,22 @@ class AppTheme {
   static const Color borderColor = Color(0xFFE5E7EB);
   static const Color dividerColor = Color(0xFFF3F4F6);
 
+  // Chat Message Bubble Colors (WhatsApp-style)
+  static const Color messageBubbleMe =
+      Color(0xFFDCF8C6); // Soft green for sent messages
+  static const Color messageBubbleOther =
+      Color(0xFFFFFFFF); // White for received messages
+  static const Color messageBubbleMeDark =
+      Color(0xFF056162); // Dark green for sent messages in dark mode
+  static const Color messageBubbleOtherDark =
+      Color(0xFF1F2C34); // Dark gray for received messages in dark mode
+
+  // Chat Background Colors
+  static const Color chatBackgroundLight =
+      Color(0xFFECE5DD); // Light beige like WhatsApp
+  static const Color chatBackgroundDark =
+      Color(0xFF0B141A); // Dark background for dark mode
+
   // Dark Theme Colors
   static const Color darkBackgroundColor = Color(0xFF0F172A);
   static const Color darkSurfaceColor = Color(0xFF1E293B);
@@ -40,6 +56,10 @@ class AppTheme {
 
   static ThemeData get lightTheme {
     return ThemeData(
+      // Enable high-performance rendering
+      visualDensity: VisualDensity.adaptivePlatformDensity,
+      // Optimize material animations
+      materialTapTargetSize: MaterialTapTargetSize.padded,
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: const ColorScheme.light(

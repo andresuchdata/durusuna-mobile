@@ -4,6 +4,7 @@ import '../models/user.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/constants/api_constants.dart';
 import 'api_service.dart';
+import 'package:flutter/foundation.dart'; // Added for debugPrint
 
 class AuthService {
   final ApiService _apiService;
@@ -239,10 +240,8 @@ class AuthService {
     } catch (e) {
       // Continue with local logout even if server call fails
     } finally {
-      // Clear local storage (real-time service will auto-disconnect via auth state listener)
-      await StorageService.clearUser();
-      // Clear any cached data that might be stale
-      await StorageService.clearCache();
+      // Clear all user data and cached data thoroughly
+      await StorageService.clearUserData();
     }
   }
 
