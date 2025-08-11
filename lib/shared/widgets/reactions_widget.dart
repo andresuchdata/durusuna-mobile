@@ -51,90 +51,90 @@ class ReactionsWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     if (reactions.isEmpty) return const SizedBox.shrink();
 
-    final reactionWidgets = <Widget>[];
+    // Prepare a compact list of at most two emoji types, with "+N" overflow
+    final entries = reactions.entries
+        .map((e) {
+          final info = _getReactionInfo(e.key, e.value);
+          return {
+            'emoji': e.key,
+            'count': info['count'] as int,
+            'hasReacted': info['hasReacted'] as bool,
+          };
+        })
+        .where((m) => (m['count'] as int) > 0)
+        .toList();
 
-    // Build reaction chips
-    reactions.forEach((emoji, reactionData) {
-      final info = _getReactionInfo(emoji, reactionData);
-      final count = info['count'] as int;
-      final hasReacted = info['hasReacted'] as bool;
+    if (entries.isEmpty) return const SizedBox.shrink();
 
-      if (count > 0) {
-        reactionWidgets.add(
-          GestureDetector(
-            onTap: () => onReactionTap(emoji),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(
-                color: hasReacted
-                    ? AppTheme.primaryColor.withValues(alpha: 0.1)
-                    : Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: hasReacted ? AppTheme.primaryColor : Colors.grey[300]!,
-                  width: hasReacted ? 1.5 : 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    emoji,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  if (count > 1) ...[
-                    const SizedBox(width: 4),
-                    Text(
-                      count.toString(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: hasReacted
-                            ? AppTheme.primaryColor
-                            : AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      }
+    // Sort by count desc; keep user's reacted emoji first if counts tie
+    entries.sort((a, b) {
+      final ca = a['count'] as int;
+      final cb = b['count'] as int;
+      if (cb != ca) return cb.compareTo(ca);
+      final ra = (a['hasReacted'] as bool) ? 1 : 0;
+      final rb = (b['hasReacted'] as bool) ? 1 : 0;
+      return rb.compareTo(ra);
     });
 
-    // Add reaction button
-    if (onAddReaction != null) {
-      reactionWidgets.add(
-        GestureDetector(
-          onTap: onAddReaction,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.grey[300]!,
-                width: 1,
-              ),
+    final displayed = entries.take(2).toList();
+    final overflowCount = entries.length > 2 ? (entries.length - 2) : 0;
+
+    Widget buildCircleBadge({required Widget child, bool highlighted = false}) {
+      return Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          color: highlighted
+              ? AppTheme.primaryColor.withValues(alpha: 0.08)
+              : Colors.grey.withValues(alpha: 0.05),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.black.withValues(alpha: 0.08),
+            width: 0.1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey[200]!.withValues(alpha: 0.88),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
             ),
-            child: const Icon(
-              Icons.add,
-              size: 16,
+          ],
+        ),
+        child: Center(child: child),
+      );
+    }
+
+    final reactionWidgets = <Widget>[
+      for (final m in displayed)
+        GestureDetector(
+          onTap: () => onReactionTap(m['emoji'] as String),
+          child: buildCircleBadge(
+            child: Text(
+              m['emoji'] as String,
+              style: const TextStyle(fontSize: 14),
+            ),
+            highlighted: (m['hasReacted'] as bool),
+          ),
+        ),
+      if (overflowCount > 0)
+        buildCircleBadge(
+          child: Text(
+            '+$overflowCount',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
               color: AppTheme.textSecondary,
             ),
           ),
         ),
-      );
-    }
-
-    if (reactionWidgets.isEmpty) return const SizedBox.shrink();
+    ];
 
     return Container(
-      margin: const EdgeInsets.only(top: 4),
+      margin: const EdgeInsets.only(top: 0),
       child: Wrap(
         spacing: 4,
         runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: reactionWidgets,
       ),
     );

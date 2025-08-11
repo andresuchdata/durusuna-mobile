@@ -37,6 +37,8 @@ class RealtimeService with WidgetsBindingObserver {
   final _conversationController =
       StreamController<ConversationEvent>.broadcast();
   final _reactionController = StreamController<ReactionEvent>.broadcast();
+  final _messageReactionUpdatedController =
+      StreamController<MessageReactionUpdatedEvent>.broadcast();
   final _fileUploadController = StreamController<FileUploadEvent>.broadcast();
   final _voiceRecordController = StreamController<VoiceRecordEvent>.broadcast();
   final _lastSeenController = StreamController<LastSeenEvent>.broadcast();
@@ -51,6 +53,8 @@ class RealtimeService with WidgetsBindingObserver {
   Stream<ConversationEvent> get conversationStream =>
       _conversationController.stream;
   Stream<ReactionEvent> get reactionStream => _reactionController.stream;
+  Stream<MessageReactionUpdatedEvent> get messageReactionUpdatedStream =>
+      _messageReactionUpdatedController.stream;
   Stream<FileUploadEvent> get fileUploadStream => _fileUploadController.stream;
   Stream<VoiceRecordEvent> get voiceRecordStream =>
       _voiceRecordController.stream;
@@ -130,7 +134,6 @@ class RealtimeService with WidgetsBindingObserver {
     _socket = null;
     _isConnected = false;
     _currentUserId = null;
-    _joinedConversations.clear(); // Clear tracked conversations on disconnect
     _connectionController.add(false);
     _stopConnectionCheck();
   }
@@ -266,6 +269,8 @@ class RealtimeService with WidgetsBindingObserver {
       _isConnected = true;
       _connectionController.add(true);
       _setupUserPresence();
+      // Ensure we join any conversations that were requested before connect
+      _rejoinAllConversations();
       _flushPendingPresenceRequests();
     });
 
@@ -417,6 +422,23 @@ class RealtimeService with WidgetsBindingObserver {
       _reactionController.add(event);
     });
 
+    // Message reaction updates (from backend toggleReaction)
+    _socket!.on('message:reaction_updated', (data) {
+      try {
+        print('🔄 RealtimeService: Received message:reaction_updated event');
+        print('🔄 RealtimeService: Raw event data: $data');
+        final event = MessageReactionUpdatedEvent.fromJson(data);
+        print(
+            '🔄 RealtimeService: Parsed event - messageId: ${event.messageId}, conversationId: ${event.conversationId}');
+        _messageReactionUpdatedController.add(event);
+        print(
+            '✅ RealtimeService: Successfully added MessageReactionUpdatedEvent to stream');
+      } catch (e) {
+        print('❌ RealtimeService: Error parsing message:reaction_updated: $e');
+        print('❌ RealtimeService: Raw data that failed: $data');
+      }
+    });
+
     // File upload progress
     _socket!.on('upload:progress', (data) {
       final event = FileUploadEvent.fromJson(data);
@@ -471,9 +493,14 @@ class RealtimeService with WidgetsBindingObserver {
 
   /// Join a conversation room for real-time updates
   void joinConversation(String conversationId) {
+    // Track the intent to be joined regardless of current connection state
+    _joinedConversations.add(conversationId);
     if (_socket?.connected == true) {
+      print('🔊 RealtimeService: Joining conversation room $conversationId');
       _socket!.emit('conversation:join', {'conversationId': conversationId});
-      _joinedConversations.add(conversationId); // Track joined conversation
+    } else {
+      print(
+          '🕒 RealtimeService: Queued join for conversation $conversationId (will send on connect)');
     }
   }
 
@@ -487,8 +514,10 @@ class RealtimeService with WidgetsBindingObserver {
 
   /// Re-join all previously joined conversations (after reconnect)
   void _rejoinAllConversations() {
+    print('🔁 RealtimeService: Rejoining ${_joinedConversations.length} rooms');
     for (final conversationId in _joinedConversations) {
       if (_socket?.connected == true) {
+        print('🔊 RealtimeService: Re-join conversation $conversationId');
         _socket!.emit('conversation:join', {'conversationId': conversationId});
       }
     }
@@ -637,6 +666,7 @@ class RealtimeService with WidgetsBindingObserver {
     _messageStatusController.close();
     _conversationController.close();
     _reactionController.close();
+    _messageReactionUpdatedController.close();
     _fileUploadController.close();
     _voiceRecordController.close();
     _lastSeenController.close();
@@ -785,6 +815,29 @@ class ReactionEvent {
       emoji: json['emoji'],
       userId: json['userId'],
       action: json['action'],
+      timestamp: DateTime.parse(json['timestamp']),
+    );
+  }
+}
+
+class MessageReactionUpdatedEvent {
+  final String messageId;
+  final Map<String, dynamic> reactions;
+  final String conversationId;
+  final DateTime timestamp;
+
+  MessageReactionUpdatedEvent({
+    required this.messageId,
+    required this.reactions,
+    required this.conversationId,
+    required this.timestamp,
+  });
+
+  factory MessageReactionUpdatedEvent.fromJson(Map<String, dynamic> json) {
+    return MessageReactionUpdatedEvent(
+      messageId: json['messageId'],
+      reactions: json['reactions'] as Map<String, dynamic>,
+      conversationId: json['conversationId'],
       timestamp: DateTime.parse(json['timestamp']),
     );
   }
@@ -950,4 +1003,20 @@ final realtimePresenceProvider = StreamProvider<PresenceEvent>((ref) {
 final realtimeMessageStatusProvider = StreamProvider<MessageStatusEvent>((ref) {
   final service = ref.watch(realtimeServiceProvider);
   return service.messageStatusStream;
+});
+
+final realtimeConversationProvider = StreamProvider<ConversationEvent>((ref) {
+  final service = ref.watch(realtimeServiceProvider);
+  return service.conversationStream;
+});
+
+final realtimeReactionProvider = StreamProvider<ReactionEvent>((ref) {
+  final service = ref.watch(realtimeServiceProvider);
+  return service.reactionStream;
+});
+
+final realtimeMessageReactionUpdatedProvider =
+    StreamProvider<MessageReactionUpdatedEvent>((ref) {
+  final service = ref.watch(realtimeServiceProvider);
+  return service.messageReactionUpdatedStream;
 });

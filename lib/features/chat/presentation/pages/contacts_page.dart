@@ -77,30 +77,30 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       // Clear any currently viewed conversation before starting chat
       ref.read(currentConversationProvider.notifier).state = null;
 
-      // First check if conversation already exists
+      // Ensure we have fresh conversations snapshot
       await ref.read(conversationsProvider.notifier).loadConversations();
       final conversations = ref.read(conversationsProvider).conversations;
 
-      // Look for existing conversation with this user
-      final existingConversation = conversations
-          .cast<Conversation?>()
-          .firstWhere(
-            (conv) =>
-                conv != null && conv.participants.any((p) => p.id == user.id),
-            orElse: () => null,
-          );
+      // Prefer existing direct chat with this user
+      Conversation? existingDirect =
+          conversations.cast<Conversation?>().firstWhere(
+                (conv) =>
+                    conv != null &&
+                    conv.type == 'direct' &&
+                    ((conv.otherUser?.id == user.id) ||
+                        conv.participants.any((p) => p.id == user.id)),
+                orElse: () => null,
+              );
 
       final Conversation conversation;
-      if (existingConversation != null) {
-        // Use existing conversation
-        conversation = existingConversation;
+      if (existingDirect != null) {
+        conversation = existingDirect;
       } else {
-        // Create a new conversation object for new chat
-        // The actual backend conversation will be created when first message is sent
+        // Create a new direct conversation placeholder for UI
+        // The actual conversation will be created when the first message is sent
         final conversationId = 'new_${user.id}';
-
         conversation = Conversation(
-          id: conversationId, // Special ID format for new conversations
+          id: conversationId,
           type: 'direct',
           createdBy: user.id,
           createdAt: DateTime.now(),

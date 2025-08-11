@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/chat_database.dart';
 import '../models/local_message.dart';
@@ -185,10 +186,30 @@ class LocalChatService {
   /// Sync message to server only (after local save)
   Future<LocalMessage> syncMessageToServer(LocalMessage localMessage) async {
     try {
-      final response = await _apiService.post(
-        '/conversations/${localMessage.conversationId}/messages',
-        data: localMessage.toApiJson(),
-      );
+      String endpoint;
+      Map<String, dynamic> data = localMessage.toApiJson();
+
+      // Handle new conversations that don't exist on server yet
+      if (localMessage.conversationId.startsWith('new_')) {
+        // Extract receiver ID from conversation ID format: 'new_userId'
+        final receiverId = localMessage.conversationId.substring(4);
+
+        if (receiverId.isEmpty) {
+          throw LocalChatException(
+              'Invalid receiver ID extracted from conversation ID: ${localMessage.conversationId}');
+        }
+
+        // Use direct message endpoint for new conversations
+        endpoint = '/messages';
+        data['receiver_id'] = receiverId;
+        data.remove(
+            'conversation_id'); // Remove conversation_id for direct messages
+      } else {
+        // Use existing conversation endpoint
+        endpoint = '/conversations/${localMessage.conversationId}/messages';
+      }
+
+      final response = await _apiService.post(endpoint, data: data);
 
       final serverMessage = response.data['message'] as Map<String, dynamic>;
       final currentUserId = StorageService.getUser()?['id'];
@@ -221,6 +242,18 @@ class LocalChatService {
       print('Failed to mark conversation as read: $e');
       // Still try to sync to server even if local update failed
       _syncReadStatusToServer(conversationId);
+    }
+  }
+
+  /// Clean up failed messages from database
+  Future<void> cleanupFailedMessages(String conversationId) async {
+    try {
+      // This would need to be implemented in ChatDatabase
+      // For now, just log that we should clean up
+      debugPrint(
+          '🧹 TODO: Clean up failed messages for conversation: $conversationId');
+    } catch (e) {
+      debugPrint('Failed to cleanup failed messages: $e');
     }
   }
 
@@ -342,6 +375,13 @@ class LocalChatService {
   Future<void> forceSyncMessagesFromServer(String conversationId) async {
     print(
         '🔄 Force syncing messages from server for conversation: $conversationId');
+
+    // Skip sync for new conversations that don't exist on server yet
+    if (conversationId.startsWith('new_')) {
+      print('🔄 Skipping sync for new conversation: $conversationId');
+      return;
+    }
+
     try {
       // Get last sync time for this conversation based on latest local message
       final lastLocalMessage =
@@ -409,6 +449,13 @@ class LocalChatService {
   /// Useful when conversation list shows a newer last message that isn't in local DB
   Future<void> fetchLatestFromServer(String conversationId,
       {int limit = 10}) async {
+    // Skip sync for new conversations that don't exist on server yet
+    if (conversationId.startsWith('new_')) {
+      print(
+          '🔄 Skipping fetchLatestFromServer for new conversation: $conversationId');
+      return;
+    }
+
     try {
       final path = ApiConstants.getConversationMessages(conversationId);
       final response = await _apiService.get(
@@ -697,6 +744,12 @@ class LocalChatService {
 
   Future<void> _syncMessagesFromServer(String conversationId,
       {int limit = 50}) async {
+    // Skip sync for new conversations that don't exist on server yet
+    if (conversationId.startsWith('new_')) {
+      print('🔄 Skipping message sync for new conversation: $conversationId');
+      return;
+    }
+
     try {
       // Get last sync time for this conversation based on latest local message
       // This prevents the server from re-sending messages we already have locally
@@ -770,12 +823,35 @@ class LocalChatService {
 
   Future<void> _syncMessageToServer(LocalMessage message) async {
     try {
+      String endpoint;
+      Map<String, dynamic> data = message.toApiJson();
+
+      // Handle new conversations that don't exist on server yet
+      if (message.conversationId.startsWith('new_')) {
+        // Extract receiver ID from conversation ID format: 'new_userId'
+        final receiverId = message.conversationId.substring(4);
+
+        if (receiverId.isEmpty) {
+          throw LocalChatException(
+              'Invalid receiver ID extracted from conversation ID: ${message.conversationId}');
+        }
+
+        // Use direct message endpoint for new conversations
+        endpoint = '/messages';
+        data['receiver_id'] = receiverId;
+        data.remove(
+            'conversation_id'); // Remove conversation_id for direct messages
+
+        print(
+            '🔄 Sending message to new conversation via direct message endpoint');
+      } else {
+        // Use existing conversation endpoint
+        endpoint = '/conversations/${message.conversationId}/messages';
+      }
+
       // Send to server with timeout to prevent hanging
       final response = await _apiService
-          .post(
-            '/conversations/${message.conversationId}/messages',
-            data: message.toApiJson(),
-          )
+          .post(endpoint, data: data)
           .timeout(const Duration(seconds: 10));
 
       final serverMessage = response.data['message'] as Map<String, dynamic>;
@@ -838,6 +914,13 @@ class LocalChatService {
 
   Future<void> _syncReadStatusToServer(String conversationId) async {
     try {
+      // Skip sync for new conversations that don't exist on server yet
+      if (conversationId.startsWith('new_')) {
+        print(
+            '🔄 Skipping read status sync for new conversation: $conversationId');
+        return;
+      }
+
       await _apiService.put('/conversations/$conversationId/mark-read');
     } catch (e) {
       print('Failed to sync read status to server: $e');
@@ -871,6 +954,56 @@ class LocalChatService {
       return reactions;
     } catch (e) {
       throw LocalChatException('Failed to toggle reaction: $e');
+    }
+  }
+
+  /// Sync existing reactions from server for specific messages
+  /// This is called when chat page loads to ensure reactions are visible
+  Future<void> syncMessageReactions(
+      String conversationId, List<String> messageIds) async {
+    try {
+      if (messageIds.isEmpty) return;
+
+      // Skip sync for new conversations that don't exist on server yet
+      if (conversationId.startsWith('new_')) {
+        debugPrint(
+            '🔄 Skipping reaction sync for new conversation: $conversationId');
+        return;
+      }
+
+      debugPrint(
+          '🔄 [REACTION SYNC] Fetching reactions for ${messageIds.length} messages from server');
+
+      // Fetch message data with reactions from server
+      final response = await _apiService.post(
+        '${ApiConstants.conversations}/$conversationId/messages/reactions',
+        data: {'messageIds': messageIds},
+      );
+
+      final messagesWithReactions = response.data['messages'] as List<dynamic>;
+      debugPrint(
+          '🔄 [REACTION SYNC] Received ${messagesWithReactions.length} messages with reactions');
+
+      // Update each message's reactions in local database
+      for (final messageData in messagesWithReactions) {
+        final messageId = messageData['id'] as String;
+        final reactions = messageData['reactions'] as Map<String, dynamic>?;
+
+        if (reactions != null && reactions.isNotEmpty) {
+          debugPrint(
+              '🔄 [REACTION SYNC] Updating reactions for message $messageId');
+          await ChatDatabase.updateMessageReactions(
+            serverId: messageId,
+            reactionsJson: jsonEncode(reactions),
+          );
+        }
+      }
+
+      debugPrint(
+          '✅ [REACTION SYNC] Successfully synced reactions for ${messagesWithReactions.length} messages');
+    } catch (e) {
+      debugPrint('❌ [REACTION SYNC] Failed to sync message reactions: $e');
+      // Don't rethrow - this is a background sync operation
     }
   }
 

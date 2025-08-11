@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/chat_database.dart';
 import '../models/local_message.dart';
 import '../providers/local_chat_providers.dart';
 import '../services/chat_service.dart';
+import '../models/message.dart' as remote;
 import 'realtime_service.dart';
 import '../../core/storage/storage_service.dart';
 
@@ -98,6 +100,40 @@ class RealtimeDispatcher {
       (previous, next) {
         next.whenData((statusEvent) {
           _handleMessageStatus(statusEvent);
+        });
+      },
+    );
+
+    // Single reaction listener
+    _ref!.listen(
+      realtimeReactionProvider,
+      (previous, next) {
+        next.whenData((reactionEvent) {
+          _handleReaction(reactionEvent);
+        });
+      },
+    );
+
+    // Message reaction updated listener
+    _ref!.listen(
+      realtimeMessageReactionUpdatedProvider,
+      (previous, next) {
+        next.whenData((reactionEvent) {
+          print(
+              '🎭 RealtimeDispatcher: Received reaction updated event from stream');
+          _handleMessageReactionUpdated(reactionEvent);
+        });
+      },
+    );
+
+    // Conversation event listener
+    _ref!.listen(
+      realtimeConversationProvider,
+      (previous, next) {
+        next.whenData((conversationEvent) {
+          print(
+              '📋 RealtimeDispatcher: Received conversation event: ${conversationEvent.action}');
+          _handleConversationEvent(conversationEvent);
         });
       },
     );
@@ -256,6 +292,17 @@ class RealtimeDispatcher {
       if (adopted) {
         print(
             '✅ RealtimeDispatcher: Own message adopted successfully via real-time: ${realtimeMessage.message.id}');
+        // Update conversations list (legacy provider) so ConversationsPage shows latest
+        try {
+          final converted =
+              _convertLocalToRemote(realtimeMessage.message, isFromMe: true);
+          _ref!
+              .read(conversationsProvider.notifier)
+              .updateConversationLastMessage(
+                realtimeMessage.conversationId,
+                converted,
+              );
+        } catch (_) {}
         return; // Don't refresh - the stream will update automatically
       }
 
@@ -272,6 +319,17 @@ class RealtimeDispatcher {
 
       print(
           '✅ RealtimeDispatcher: Own message status updated to "sent": ${realtimeMessage.message.id}');
+      // Also update conversations list with the latest message for own sends
+      try {
+        final converted =
+            _convertLocalToRemote(realtimeMessage.message, isFromMe: true);
+        _ref!
+            .read(conversationsProvider.notifier)
+            .updateConversationLastMessage(
+              realtimeMessage.conversationId,
+              converted,
+            );
+      } catch (_) {}
     } catch (e) {
       if (e.toString().contains('Unique index violated') ||
           e.toString().contains('not found')) {
@@ -316,6 +374,15 @@ class RealtimeDispatcher {
           realtimeMessage.conversationId,
           localMessage,
         );
+
+    // Also update legacy conversations provider so ConversationsPage reflects last message/unread
+    try {
+      final converted = _convertLocalToRemote(localMessage, isFromMe: false);
+      _ref!.read(conversationsProvider.notifier).updateConversationLastMessage(
+            realtimeMessage.conversationId,
+            converted,
+          );
+    } catch (_) {}
   }
 
   /// Update UI providers for incoming messages
@@ -337,6 +404,42 @@ class RealtimeDispatcher {
     } else {
       // Refresh list for unread badge updates
       _ref!.read(localConversationsProvider.notifier).refresh();
+    }
+  }
+
+  // Convert LocalMessage to remote.Message for conversationsProvider updates
+  remote.Message _convertLocalToRemote(LocalMessage m,
+      {required bool isFromMe}) {
+    final remoteType = _mapType(m.messageType);
+    return remote.Message(
+      id: m.serverId ?? m.id.toString(),
+      conversationId: m.conversationId,
+      senderId: m.senderId,
+      content: m.content,
+      messageType: remoteType,
+      isFromMe: isFromMe,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt ?? m.createdAt,
+      readStatus: remote.ReadStatus.sent,
+    );
+  }
+
+  remote.MessageType _mapType(LocalMessageType t) {
+    switch (t) {
+      case LocalMessageType.text:
+        return remote.MessageType.text;
+      case LocalMessageType.image:
+        return remote.MessageType.image;
+      case LocalMessageType.video:
+        return remote.MessageType.video;
+      case LocalMessageType.audio:
+        return remote.MessageType.audio;
+      case LocalMessageType.file:
+        return remote.MessageType.file;
+      case LocalMessageType.emoji:
+        return remote.MessageType.emoji;
+      case LocalMessageType.location:
+        return remote.MessageType.text;
     }
   }
 
@@ -382,6 +485,71 @@ class RealtimeDispatcher {
   }
 
   // Conversion methods removed - RealtimeMessage now contains LocalMessage directly
+
+  /// Handle reaction events
+  Future<void> _handleReaction(ReactionEvent reactionEvent) async {
+    try {
+      print(
+          '🎭 RealtimeDispatcher: Handling reaction event: ${reactionEvent.action} for message ${reactionEvent.messageId}');
+      // For individual reaction:added/removed events (legacy format)
+      print(
+          '🎭 RealtimeDispatcher: Individual reaction events not yet implemented');
+    } catch (e) {
+      print('❌ RealtimeDispatcher: Failed to handle reaction: $e');
+    }
+  }
+
+  /// Handle message reaction updated events
+  Future<void> _handleMessageReactionUpdated(
+      MessageReactionUpdatedEvent event) async {
+    try {
+      print(
+          '🎭 RealtimeDispatcher: Handling message reaction updated for message ${event.messageId}');
+
+      // Convert reactions map to JSON string for database storage
+      final reactionsJson = json.encode(event.reactions);
+
+      // Update the message reactions in the database
+      await ChatDatabase.updateMessageReactions(
+        serverId: event.messageId,
+        reactionsJson: reactionsJson,
+      );
+
+      print(
+          '✅ RealtimeDispatcher: Updated reactions for message ${event.messageId}');
+    } catch (e) {
+      print(
+          '❌ RealtimeDispatcher: Failed to handle message reaction updated: $e');
+    }
+  }
+
+  /// Handle conversation events (created, updated, etc.)
+  Future<void> _handleConversationEvent(ConversationEvent event) async {
+    try {
+      print(
+          '📋 RealtimeDispatcher: Handling conversation ${event.action} for ${event.conversationId}');
+
+      if (event.action == 'created') {
+        // Refresh conversations list when a new conversation is created
+        if (_ref != null) {
+          // Force refresh the conversations provider to pick up the new conversation
+          final conversationsNotifier =
+              _ref!.read(localConversationsProvider.notifier);
+          await conversationsNotifier.refresh();
+
+          print(
+              '✅ RealtimeDispatcher: Refreshed conversations list after creation of ${event.conversationId}');
+        }
+      } else if (event.action == 'updated') {
+        // Handle conversation updates (e.g., name changes)
+        print(
+            '📋 RealtimeDispatcher: Conversation updated: ${event.conversationId}');
+        // Could implement specific update handling here if needed
+      }
+    } catch (e) {
+      print('❌ RealtimeDispatcher: Failed to handle conversation event: $e');
+    }
+  }
 
   /// Start cleanup timer to prevent memory leaks
   void _startCleanupTimer() {

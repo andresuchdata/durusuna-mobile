@@ -142,6 +142,7 @@ class ApiConstants {
 
   // Conversation endpoints
   static String getConversations = conversations;
+  static String createConversation = conversations;
   static String getConversationMessages(String conversationId) =>
       '$conversations/$conversationId/messages';
   static String loadMoreMessages(String conversationId) =>

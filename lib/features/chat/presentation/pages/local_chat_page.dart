@@ -17,6 +17,7 @@ import '../widgets/chat_action_bar.dart';
 import '../widgets/local_message_bubble.dart';
 import '../widgets/reaction_bar.dart';
 import 'dart:convert';
+import 'dart:async';
 import '../../../../shared/widgets/reactions_widget.dart';
 import '../widgets/chat_top_user_panel.dart';
 
@@ -166,69 +167,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     _reactionOverlay = null;
   }
 
-  Widget _buildReactionChips(LocalMessage message, bool isMe) {
-    try {
-      final reactionsJson = message.reactions;
-      final reactions = reactionsJson == null || reactionsJson.isEmpty
-          ? <String, dynamic>{}
-          : (jsonDecode(reactionsJson) as Map<String, dynamic>);
-
-      if (reactions.isEmpty) return const SizedBox.shrink();
-
-      final currentUserId = ref.read(authStateProvider).user?.id;
-
-      return Padding(
-        padding: const EdgeInsets.only(left: 12, right: 12, top: 4),
-        child: Align(
-          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-          child: ReactionsWidget(
-            reactions: reactions,
-            currentUserId: currentUserId,
-            onReactionTap: (emoji) async {
-              try {
-                if (message.serverId == null) return;
-                final reactionsMap = await ref
-                    .read(localChatServiceProvider)
-                    .toggleReactionOnServer(message.serverId!, emoji);
-                await ChatDatabase.updateMessageReactions(
-                  serverId: message.serverId,
-                  reactionsJson: jsonEncode(reactionsMap),
-                );
-              } catch (_) {}
-            },
-            onAddReaction: () {
-              _hideReactionBar();
-              showDialog(
-                context: context,
-                builder: (_) => Dialog(
-                  backgroundColor: Colors.transparent,
-                  insetPadding: const EdgeInsets.all(24),
-                  child: ReactionPicker(
-                    onEmojiSelected: (emoji) async {
-                      try {
-                        if (message.serverId == null) return;
-                        final reactionsMap = await ref
-                            .read(localChatServiceProvider)
-                            .toggleReactionOnServer(message.serverId!, emoji);
-                        await ChatDatabase.updateMessageReactions(
-                          serverId: message.serverId,
-                          reactionsJson: jsonEncode(reactionsMap),
-                        );
-                      } catch (_) {}
-                    },
-                    onClose: () => Navigator.of(context).pop(),
-                  ),
-                ),
-              );
-            },
-            isMyMessage: isMe,
-          ),
-        ),
-      );
-    } catch (e) {
-      return const SizedBox.shrink();
-    }
-  }
+  // Removed _buildReactionChips - reactions are now handled internally by LocalMessageBubble
 
   // State for replying to a message
   LocalMessage? _replyingToMessage;
@@ -267,6 +206,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
       // Mark as read when entering chat page
       _markOnChatPageEnter();
+      // Connection state listening moved to build method to avoid assertion error
 
       // Reconcile any leftover pending messages on initial open
       Future.delayed(const Duration(milliseconds: 250), () async {
@@ -298,6 +238,20 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         } catch (_) {}
       });
 
+      // CRITICAL: Sync existing reactions when chat page loads
+      Future.delayed(const Duration(milliseconds: 800), () async {
+        try {
+          debugPrint(
+              '🔄 [REACTION SYNC] Starting reaction sync for conversation ${widget.conversation.id}');
+          await _syncExistingReactions();
+          debugPrint(
+              '✅ [REACTION SYNC] Completed reaction sync for conversation ${widget.conversation.id}');
+        } catch (e) {
+          debugPrint('❌ [REACTION SYNC] Failed to sync reactions: $e');
+          debugPrint('❌ [REACTION SYNC] Error details: ${e.toString()}');
+        }
+      });
+
       // Handle message highlighting and scrolling if requested
       if (widget.highlightMessageId != null && widget.scrollToMessage) {
         _scrollToHighlightedMessage();
@@ -324,6 +278,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     try {
       final realtimeService = ref.read(realtimeServiceProvider);
       realtimeService.leaveConversation(widget.conversation.id);
+      // Safe to clear provider here
       ref.read(currentConversationProvider.notifier).state = null;
     } catch (e) {
       // Error in dispose
@@ -334,12 +289,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   @override
   void deactivate() {
-    // Clear current conversation when leaving page
-    try {
-      ref.read(currentConversationProvider.notifier).state = null;
-    } catch (e) {
-      // Error in deactivate
-    }
+    // Avoid modifying providers during lifecycle; handled in dispose()
     super.deactivate();
   }
 
@@ -476,6 +426,65 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         realtimeService.markAsRead(unreadFromOthers, widget.conversation.id);
       }
     });
+  }
+
+  /// Sync existing reactions from server when chat page loads
+  /// This ensures users see reactions that were added before they joined
+  Future<void> _syncExistingReactions() async {
+    try {
+      debugPrint('🔄 [REACTION SYNC] _syncExistingReactions() called');
+      final chatService = ref.read(localChatServiceProvider);
+
+      // Get current local messages that have server IDs
+      final messagesAsync =
+          ref.read(localMessagesProvider(widget.conversation.id));
+      debugPrint(
+          '🔄 [REACTION SYNC] Got messagesAsync: ${messagesAsync.runtimeType}');
+
+      await messagesAsync.when(
+        data: (messages) async {
+          debugPrint(
+              '🔄 [REACTION SYNC] Processing ${messages.length} total messages');
+          final serverMessageIds = messages
+              .where((msg) =>
+                  msg.serverId != null && !msg.serverId!.startsWith('failed_'))
+              .map((msg) => msg.serverId!)
+              .toList();
+
+          debugPrint(
+              '🔄 [REACTION SYNC] Found ${serverMessageIds.length} messages with server IDs');
+
+          if (serverMessageIds.isEmpty) {
+            debugPrint(
+                '🔄 [REACTION SYNC] No server messages to sync reactions for');
+            return;
+          }
+
+          debugPrint(
+              '🔄 [REACTION SYNC] Syncing reactions for ${serverMessageIds.length} messages');
+          debugPrint(
+              '🔄 [REACTION SYNC] Message IDs: ${serverMessageIds.take(5).join(", ")}${serverMessageIds.length > 5 ? "..." : ""}');
+
+          // Fetch updated message data including reactions from server
+          await chatService.syncMessageReactions(
+              widget.conversation.id, serverMessageIds);
+
+          debugPrint(
+              '✅ [REACTION SYNC] Successfully synced reactions for ${serverMessageIds.length} messages');
+        },
+        loading: () async {
+          debugPrint(
+              '🔄 [REACTION SYNC] Messages still loading, skipping reaction sync');
+        },
+        error: (error, stack) async {
+          debugPrint(
+              '❌ [REACTION SYNC] Error getting messages for reaction sync: $error');
+        },
+      );
+    } catch (e) {
+      debugPrint('❌ [REACTION SYNC] Failed to sync existing reactions: $e');
+      debugPrint('❌ [REACTION SYNC] Stack trace: ${StackTrace.current}');
+    }
   }
 
   PreferredSizeWidget _buildAppBar() {
@@ -894,6 +903,20 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     // Real-time messages are now handled by the centralized RealtimeDispatcher
     // This ensures no duplicate processing and better performance
 
+    // CRITICAL: Listen for real-time connection state and re-join when connected
+    ref.listen(realtimeConnectionProvider, (previous, next) {
+      next.whenData((isConnected) {
+        if (isConnected) {
+          try {
+            final rs = ref.read(realtimeServiceProvider);
+            rs.joinConversation(widget.conversation.id);
+            debugPrint(
+                '🔊 [UI] Re-joined room on connect: ${widget.conversation.id}');
+          } catch (_) {}
+        }
+      });
+    });
+
     // CRITICAL: Listen for real-time typing indicators
     ref.listen(realtimeTypingProvider, (previous, next) {
       next.whenData((typingEvent) {
@@ -1103,6 +1126,20 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                 senderName: _getSenderDisplayName(message),
                 senderAvatarUrl: _getSenderAvatarUrl(message),
                 participants: widget.conversation.participants,
+                reactionsJson: message.reactions,
+                currentUserId: authState.user?.id,
+                onReactionTap: (emoji) async {
+                  try {
+                    if (message.serverId == null) return;
+                    final reactionsMap = await ref
+                        .read(localChatServiceProvider)
+                        .toggleReactionOnServer(message.serverId!, emoji);
+                    await ChatDatabase.updateMessageReactions(
+                      serverId: message.serverId,
+                      reactionsJson: jsonEncode(reactionsMap),
+                    );
+                  } catch (_) {}
+                },
                 onTap: () {
                   if (_isSelectionMode) {
                     _toggleMessageSelection(message);
@@ -1144,9 +1181,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                 },
               ),
             ),
-            // Reaction chips below the bubble
-            if (message.reactions != null && message.reactions!.isNotEmpty)
-              _buildReactionChips(message, isMe),
+            // Reactions are now handled internally by LocalMessageBubble
           ],
         );
       },

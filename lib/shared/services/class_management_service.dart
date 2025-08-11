@@ -67,20 +67,33 @@ class ClassManagementService {
     }
   }
 
-  /// Get students in a specific class
+  /// Get students in a specific class (legacy method for backward compatibility)
   Future<List<User>> getClassStudents(String classId) async {
+    final response =
+        await getClassStudentsPaginated(classId, page: 1, limit: 100);
+    return response.students;
+  }
+
+  /// Get students in a specific class with pagination
+  Future<ClassStudentsResponse> getClassStudentsPaginated(String classId,
+      {int page = 1, int limit = 20}) async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/classes/$classId/students'),
+        Uri.parse(
+            '$_baseUrl/classes/$classId/students?page=$page&limit=$limit'),
         headers: headers,
       );
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final List<dynamic> studentsJson = data['students'] ?? [];
+        final Map<String, dynamic> paginationJson = data['pagination'] ?? {};
 
-        return studentsJson.map((json) => User.fromJson(json)).toList();
+        return ClassStudentsResponse(
+          students: studentsJson.map((json) => User.fromJson(json)).toList(),
+          pagination: PaginationInfo.fromJson(paginationJson),
+        );
       } else if (response.statusCode == 401) {
         throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
@@ -94,20 +107,57 @@ class ClassManagementService {
     }
   }
 
-  /// Get teachers in a specific class
-  Future<List<User>> getClassTeachers(String classId) async {
+  /// Get class counts (student count, teacher count, etc.)
+  Future<ClassCounts> getClassCounts(String classId) async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/classes/$classId/teachers'),
+        Uri.parse('$_baseUrl/classes/$classId/counts'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        return ClassCounts.fromJson(data);
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied to this class');
+      } else {
+        throw Exception('Failed to fetch class counts: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching class counts: $e');
+    }
+  }
+
+  /// Get teachers in a specific class (legacy method for backward compatibility)
+  Future<List<User>> getClassTeachers(String classId) async {
+    final response =
+        await getClassTeachersPaginated(classId, page: 1, limit: 100);
+    return response.teachers;
+  }
+
+  /// Get teachers in a specific class with pagination
+  Future<ClassTeachersResponse> getClassTeachersPaginated(String classId,
+      {int page = 1, int limit = 20}) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse(
+            '$_baseUrl/classes/$classId/teachers?page=$page&limit=$limit'),
         headers: headers,
       );
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final List<dynamic> teachersJson = data['teachers'] ?? [];
+        final Map<String, dynamic> paginationJson = data['pagination'] ?? {};
 
-        return teachersJson.map((json) => User.fromJson(json)).toList();
+        return ClassTeachersResponse(
+          teachers: teachersJson.map((json) => User.fromJson(json)).toList(),
+          pagination: PaginationInfo.fromJson(paginationJson),
+        );
       } else if (response.statusCode == 401) {
         throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
@@ -260,5 +310,69 @@ class ClassManagementService {
     } catch (e) {
       throw Exception('Error updating class: $e');
     }
+  }
+}
+
+// Response models for paginated data
+class PaginationInfo {
+  final int page;
+  final int limit;
+  final int total;
+  final bool hasMore;
+
+  PaginationInfo({
+    required this.page,
+    required this.limit,
+    required this.total,
+    required this.hasMore,
+  });
+
+  factory PaginationInfo.fromJson(Map<String, dynamic> json) {
+    return PaginationInfo(
+      page: json['page'] ?? 1,
+      limit: json['limit'] ?? 20,
+      total: json['total'] ?? 0,
+      hasMore: json['hasMore'] ?? false,
+    );
+  }
+}
+
+class ClassStudentsResponse {
+  final List<User> students;
+  final PaginationInfo pagination;
+
+  ClassStudentsResponse({
+    required this.students,
+    required this.pagination,
+  });
+}
+
+class ClassTeachersResponse {
+  final List<User> teachers;
+  final PaginationInfo pagination;
+
+  ClassTeachersResponse({
+    required this.teachers,
+    required this.pagination,
+  });
+}
+
+class ClassCounts {
+  final int studentCount;
+  final int teacherCount;
+  final int totalMembers;
+
+  ClassCounts({
+    required this.studentCount,
+    required this.teacherCount,
+    required this.totalMembers,
+  });
+
+  factory ClassCounts.fromJson(Map<String, dynamic> json) {
+    return ClassCounts(
+      studentCount: json['student_count'] ?? 0,
+      teacherCount: json['teacher_count'] ?? 0,
+      totalMembers: json['total_members'] ?? 0,
+    );
   }
 }
