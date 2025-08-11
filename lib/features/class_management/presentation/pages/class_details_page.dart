@@ -1179,7 +1179,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 3.0, // Increased from 2.5 to provide more height
+      childAspectRatio: 2.4,
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
       children: [
@@ -1218,7 +1218,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10), // Slightly reduced padding
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
@@ -1229,30 +1229,41 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
           Icon(
             icon,
             color: color,
-            size: 24,
+            size: 22, // Slightly smaller icon
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6), // Reduced spacing
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min, // Use minimum space needed
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  count.toString(),
-                  style: TextStyle(
-                    fontSize: 18, // Slightly reduced from 20 to save space
-                    fontWeight: FontWeight.bold,
-                    color: color,
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      count.toString(),
+                      style: TextStyle(
+                        fontSize: 14, // Further reduced for reliable fit
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2), // Small spacing between texts
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: color.withValues(alpha: 0.8),
-                    fontWeight: FontWeight.w500,
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 10, // Smaller for better fit
+                        color: color.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
                 ),
               ],

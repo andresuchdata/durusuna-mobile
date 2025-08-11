@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/chat_database.dart';
 import '../models/local_message.dart';
@@ -99,6 +100,28 @@ class RealtimeDispatcher {
       (previous, next) {
         next.whenData((statusEvent) {
           _handleMessageStatus(statusEvent);
+        });
+      },
+    );
+
+    // Single reaction listener
+    _ref!.listen(
+      realtimeReactionProvider,
+      (previous, next) {
+        next.whenData((reactionEvent) {
+          _handleReaction(reactionEvent);
+        });
+      },
+    );
+
+    // Message reaction updated listener
+    _ref!.listen(
+      realtimeMessageReactionUpdatedProvider,
+      (previous, next) {
+        next.whenData((reactionEvent) {
+          print(
+              '🎭 RealtimeDispatcher: Received reaction updated event from stream');
+          _handleMessageReactionUpdated(reactionEvent);
         });
       },
     );
@@ -450,6 +473,43 @@ class RealtimeDispatcher {
   }
 
   // Conversion methods removed - RealtimeMessage now contains LocalMessage directly
+
+  /// Handle reaction events
+  Future<void> _handleReaction(ReactionEvent reactionEvent) async {
+    try {
+      print(
+          '🎭 RealtimeDispatcher: Handling reaction event: ${reactionEvent.action} for message ${reactionEvent.messageId}');
+      // For individual reaction:added/removed events (legacy format)
+      print(
+          '🎭 RealtimeDispatcher: Individual reaction events not yet implemented');
+    } catch (e) {
+      print('❌ RealtimeDispatcher: Failed to handle reaction: $e');
+    }
+  }
+
+  /// Handle message reaction updated events
+  Future<void> _handleMessageReactionUpdated(
+      MessageReactionUpdatedEvent event) async {
+    try {
+      print(
+          '🎭 RealtimeDispatcher: Handling message reaction updated for message ${event.messageId}');
+
+      // Convert reactions map to JSON string for database storage
+      final reactionsJson = json.encode(event.reactions);
+
+      // Update the message reactions in the database
+      await ChatDatabase.updateMessageReactions(
+        serverId: event.messageId,
+        reactionsJson: reactionsJson,
+      );
+
+      print(
+          '✅ RealtimeDispatcher: Updated reactions for message ${event.messageId}');
+    } catch (e) {
+      print(
+          '❌ RealtimeDispatcher: Failed to handle message reaction updated: $e');
+    }
+  }
 
   /// Start cleanup timer to prevent memory leaks
   void _startCleanupTimer() {

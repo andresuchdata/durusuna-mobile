@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/chat_database.dart';
 import '../models/local_message.dart';
@@ -871,6 +872,49 @@ class LocalChatService {
       return reactions;
     } catch (e) {
       throw LocalChatException('Failed to toggle reaction: $e');
+    }
+  }
+
+  /// Sync existing reactions from server for specific messages
+  /// This is called when chat page loads to ensure reactions are visible
+  Future<void> syncMessageReactions(
+      String conversationId, List<String> messageIds) async {
+    try {
+      if (messageIds.isEmpty) return;
+
+      debugPrint(
+          '🔄 [REACTION SYNC] Fetching reactions for ${messageIds.length} messages from server');
+
+      // Fetch message data with reactions from server
+      final response = await _apiService.post(
+        '${ApiConstants.conversations}/$conversationId/messages/reactions',
+        data: {'messageIds': messageIds},
+      );
+
+      final messagesWithReactions = response.data['messages'] as List<dynamic>;
+      debugPrint(
+          '🔄 [REACTION SYNC] Received ${messagesWithReactions.length} messages with reactions');
+
+      // Update each message's reactions in local database
+      for (final messageData in messagesWithReactions) {
+        final messageId = messageData['id'] as String;
+        final reactions = messageData['reactions'] as Map<String, dynamic>?;
+
+        if (reactions != null && reactions.isNotEmpty) {
+          debugPrint(
+              '🔄 [REACTION SYNC] Updating reactions for message $messageId');
+          await ChatDatabase.updateMessageReactions(
+            serverId: messageId,
+            reactionsJson: jsonEncode(reactions),
+          );
+        }
+      }
+
+      debugPrint(
+          '✅ [REACTION SYNC] Successfully synced reactions for ${messagesWithReactions.length} messages');
+    } catch (e) {
+      debugPrint('❌ [REACTION SYNC] Failed to sync message reactions: $e');
+      // Don't rethrow - this is a background sync operation
     }
   }
 

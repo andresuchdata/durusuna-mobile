@@ -92,39 +92,32 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
                 orElse: () => null,
               );
 
-      // If no direct, check if the user is in any existing group chat
-      Conversation? existingGroup;
-      if (existingDirect == null) {
-        existingGroup = conversations.cast<Conversation?>().firstWhere(
-              (conv) =>
-                  conv != null &&
-                  conv.type == 'group' &&
-                  conv.participants.any((p) => p.id == user.id),
-              orElse: () => null,
-            );
-      }
-
       final Conversation conversation;
       if (existingDirect != null) {
         conversation = existingDirect;
-      } else if (existingGroup != null) {
-        // Open the group chat instead of creating a new 1:1
-        conversation = existingGroup;
       } else {
-        // Create a new direct conversation placeholder
-        final conversationId = 'new_${user.id}';
-        conversation = Conversation(
-          id: conversationId,
-          type: 'direct',
-          createdBy: user.id,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          participants: [user],
-          otherUser: user,
-          unreadCount: 0,
-          lastActivity: DateTime.now(),
-          isOnline: false,
-        );
+        // Create a new DM conversation through the backend API
+        try {
+          final chatService = ref.read(chatServiceProvider);
+          final newConversation = await chatService.createDirectConversation(user.id);
+          conversation = newConversation;
+        } catch (e) {
+          // Fallback: create a temporary conversation for UI
+          debugPrint('Failed to create DM conversation: $e');
+          final conversationId = 'temp_${user.id}_${DateTime.now().millisecondsSinceEpoch}';
+          conversation = Conversation(
+            id: conversationId,
+            type: 'direct',
+            createdBy: user.id,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+            participants: [user],
+            otherUser: user,
+            unreadCount: 0,
+            lastActivity: DateTime.now(),
+            isOnline: false,
+          );
+        }
       }
 
       Navigator.of(context).pushReplacement(

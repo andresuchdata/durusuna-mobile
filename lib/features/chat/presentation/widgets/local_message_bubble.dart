@@ -348,8 +348,8 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                       child: IntrinsicWidth(
                         child: Container(
                           constraints: BoxConstraints(
-                            // Ensure small but sufficient width for timestamp/status/reaction
-                            minWidth: 64,
+                            // Increased min width for sender messages to accommodate read status, timestamp, and reactions
+                            minWidth: 120,
                             maxWidth: MediaQuery.of(context).size.width * 0.75,
                           ),
                           padding: EdgeInsets.fromLTRB(
@@ -481,13 +481,15 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                                   ),
                                 ],
                               ),
-                              // Reactions along the bottom border of the bubble
+                              // Reactions along the bottom border of the bubble (cut in half)
                               if (!widget.isSelectionMode)
                                 Positioned(
                                   bottom:
-                                      -14, // center of 28px chips sits on border
-                                  left: widget.isMe ? null : 8,
-                                  right: widget.isMe ? 8 : null,
+                                      -10, // Position so reactions appear cut by bottom border
+                                  left: widget.isMe
+                                      ? 8
+                                      : null, // Left for isMe, right for others
+                                  right: widget.isMe ? null : 8,
                                   child: _buildReactionsChips(),
                                 ),
                               if (!widget.isSelectionMode)

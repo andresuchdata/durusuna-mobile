@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +38,8 @@ class RealtimeService with WidgetsBindingObserver {
   final _conversationController =
       StreamController<ConversationEvent>.broadcast();
   final _reactionController = StreamController<ReactionEvent>.broadcast();
+  final _messageReactionUpdatedController =
+      StreamController<MessageReactionUpdatedEvent>.broadcast();
   final _fileUploadController = StreamController<FileUploadEvent>.broadcast();
   final _voiceRecordController = StreamController<VoiceRecordEvent>.broadcast();
   final _lastSeenController = StreamController<LastSeenEvent>.broadcast();
@@ -51,6 +54,8 @@ class RealtimeService with WidgetsBindingObserver {
   Stream<ConversationEvent> get conversationStream =>
       _conversationController.stream;
   Stream<ReactionEvent> get reactionStream => _reactionController.stream;
+  Stream<MessageReactionUpdatedEvent> get messageReactionUpdatedStream =>
+      _messageReactionUpdatedController.stream;
   Stream<FileUploadEvent> get fileUploadStream => _fileUploadController.stream;
   Stream<VoiceRecordEvent> get voiceRecordStream =>
       _voiceRecordController.stream;
@@ -418,6 +423,23 @@ class RealtimeService with WidgetsBindingObserver {
       _reactionController.add(event);
     });
 
+    // Message reaction updates (from backend toggleReaction)
+    _socket!.on('message:reaction_updated', (data) {
+      try {
+        print('🔄 RealtimeService: Received message:reaction_updated event');
+        print('🔄 RealtimeService: Raw event data: $data');
+        final event = MessageReactionUpdatedEvent.fromJson(data);
+        print(
+            '🔄 RealtimeService: Parsed event - messageId: ${event.messageId}, conversationId: ${event.conversationId}');
+        _messageReactionUpdatedController.add(event);
+        print(
+            '✅ RealtimeService: Successfully added MessageReactionUpdatedEvent to stream');
+      } catch (e) {
+        print('❌ RealtimeService: Error parsing message:reaction_updated: $e');
+        print('❌ RealtimeService: Raw data that failed: $data');
+      }
+    });
+
     // File upload progress
     _socket!.on('upload:progress', (data) {
       final event = FileUploadEvent.fromJson(data);
@@ -645,6 +667,7 @@ class RealtimeService with WidgetsBindingObserver {
     _messageStatusController.close();
     _conversationController.close();
     _reactionController.close();
+    _messageReactionUpdatedController.close();
     _fileUploadController.close();
     _voiceRecordController.close();
     _lastSeenController.close();
@@ -793,6 +816,29 @@ class ReactionEvent {
       emoji: json['emoji'],
       userId: json['userId'],
       action: json['action'],
+      timestamp: DateTime.parse(json['timestamp']),
+    );
+  }
+}
+
+class MessageReactionUpdatedEvent {
+  final String messageId;
+  final Map<String, dynamic> reactions;
+  final String conversationId;
+  final DateTime timestamp;
+
+  MessageReactionUpdatedEvent({
+    required this.messageId,
+    required this.reactions,
+    required this.conversationId,
+    required this.timestamp,
+  });
+
+  factory MessageReactionUpdatedEvent.fromJson(Map<String, dynamic> json) {
+    return MessageReactionUpdatedEvent(
+      messageId: json['messageId'],
+      reactions: json['reactions'] as Map<String, dynamic>,
+      conversationId: json['conversationId'],
       timestamp: DateTime.parse(json['timestamp']),
     );
   }
@@ -958,4 +1004,15 @@ final realtimePresenceProvider = StreamProvider<PresenceEvent>((ref) {
 final realtimeMessageStatusProvider = StreamProvider<MessageStatusEvent>((ref) {
   final service = ref.watch(realtimeServiceProvider);
   return service.messageStatusStream;
+});
+
+final realtimeReactionProvider = StreamProvider<ReactionEvent>((ref) {
+  final service = ref.watch(realtimeServiceProvider);
+  return service.reactionStream;
+});
+
+final realtimeMessageReactionUpdatedProvider =
+    StreamProvider<MessageReactionUpdatedEvent>((ref) {
+  final service = ref.watch(realtimeServiceProvider);
+  return service.messageReactionUpdatedStream;
 });

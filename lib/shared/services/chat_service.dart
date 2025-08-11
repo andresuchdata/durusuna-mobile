@@ -183,6 +183,35 @@ class ChatService {
     }
   }
 
+  /// Create a new direct conversation with a user
+  Future<Conversation> createDirectConversation(String userId) async {
+    try {
+      final response = await _apiService.post(
+        ApiConstants.createConversation,
+        data: {
+          'type': 'direct',
+          'participant_ids': [userId],
+        },
+      );
+
+      if (response.statusCode == 201) {
+        final conversationData = response.data['conversation'] as Map<String, dynamic>;
+        return Conversation.fromJson(conversationData);
+      } else {
+        throw ApiException(
+          message: 'Failed to create direct conversation',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to create direct conversation: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
   /// Mark conversation as read
   Future<void> markConversationAsRead(String conversationId) async {
     try {
