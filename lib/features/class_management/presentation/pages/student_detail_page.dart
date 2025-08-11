@@ -670,7 +670,9 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage>
 
   Widget _buildAssignmentCard(Map<String, dynamic> assignment) {
     final status = assignment['status'] as String;
-    final score = assignment['score'] as double?;
+    final score = assignment['score'] != null
+        ? (assignment['score'] as num).toDouble()
+        : null;
     final maxScore = (assignment['maxScore'] as num).toDouble();
     final dueDate = assignment['dueDate'] as DateTime;
 

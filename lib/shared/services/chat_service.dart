@@ -340,6 +340,7 @@ class ChatService {
     int page = 1,
     int limit = 50,
     String? search,
+    String? userType,
   }) async {
     try {
       final queryParams = <String, dynamic>{
@@ -351,8 +352,12 @@ class ChatService {
         queryParams['search'] = search;
       }
 
+      if (userType != null && userType != 'all') {
+        queryParams['userType'] = userType;
+      }
+
       final response = await _apiService.get(
-        '${ApiConstants.users}/contacts',
+        ApiConstants.getContacts,
         queryParameters: queryParams,
       );
 
@@ -1176,7 +1181,7 @@ class ContactsNotifier extends StateNotifier<ContactsState> {
 
   ContactsNotifier(this._chatService) : super(ContactsState());
 
-  Future<void> loadContacts({bool loadMore = false}) async {
+  Future<void> loadContacts({bool loadMore = false, String? userType}) async {
     if (loadMore && state.isLoadingMore) return;
     if (!loadMore && state.isLoading) return;
 
@@ -1189,6 +1194,7 @@ class ContactsNotifier extends StateNotifier<ContactsState> {
     try {
       final contacts = await _chatService.getContacts(
         page: loadMore ? state.currentPage + 1 : 1,
+        userType: userType,
       );
 
       if (loadMore) {
@@ -1215,17 +1221,41 @@ class ContactsNotifier extends StateNotifier<ContactsState> {
     }
   }
 
-  Future<void> searchContacts(String query) async {
+  Future<void> searchContacts(String query, {String? userType}) async {
     if (state.isLoading) return;
 
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final contacts = await _chatService.getContacts(search: query);
+      final contacts = await _chatService.getContacts(
+        search: query,
+        userType: userType,
+      );
       state = state.copyWith(
         contacts: contacts,
         isLoading: false,
         hasMore: false, // Search results don't have pagination
+        currentPage: 1,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: e.toString(),
+      );
+    }
+  }
+
+  Future<void> filterContacts(String userType) async {
+    if (state.isLoading) return;
+
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      final contacts = await _chatService.getContacts(userType: userType);
+      state = state.copyWith(
+        contacts: contacts,
+        isLoading: false,
+        hasMore: false, // Filter results don't have pagination for now
         currentPage: 1,
       );
     } catch (e) {

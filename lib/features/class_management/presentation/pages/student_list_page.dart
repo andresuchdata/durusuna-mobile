@@ -6,11 +6,12 @@ import '../../../../shared/models/user.dart';
 import '../../../../shared/services/class_management_service.dart';
 import 'student_detail_page.dart';
 
-// Provider for paginated students list
-final studentsListProvider =
-    FutureProvider.family<List<User>, String>((ref, classId) async {
+// Provider for paginated students list with search
+final studentsListWithSearchProvider =
+    FutureProvider.family<List<User>, (String, String?)>((ref, params) async {
+  final (classId, search) = params;
   final service = ref.read(classManagementServiceProvider);
-  return await service.getClassStudents(classId);
+  return await service.getClassStudents(classId, search: search);
 });
 
 final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
@@ -39,9 +40,16 @@ class _StudentListPageState extends ConsumerState<StudentListPage> {
     super.dispose();
   }
 
+  void _onSearchChanged(String value) {
+    setState(() {
+      _searchQuery = value;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final studentsAsync = ref.watch(studentsListProvider(widget.classModel.id));
+    final studentsAsync = ref.watch(studentsListWithSearchProvider(
+        (widget.classModel.id, _searchQuery.isEmpty ? null : _searchQuery)));
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -85,11 +93,7 @@ class _StudentListPageState extends ConsumerState<StudentListPage> {
               ),
               child: TextField(
                 controller: _searchController,
-                onChanged: (value) {
-                  setState(() {
-                    _searchQuery = value.toLowerCase();
-                  });
-                },
+                onChanged: _onSearchChanged,
                 decoration: const InputDecoration(
                   hintText: 'Search students...',
                   hintStyle: TextStyle(
@@ -188,20 +192,8 @@ class _StudentListPageState extends ConsumerState<StudentListPage> {
                   );
                 }
 
-                // Filter students based on search query
-                final filteredStudents = students.where((student) {
-                  if (_searchQuery.isEmpty) return true;
-                  final fullName =
-                      '${student.firstName} ${student.lastName}'.toLowerCase();
-                  final email = student.email.toLowerCase();
-                  final studentId = student.id.toLowerCase();
-
-                  return fullName.contains(_searchQuery) ||
-                      email.contains(_searchQuery) ||
-                      studentId.contains(_searchQuery);
-                }).toList();
-
-                if (filteredStudents.isEmpty && _searchQuery.isNotEmpty) {
+                // Check if search returned no results
+                if (students.isEmpty && _searchQuery.isNotEmpty) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(32),
@@ -237,9 +229,9 @@ class _StudentListPageState extends ConsumerState<StudentListPage> {
 
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: filteredStudents.length,
+                  itemCount: students.length,
                   itemBuilder: (context, index) {
-                    final student = filteredStudents[index];
+                    final student = students[index];
                     return _buildStudentTile(student);
                   },
                 );
