@@ -27,3 +27,16 @@
 -keep class ** {
     public <methods>;
 }
+
+# Modern Android compatibility
+-keep class androidx.** { *; }
+
+# Prevent object loading errors on Android devices
+-keep class * extends java.lang.Object {
+    <init>(...);
+}
+
+# Keep all constructors for object instantiation
+-keepclassmembers class * {
+    <init>(...);
+}
