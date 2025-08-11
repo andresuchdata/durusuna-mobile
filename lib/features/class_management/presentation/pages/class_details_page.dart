@@ -13,6 +13,7 @@ import '../../../../shared/widgets/global_bottom_navigation.dart';
 import '../../../../core/utils/date_utils.dart' as app_date_utils;
 
 import 'subject_details_page.dart';
+import 'student_list_page.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 
 // Providers for class details data
@@ -623,7 +624,14 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 ),
                 TextButton(
                   onPressed: () {
-                    // Navigate to full student list
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => StudentListPage(
+                          classModel: widget.classModel,
+                        ),
+                      ),
+                    );
                   },
                   child: const Text('View all'),
                 ),
