@@ -19,6 +19,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   final ScrollController _scrollController = ScrollController();
   bool _isSearching = false;
   String _searchQuery = '';
+  String _selectedUserType = 'all';
 
   @override
   void initState() {
@@ -26,7 +27,9 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     _scrollController.addListener(_onScroll);
     // Load initial contacts
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(contactsProvider.notifier).loadContacts();
+      ref
+          .read(contactsProvider.notifier)
+          .loadContacts(userType: _selectedUserType);
     });
   }
 
@@ -53,9 +56,13 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     });
 
     if (query.trim().isEmpty) {
-      ref.read(contactsProvider.notifier).loadContacts();
+      ref
+          .read(contactsProvider.notifier)
+          .loadContacts(userType: _selectedUserType);
     } else {
-      ref.read(contactsProvider.notifier).searchContacts(query);
+      ref
+          .read(contactsProvider.notifier)
+          .searchContacts(query, userType: _selectedUserType);
     }
   }
 
@@ -69,7 +76,23 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       _searchQuery = '';
       _searchController.clear();
     });
-    ref.read(contactsProvider.notifier).loadContacts();
+    ref
+        .read(contactsProvider.notifier)
+        .loadContacts(userType: _selectedUserType);
+  }
+
+  void _onFilterChanged(String userType) {
+    setState(() {
+      _selectedUserType = userType;
+    });
+
+    if (_searchQuery.trim().isEmpty) {
+      ref.read(contactsProvider.notifier).filterContacts(userType);
+    } else {
+      ref
+          .read(contactsProvider.notifier)
+          .searchContacts(_searchQuery, userType: userType);
+    }
   }
 
   void _startChat(User user) async {
@@ -184,40 +207,32 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
           Expanded(
             child: _buildFilterChip(
               label: 'All',
-              isSelected: true, // TODO: Implement filter state
-              onTap: () {
-                // TODO: Filter by all users
-              },
+              isSelected: _selectedUserType == 'all',
+              onTap: () => _onFilterChanged('all'),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: _buildFilterChip(
               label: 'Teachers',
-              isSelected: false,
-              onTap: () {
-                // TODO: Filter by teachers
-              },
+              isSelected: _selectedUserType == 'teacher',
+              onTap: () => _onFilterChanged('teacher'),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: _buildFilterChip(
               label: 'Students',
-              isSelected: false,
-              onTap: () {
-                // TODO: Filter by students
-              },
+              isSelected: _selectedUserType == 'student',
+              onTap: () => _onFilterChanged('student'),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: _buildFilterChip(
               label: 'Parents',
-              isSelected: false,
-              onTap: () {
-                // TODO: Filter by parents
-              },
+              isSelected: _selectedUserType == 'parent',
+              onTap: () => _onFilterChanged('parent'),
             ),
           ),
         ],
@@ -270,9 +285,13 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
     return RefreshIndicator(
       onRefresh: () async {
         if (_searchQuery.isEmpty) {
-          ref.read(contactsProvider.notifier).loadContacts();
+          ref
+              .read(contactsProvider.notifier)
+              .loadContacts(userType: _selectedUserType);
         } else {
-          ref.read(contactsProvider.notifier).searchContacts(_searchQuery);
+          ref
+              .read(contactsProvider.notifier)
+              .searchContacts(_searchQuery, userType: _selectedUserType);
         }
       },
       child: ListView.builder(
@@ -366,7 +385,9 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
-            onPressed: () => ref.read(contactsProvider.notifier).loadContacts(),
+            onPressed: () => ref
+                .read(contactsProvider.notifier)
+                .loadContacts(userType: _selectedUserType),
             icon: const Icon(Icons.refresh),
             label: const Text('Try Again'),
           ),

@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.durusuna_mobile"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -24,13 +24,18 @@ android {
         applicationId = "com.example.durusuna_mobile"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 23  // Android 6.0 for maximum compatibility including Samsung A22
-        targetSdk = 34  // Latest stable Android version
+        minSdk = 26  // Android 8.0 - good balance of modern features and device coverage
+        targetSdk = 35  // Match with compileSdk for consistency
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         
-        // Enable multidex for Samsung A22 compatibility
+        // Enable multidex for modern Android compatibility
         multiDexEnabled = true
+        
+        // Add ABI splits for better device compatibility
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
@@ -39,12 +44,25 @@ android {
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
             
-            // Optimize for Samsung A22 release builds
-            isMinifyEnabled = false  // Disable to avoid issues on Samsung devices
+            // Optimize for modern Android devices release builds
+            isMinifyEnabled = false  // Disable to avoid compatibility issues
             isShrinkResources = false
             
-            // Keep debugging info for Samsung-specific issues
+            // Keep debugging info for device-specific issues
             isDebuggable = false
+            
+            // Add ProGuard rules for Isar compatibility and modern Android support
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+    
+    // Split APKs by ABI for better compatibility with different devices
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = true  // Also generate a universal APK
         }
     }
 }

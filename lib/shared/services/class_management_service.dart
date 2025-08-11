@@ -68,20 +68,25 @@ class ClassManagementService {
   }
 
   /// Get students in a specific class (legacy method for backward compatibility)
-  Future<List<User>> getClassStudents(String classId) async {
-    final response =
-        await getClassStudentsPaginated(classId, page: 1, limit: 100);
+  Future<List<User>> getClassStudents(String classId, {String? search}) async {
+    final response = await getClassStudentsPaginated(classId,
+        page: 1, limit: 100, search: search);
     return response.students;
   }
 
   /// Get students in a specific class with pagination
   Future<ClassStudentsResponse> getClassStudentsPaginated(String classId,
-      {int page = 1, int limit = 20}) async {
+      {int page = 1, int limit = 20, String? search}) async {
     try {
       final headers = await _getHeaders();
+
+      var url = '$_baseUrl/classes/$classId/students?page=$page&limit=$limit';
+      if (search != null && search.isNotEmpty) {
+        url += '&search=${Uri.encodeComponent(search)}';
+      }
+
       final response = await http.get(
-        Uri.parse(
-            '$_baseUrl/classes/$classId/students?page=$page&limit=$limit'),
+        Uri.parse(url),
         headers: headers,
       );
 

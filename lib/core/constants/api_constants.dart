@@ -140,6 +140,10 @@ class ApiConstants {
   static const String sendMessage = messages;
   static const String searchMessages = '$messages/search';
 
+  // User endpoints
+  static const String searchUsers = '$users/search';
+  static const String getContacts = '$users/contacts';
+
   // Conversation endpoints
   static String getConversations = conversations;
   static String createConversation = conversations;

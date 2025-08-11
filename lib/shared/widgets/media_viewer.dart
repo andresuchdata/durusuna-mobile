@@ -147,6 +147,29 @@ class _MediaViewerState extends State<MediaViewer> {
 
   Widget _buildVideoViewer(Map<String, dynamic> attachment) {
     final url = _getAttachmentUrl(attachment);
+    
+    // Validate URL before creating video player
+    if (url.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error, color: Colors.white, size: 64),
+            const SizedBox(height: 16),
+            const Text(
+              'Video URL not found',
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              attachment['fileName'] ?? attachment['filename'] ?? 'Unknown Video',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
 
     return VideoPlayerWidget(
       videoUrl: url,
@@ -318,22 +341,66 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   Future<void> _initializeVideoPlayer() async {
     try {
-      _controller =
-          VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-      await _controller!.initialize();
+      // Debug print the video URL
+      debugPrint('Initializing video player with URL: ${widget.videoUrl}');
+      
+      // Validate URL format
+      final uri = Uri.tryParse(widget.videoUrl);
+      if (uri == null || (!uri.hasScheme || (!uri.scheme.startsWith('http')))) {
+        throw Exception('Invalid video URL format: ${widget.videoUrl}');
+      }
+      
+      _controller = VideoPlayerController.networkUrl(uri);
+      
+      // Add a listener to track video state changes
+      _controller!.addListener(() {
+        if (mounted && _controller!.value.hasError) {
+          setState(() {
+            _isLoading = false;
+            _hasError = true;
+            _errorMessage = _controller!.value.errorDescription ?? 'Video playback error';
+          });
+        }
+      });
+      
+      // Add timeout for initialization
+      await _controller!.initialize().timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Video loading timeout - please check your internet connection');
+        },
+      );
+      
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
+        debugPrint('Video player initialized successfully - Duration: ${_controller!.value.duration}');
       }
     } catch (e) {
+      debugPrint('Video player initialization error: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
           _hasError = true;
-          _errorMessage = e.toString();
+          _errorMessage = _getErrorMessage(e);
         });
       }
+    }
+  }
+  
+  String _getErrorMessage(dynamic error) {
+    final errorStr = error.toString().toLowerCase();
+    if (errorStr.contains('timeout')) {
+      return 'Video loading timeout. Please check your internet connection.';
+    } else if (errorStr.contains('network') || errorStr.contains('connection')) {
+      return 'Network error. Please check your internet connection and try again.';
+    } else if (errorStr.contains('format') || errorStr.contains('codec')) {
+      return 'Video format not supported on this device.';
+    } else if (errorStr.contains('invalid') || errorStr.contains('url')) {
+      return 'Invalid video file or URL.';
+    } else {
+      return 'Unable to play video: ${error.toString()}';
     }
   }
 
@@ -399,12 +466,32 @@ class _VideoPlayerControlsState extends State<VideoPlayerControls> {
   bool _showControls = true;
 
   @override
+  void initState() {
+    super.initState();
+    // Auto-hide controls after 3 seconds
+    _hideControlsAfterDelay();
+  }
+
+  void _hideControlsAfterDelay() {
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _showControls = false;
+        });
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
         setState(() {
           _showControls = !_showControls;
         });
+        if (_showControls) {
+          _hideControlsAfterDelay();
+        }
       },
       child: AnimatedOpacity(
         opacity: _showControls ? 1.0 : 0.0,
@@ -414,12 +501,17 @@ class _VideoPlayerControlsState extends State<VideoPlayerControls> {
           child: Center(
             child: IconButton(
               iconSize: 64,
-              onPressed: () {
-                setState(() {
-                  widget.controller.value.isPlaying
-                      ? widget.controller.pause()
-                      : widget.controller.play();
-                });
+              onPressed: () async {
+                try {
+                  if (widget.controller.value.isPlaying) {
+                    await widget.controller.pause();
+                  } else {
+                    await widget.controller.play();
+                  }
+                  setState(() {});
+                } catch (e) {
+                  debugPrint('Error controlling video playback: $e');
+                }
               },
               icon: Icon(
                 widget.controller.value.isPlaying
