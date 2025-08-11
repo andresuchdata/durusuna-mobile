@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.durusuna_mobile"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -25,7 +25,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 23  // Android 6.0 for maximum compatibility including Samsung A22
-        targetSdk = 34  // Latest stable Android version
+        targetSdk = 35  // Match with compileSdk for consistency
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         
@@ -45,6 +45,9 @@ android {
             
             // Keep debugging info for Samsung-specific issues
             isDebuggable = false
+            
+            // Add ProGuard rules for Isar compatibility (commented out for now)
+            // proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
