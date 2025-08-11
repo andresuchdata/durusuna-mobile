@@ -446,7 +446,8 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           debugPrint(
               '🔄 [REACTION SYNC] Processing ${messages.length} total messages');
           final serverMessageIds = messages
-              .where((msg) => msg.serverId != null)
+              .where((msg) =>
+                  msg.serverId != null && !msg.serverId!.startsWith('failed_'))
               .map((msg) => msg.serverId!)
               .toList();
 

@@ -172,6 +172,18 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       }
     });
 
+    // Listen for real-time conversation events (creation, updates)
+    ref.listen(realtimeConversationProvider, (previous, next) {
+      next.whenData((conversationEvent) {
+        if (conversationEvent.action == 'created') {
+          // Refresh conversations list when a new conversation is created
+          debugPrint(
+              '📋 ConversationsPage: New conversation created, refreshing list');
+          ref.read(conversationsProvider.notifier).loadConversations();
+        }
+      });
+    });
+
     // Real-time conversations updates are now handled by the centralized RealtimeDispatcher
 
     return GlobalAppScaffold(

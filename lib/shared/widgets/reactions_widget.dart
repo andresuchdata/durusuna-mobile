@@ -81,21 +81,22 @@ class ReactionsWidget extends StatelessWidget {
 
     Widget buildCircleBadge({required Widget child, bool highlighted = false}) {
       return Container(
-        width: 16,
-        height: 16,
+        width: 24,
+        height: 24,
         decoration: BoxDecoration(
           color: highlighted
               ? AppTheme.primaryColor.withValues(alpha: 0.08)
               : Colors.grey.withValues(alpha: 0.05),
           shape: BoxShape.circle,
           border: Border.all(
-            color: Colors.grey[300]!,
-            width: 0.02,
+            color: Colors.black.withValues(alpha: 0.08),
+            width: 0.1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              offset: const Offset(0, 0.5),
+              color: Colors.grey[200]!.withValues(alpha: 0.88),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
             ),
           ],
         ),
@@ -110,7 +111,7 @@ class ReactionsWidget extends StatelessWidget {
           child: buildCircleBadge(
             child: Text(
               m['emoji'] as String,
-              style: const TextStyle(fontSize: 10),
+              style: const TextStyle(fontSize: 14),
             ),
             highlighted: (m['hasReacted'] as bool),
           ),

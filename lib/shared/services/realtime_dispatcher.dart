@@ -125,6 +125,18 @@ class RealtimeDispatcher {
         });
       },
     );
+
+    // Conversation event listener
+    _ref!.listen(
+      realtimeConversationProvider,
+      (previous, next) {
+        next.whenData((conversationEvent) {
+          print(
+              '📋 RealtimeDispatcher: Received conversation event: ${conversationEvent.action}');
+          _handleConversationEvent(conversationEvent);
+        });
+      },
+    );
   }
 
   /// Handle incoming messages with deduplication and circuit breaker
@@ -508,6 +520,34 @@ class RealtimeDispatcher {
     } catch (e) {
       print(
           '❌ RealtimeDispatcher: Failed to handle message reaction updated: $e');
+    }
+  }
+
+  /// Handle conversation events (created, updated, etc.)
+  Future<void> _handleConversationEvent(ConversationEvent event) async {
+    try {
+      print(
+          '📋 RealtimeDispatcher: Handling conversation ${event.action} for ${event.conversationId}');
+
+      if (event.action == 'created') {
+        // Refresh conversations list when a new conversation is created
+        if (_ref != null) {
+          // Force refresh the conversations provider to pick up the new conversation
+          final conversationsNotifier =
+              _ref!.read(localConversationsProvider.notifier);
+          await conversationsNotifier.refresh();
+
+          print(
+              '✅ RealtimeDispatcher: Refreshed conversations list after creation of ${event.conversationId}');
+        }
+      } else if (event.action == 'updated') {
+        // Handle conversation updates (e.g., name changes)
+        print(
+            '📋 RealtimeDispatcher: Conversation updated: ${event.conversationId}');
+        // Could implement specific update handling here if needed
+      }
+    } catch (e) {
+      print('❌ RealtimeDispatcher: Failed to handle conversation event: $e');
     }
   }
 

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1004,6 +1003,11 @@ final realtimePresenceProvider = StreamProvider<PresenceEvent>((ref) {
 final realtimeMessageStatusProvider = StreamProvider<MessageStatusEvent>((ref) {
   final service = ref.watch(realtimeServiceProvider);
   return service.messageStatusStream;
+});
+
+final realtimeConversationProvider = StreamProvider<ConversationEvent>((ref) {
+  final service = ref.watch(realtimeServiceProvider);
+  return service.conversationStream;
 });
 
 final realtimeReactionProvider = StreamProvider<ReactionEvent>((ref) {

@@ -195,7 +195,8 @@ class ChatService {
       );
 
       if (response.statusCode == 201) {
-        final conversationData = response.data['conversation'] as Map<String, dynamic>;
+        final conversationData =
+            response.data['conversation'] as Map<String, dynamic>;
         return Conversation.fromJson(conversationData);
       } else {
         throw ApiException(

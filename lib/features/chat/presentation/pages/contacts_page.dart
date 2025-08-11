@@ -96,28 +96,21 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       if (existingDirect != null) {
         conversation = existingDirect;
       } else {
-        // Create a new DM conversation through the backend API
-        try {
-          final chatService = ref.read(chatServiceProvider);
-          final newConversation = await chatService.createDirectConversation(user.id);
-          conversation = newConversation;
-        } catch (e) {
-          // Fallback: create a temporary conversation for UI
-          debugPrint('Failed to create DM conversation: $e');
-          final conversationId = 'temp_${user.id}_${DateTime.now().millisecondsSinceEpoch}';
-          conversation = Conversation(
-            id: conversationId,
-            type: 'direct',
-            createdBy: user.id,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-            participants: [user],
-            otherUser: user,
-            unreadCount: 0,
-            lastActivity: DateTime.now(),
-            isOnline: false,
-          );
-        }
+        // Create a new direct conversation placeholder for UI
+        // The actual conversation will be created when the first message is sent
+        final conversationId = 'new_${user.id}';
+        conversation = Conversation(
+          id: conversationId,
+          type: 'direct',
+          createdBy: user.id,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          participants: [user],
+          otherUser: user,
+          unreadCount: 0,
+          lastActivity: DateTime.now(),
+          isOnline: false,
+        );
       }
 
       Navigator.of(context).pushReplacement(

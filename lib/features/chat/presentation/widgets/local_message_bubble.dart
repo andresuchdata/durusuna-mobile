@@ -303,7 +303,8 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
             onLongPress: widget.onLongPress,
             onDoubleTap: widget.onDoubleTap,
             child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+              margin: const EdgeInsets.fromLTRB(
+                  8, 2, 8, 24), // Add bottom margin for reactions
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisAlignment: widget.isMe
@@ -481,11 +482,11 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                                   ),
                                 ],
                               ),
-                              // Reactions along the bottom border of the bubble (cut in half)
+                              // Reactions below the bubble (fully visible)
                               if (!widget.isSelectionMode)
                                 Positioned(
                                   bottom:
-                                      -10, // Position so reactions appear cut by bottom border
+                                      -20, // Position reactions below the bubble with proper spacing
                                   left: widget.isMe
                                       ? 8
                                       : null, // Left for isMe, right for others
