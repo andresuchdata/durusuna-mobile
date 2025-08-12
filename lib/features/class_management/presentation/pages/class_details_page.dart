@@ -7,6 +7,7 @@ import '../../../../shared/models/class_update.dart';
 import '../../../../shared/services/class_management_service.dart';
 import '../../../../shared/services/class_updates_service.dart'
     show classUpdatesServiceProvider;
+import '../../../../shared/services/auth_service.dart';
 
 import '../../../../shared/widgets/global_app_drawer.dart';
 import '../../../../shared/widgets/global_bottom_navigation.dart';
@@ -15,6 +16,7 @@ import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import 'subject_details_page.dart';
 import 'student_list_page.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
+import '../../../attendance/presentation/pages/attendance_management_page.dart';
 
 // Providers for class details data
 final classSubjectsProvider =
@@ -153,6 +155,9 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                   child: _buildClassStatistics(),
                 ),
                 SliverToBoxAdapter(
+                  child: _buildQuickActions(),
+                ),
+                SliverToBoxAdapter(
                   child: _buildClassUpdatesPreview(),
                 ),
                 SliverToBoxAdapter(
@@ -192,6 +197,8 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     final teacher = widget.classModel.teachers?.isNotEmpty == true
         ? widget.classModel.teachers!.first
         : null;
+    final authState = ref.watch(authStateProvider);
+    final currentUser = authState.user;
 
     return SliverAppBar(
       expandedHeight: teacher != null ? 250 : 180,
@@ -210,6 +217,22 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
         ),
       ),
       actions: [
+        // Attendance management button for teachers
+        if (currentUser?.userType == UserType.teacher)
+          IconButton(
+            icon: const Icon(Icons.fact_check, color: Colors.white),
+            tooltip: 'Manage Attendance',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AttendanceManagementPage(
+                    classModel: widget.classModel,
+                  ),
+                ),
+              );
+            },
+          ),
         if (teacher != null)
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
@@ -1110,6 +1133,143 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 Icons.chevron_right,
                 color: AppTheme.textSecondary.withValues(alpha: 0.6),
                 size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    final authState = ref.watch(authStateProvider);
+    final currentUser = authState.user;
+
+    // Only show quick actions for teachers
+    if (currentUser?.userType != UserType.teacher) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Quick Actions',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildQuickActionCard(
+                    icon: Icons.fact_check,
+                    title: 'Manage Attendance',
+                    subtitle: 'Take daily attendance',
+                    color: AppTheme.primaryColor,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AttendanceManagementPage(
+                            classModel: widget.classModel,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildQuickActionCard(
+                    icon: Icons.people,
+                    title: 'View Students',
+                    subtitle: 'Manage class roster',
+                    color: AppTheme.accentColor,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => StudentListPage(
+                            classModel: widget.classModel,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: color.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                icon,
+                color: color,
+                size: 24,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                ),
               ),
             ],
           ),

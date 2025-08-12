@@ -32,94 +32,99 @@ const LocalMessageSchema = CollectionSchema(
       name: r'attachmentUrl',
       type: IsarType.string,
     ),
-    r'content': PropertySchema(
+    r'clientMessageId': PropertySchema(
       id: 3,
+      name: r'clientMessageId',
+      type: IsarType.string,
+    ),
+    r'content': PropertySchema(
+      id: 4,
       name: r'content',
       type: IsarType.string,
     ),
     r'conversationId': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'conversationId',
       type: IsarType.string,
     ),
     r'createdAt': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
     r'deliveredAt': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'deliveredAt',
       type: IsarType.dateTime,
     ),
     r'isFromMe': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'isFromMe',
       type: IsarType.bool,
     ),
     r'isSynced': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'isSynced',
       type: IsarType.bool,
     ),
     r'messageType': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'messageType',
       type: IsarType.string,
       enumMap: _LocalMessagemessageTypeEnumValueMap,
     ),
     r'metadataJson': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'metadataJson',
       type: IsarType.string,
     ),
     r'needsUpload': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'needsUpload',
       type: IsarType.bool,
     ),
     r'reactions': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'reactions',
       type: IsarType.string,
     ),
     r'readAt': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'readAt',
       type: IsarType.dateTime,
     ),
     r'readStatus': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'readStatus',
       type: IsarType.string,
     ),
     r'replyToContent': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'replyToContent',
       type: IsarType.string,
     ),
     r'replyToId': PropertySchema(
-      id: 16,
+      id: 17,
       name: r'replyToId',
       type: IsarType.string,
     ),
     r'senderId': PropertySchema(
-      id: 17,
+      id: 18,
       name: r'senderId',
       type: IsarType.string,
     ),
     r'serverId': PropertySchema(
-      id: 18,
+      id: 19,
       name: r'serverId',
       type: IsarType.string,
     ),
     r'thumbnailPath': PropertySchema(
-      id: 19,
+      id: 20,
       name: r'thumbnailPath',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 20,
+      id: 21,
       name: r'updatedAt',
       type: IsarType.dateTime,
     )
@@ -140,6 +145,19 @@ const LocalMessageSchema = CollectionSchema(
           name: r'serverId',
           type: IndexType.hash,
           caseSensitive: true,
+        )
+      ],
+    ),
+    r'clientMessageId': IndexSchema(
+      id: -5446652790308646705,
+      name: r'clientMessageId',
+      unique: true,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'clientMessageId',
+          type: IndexType.hash,
+          caseSensitive: false,
         )
       ],
     ),
@@ -249,6 +267,12 @@ int _localMessageEstimateSize(
     }
   }
   {
+    final value = object.clientMessageId;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
     final value = object.content;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
@@ -311,24 +335,25 @@ void _localMessageSerialize(
   writer.writeLong(offsets[0], object.attachmentSize);
   writer.writeString(offsets[1], object.attachmentType);
   writer.writeString(offsets[2], object.attachmentUrl);
-  writer.writeString(offsets[3], object.content);
-  writer.writeString(offsets[4], object.conversationId);
-  writer.writeDateTime(offsets[5], object.createdAt);
-  writer.writeDateTime(offsets[6], object.deliveredAt);
-  writer.writeBool(offsets[7], object.isFromMe);
-  writer.writeBool(offsets[8], object.isSynced);
-  writer.writeString(offsets[9], object.messageType.name);
-  writer.writeString(offsets[10], object.metadataJson);
-  writer.writeBool(offsets[11], object.needsUpload);
-  writer.writeString(offsets[12], object.reactions);
-  writer.writeDateTime(offsets[13], object.readAt);
-  writer.writeString(offsets[14], object.readStatus);
-  writer.writeString(offsets[15], object.replyToContent);
-  writer.writeString(offsets[16], object.replyToId);
-  writer.writeString(offsets[17], object.senderId);
-  writer.writeString(offsets[18], object.serverId);
-  writer.writeString(offsets[19], object.thumbnailPath);
-  writer.writeDateTime(offsets[20], object.updatedAt);
+  writer.writeString(offsets[3], object.clientMessageId);
+  writer.writeString(offsets[4], object.content);
+  writer.writeString(offsets[5], object.conversationId);
+  writer.writeDateTime(offsets[6], object.createdAt);
+  writer.writeDateTime(offsets[7], object.deliveredAt);
+  writer.writeBool(offsets[8], object.isFromMe);
+  writer.writeBool(offsets[9], object.isSynced);
+  writer.writeString(offsets[10], object.messageType.name);
+  writer.writeString(offsets[11], object.metadataJson);
+  writer.writeBool(offsets[12], object.needsUpload);
+  writer.writeString(offsets[13], object.reactions);
+  writer.writeDateTime(offsets[14], object.readAt);
+  writer.writeString(offsets[15], object.readStatus);
+  writer.writeString(offsets[16], object.replyToContent);
+  writer.writeString(offsets[17], object.replyToId);
+  writer.writeString(offsets[18], object.senderId);
+  writer.writeString(offsets[19], object.serverId);
+  writer.writeString(offsets[20], object.thumbnailPath);
+  writer.writeDateTime(offsets[21], object.updatedAt);
 }
 
 LocalMessage _localMessageDeserialize(
@@ -341,26 +366,27 @@ LocalMessage _localMessageDeserialize(
     attachmentSize: reader.readLongOrNull(offsets[0]),
     attachmentType: reader.readStringOrNull(offsets[1]),
     attachmentUrl: reader.readStringOrNull(offsets[2]),
-    content: reader.readStringOrNull(offsets[3]),
-    conversationId: reader.readString(offsets[4]),
-    createdAt: reader.readDateTime(offsets[5]),
-    deliveredAt: reader.readDateTimeOrNull(offsets[6]),
-    isFromMe: reader.readBool(offsets[7]),
-    isSynced: reader.readBoolOrNull(offsets[8]) ?? false,
+    clientMessageId: reader.readStringOrNull(offsets[3]),
+    content: reader.readStringOrNull(offsets[4]),
+    conversationId: reader.readString(offsets[5]),
+    createdAt: reader.readDateTime(offsets[6]),
+    deliveredAt: reader.readDateTimeOrNull(offsets[7]),
+    isFromMe: reader.readBool(offsets[8]),
+    isSynced: reader.readBoolOrNull(offsets[9]) ?? false,
     messageType: _LocalMessagemessageTypeValueEnumMap[
-            reader.readStringOrNull(offsets[9])] ??
+            reader.readStringOrNull(offsets[10])] ??
         LocalMessageType.text,
-    metadataJson: reader.readStringOrNull(offsets[10]),
-    needsUpload: reader.readBoolOrNull(offsets[11]) ?? false,
-    reactions: reader.readStringOrNull(offsets[12]),
-    readAt: reader.readDateTimeOrNull(offsets[13]),
-    readStatus: reader.readStringOrNull(offsets[14]),
-    replyToContent: reader.readStringOrNull(offsets[15]),
-    replyToId: reader.readStringOrNull(offsets[16]),
-    senderId: reader.readString(offsets[17]),
-    serverId: reader.readStringOrNull(offsets[18]),
-    thumbnailPath: reader.readStringOrNull(offsets[19]),
-    updatedAt: reader.readDateTimeOrNull(offsets[20]),
+    metadataJson: reader.readStringOrNull(offsets[11]),
+    needsUpload: reader.readBoolOrNull(offsets[12]) ?? false,
+    reactions: reader.readStringOrNull(offsets[13]),
+    readAt: reader.readDateTimeOrNull(offsets[14]),
+    readStatus: reader.readStringOrNull(offsets[15]),
+    replyToContent: reader.readStringOrNull(offsets[16]),
+    replyToId: reader.readStringOrNull(offsets[17]),
+    senderId: reader.readString(offsets[18]),
+    serverId: reader.readStringOrNull(offsets[19]),
+    thumbnailPath: reader.readStringOrNull(offsets[20]),
+    updatedAt: reader.readDateTimeOrNull(offsets[21]),
   );
   object.id = id;
   return object;
@@ -382,40 +408,42 @@ P _localMessageDeserializeProp<P>(
     case 3:
       return (reader.readStringOrNull(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 5:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 6:
-      return (reader.readDateTimeOrNull(offset)) as P;
+      return (reader.readDateTime(offset)) as P;
     case 7:
-      return (reader.readBool(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 8:
-      return (reader.readBoolOrNull(offset) ?? false) as P;
+      return (reader.readBool(offset)) as P;
     case 9:
+      return (reader.readBoolOrNull(offset) ?? false) as P;
+    case 10:
       return (_LocalMessagemessageTypeValueEnumMap[
               reader.readStringOrNull(offset)] ??
           LocalMessageType.text) as P;
-    case 10:
-      return (reader.readStringOrNull(offset)) as P;
     case 11:
-      return (reader.readBoolOrNull(offset) ?? false) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 12:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readBoolOrNull(offset) ?? false) as P;
     case 13:
-      return (reader.readDateTimeOrNull(offset)) as P;
-    case 14:
       return (reader.readStringOrNull(offset)) as P;
+    case 14:
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 15:
       return (reader.readStringOrNull(offset)) as P;
     case 16:
       return (reader.readStringOrNull(offset)) as P;
     case 17:
-      return (reader.readString(offset)) as P;
-    case 18:
       return (reader.readStringOrNull(offset)) as P;
+    case 18:
+      return (reader.readString(offset)) as P;
     case 19:
       return (reader.readStringOrNull(offset)) as P;
     case 20:
+      return (reader.readStringOrNull(offset)) as P;
+    case 21:
       return (reader.readDateTimeOrNull(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -506,6 +534,61 @@ extension LocalMessageByIndex on IsarCollection<LocalMessage> {
   List<Id> putAllByServerIdSync(List<LocalMessage> objects,
       {bool saveLinks = true}) {
     return putAllByIndexSync(r'serverId', objects, saveLinks: saveLinks);
+  }
+
+  Future<LocalMessage?> getByClientMessageId(String? clientMessageId) {
+    return getByIndex(r'clientMessageId', [clientMessageId]);
+  }
+
+  LocalMessage? getByClientMessageIdSync(String? clientMessageId) {
+    return getByIndexSync(r'clientMessageId', [clientMessageId]);
+  }
+
+  Future<bool> deleteByClientMessageId(String? clientMessageId) {
+    return deleteByIndex(r'clientMessageId', [clientMessageId]);
+  }
+
+  bool deleteByClientMessageIdSync(String? clientMessageId) {
+    return deleteByIndexSync(r'clientMessageId', [clientMessageId]);
+  }
+
+  Future<List<LocalMessage?>> getAllByClientMessageId(
+      List<String?> clientMessageIdValues) {
+    final values = clientMessageIdValues.map((e) => [e]).toList();
+    return getAllByIndex(r'clientMessageId', values);
+  }
+
+  List<LocalMessage?> getAllByClientMessageIdSync(
+      List<String?> clientMessageIdValues) {
+    final values = clientMessageIdValues.map((e) => [e]).toList();
+    return getAllByIndexSync(r'clientMessageId', values);
+  }
+
+  Future<int> deleteAllByClientMessageId(List<String?> clientMessageIdValues) {
+    final values = clientMessageIdValues.map((e) => [e]).toList();
+    return deleteAllByIndex(r'clientMessageId', values);
+  }
+
+  int deleteAllByClientMessageIdSync(List<String?> clientMessageIdValues) {
+    final values = clientMessageIdValues.map((e) => [e]).toList();
+    return deleteAllByIndexSync(r'clientMessageId', values);
+  }
+
+  Future<Id> putByClientMessageId(LocalMessage object) {
+    return putByIndex(r'clientMessageId', object);
+  }
+
+  Id putByClientMessageIdSync(LocalMessage object, {bool saveLinks = true}) {
+    return putByIndexSync(r'clientMessageId', object, saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllByClientMessageId(List<LocalMessage> objects) {
+    return putAllByIndex(r'clientMessageId', objects);
+  }
+
+  List<Id> putAllByClientMessageIdSync(List<LocalMessage> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'clientMessageId', objects, saveLinks: saveLinks);
   }
 }
 
@@ -663,6 +746,73 @@ extension LocalMessageQueryWhere
               indexName: r'serverId',
               lower: [],
               upper: [serverId],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterWhereClause>
+      clientMessageIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'clientMessageId',
+        value: [null],
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterWhereClause>
+      clientMessageIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'clientMessageId',
+        lower: [null],
+        includeLower: false,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterWhereClause>
+      clientMessageIdEqualTo(String? clientMessageId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'clientMessageId',
+        value: [clientMessageId],
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterWhereClause>
+      clientMessageIdNotEqualTo(String? clientMessageId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'clientMessageId',
+              lower: [],
+              upper: [clientMessageId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'clientMessageId',
+              lower: [clientMessageId],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'clientMessageId',
+              lower: [clientMessageId],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'clientMessageId',
+              lower: [],
+              upper: [clientMessageId],
               includeUpper: false,
             ));
       }
@@ -1408,6 +1558,160 @@ extension LocalMessageQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'attachmentUrl',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'clientMessageId',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'clientMessageId',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'clientMessageId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'clientMessageId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'clientMessageId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'clientMessageId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'clientMessageId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'clientMessageId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'clientMessageId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'clientMessageId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'clientMessageId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterFilterCondition>
+      clientMessageIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'clientMessageId',
         value: '',
       ));
     });
@@ -3463,6 +3767,20 @@ extension LocalMessageQuerySortBy
     });
   }
 
+  QueryBuilder<LocalMessage, LocalMessage, QAfterSortBy>
+      sortByClientMessageId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'clientMessageId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterSortBy>
+      sortByClientMessageIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'clientMessageId', Sort.desc);
+    });
+  }
+
   QueryBuilder<LocalMessage, LocalMessage, QAfterSortBy> sortByContent() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'content', Sort.asc);
@@ -3733,6 +4051,20 @@ extension LocalMessageQuerySortThenBy
     });
   }
 
+  QueryBuilder<LocalMessage, LocalMessage, QAfterSortBy>
+      thenByClientMessageId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'clientMessageId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<LocalMessage, LocalMessage, QAfterSortBy>
+      thenByClientMessageIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'clientMessageId', Sort.desc);
+    });
+  }
+
   QueryBuilder<LocalMessage, LocalMessage, QAfterSortBy> thenByContent() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'content', Sort.asc);
@@ -3997,6 +4329,14 @@ extension LocalMessageQueryWhereDistinct
     });
   }
 
+  QueryBuilder<LocalMessage, LocalMessage, QDistinct> distinctByClientMessageId(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'clientMessageId',
+          caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<LocalMessage, LocalMessage, QDistinct> distinctByContent(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -4145,6 +4485,13 @@ extension LocalMessageQueryProperty
       attachmentUrlProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'attachmentUrl');
+    });
+  }
+
+  QueryBuilder<LocalMessage, String?, QQueryOperations>
+      clientMessageIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'clientMessageId');
     });
   }
 
