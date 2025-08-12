@@ -154,7 +154,7 @@ class LocalMessagesNotifier
       print(
           '🔍 [PROVIDER] Stream received ${messages.length} messages for "$_conversationId"');
 
-      // If DB is empty on first open (e.g., after reset), fetch recent messages from server once
+      // If DB is empty on first open (e.g., after server reset), fetch recent messages from server once
       if (!_initialSyncTriggered && messages.isEmpty) {
         _initialSyncTriggered = true;
         print(
@@ -166,6 +166,22 @@ class LocalMessagesNotifier
             await _chatService.forceSyncMessagesFromServer(_conversationId);
             print(
                 '✅ [PROVIDER] Initial force sync completed for "$_conversationId"');
+            // Also fetch the latest page to guarantee some recent messages appear
+            try {
+              await _chatService.fetchLatestFromServer(_conversationId,
+                  limit: 20);
+            } catch (_) {}
+            // Refresh local snapshot immediately
+            if (mounted) {
+              final refreshed = await _chatService.getMessages(
+                _conversationId,
+                limit: _pageSize,
+                offset: 0,
+              );
+              state = AsyncValue.data(refreshed);
+              _currentOffset = refreshed.length;
+              _hasMore = refreshed.length >= _pageSize;
+            }
           } catch (e, stackTrace) {
             print('⚠️ Initial force sync failed for $_conversationId: $e');
             print('⚠️ Stack trace: $stackTrace');

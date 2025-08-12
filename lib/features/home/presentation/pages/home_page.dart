@@ -9,11 +9,26 @@ import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/services/class_management_service.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/models/class_model.dart';
+import '../../../../shared/models/class_update.dart';
+import '../../../../core/utils/date_utils.dart' as app_date_utils;
 
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../chat/presentation/pages/conversations_page.dart';
 import '../../../notifications/presentation/pages/notifications_page.dart';
 import '../../../class_management/presentation/pages/class_management_page.dart';
+
+// Class to hold update with class context
+class ClassUpdateWithClass {
+  final ClassUpdate update;
+  final String className;
+  final String classId;
+
+  ClassUpdateWithClass({
+    required this.update,
+    required this.className,
+    required this.classId,
+  });
+}
 
 // Enhanced providers for multi-class support
 final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
@@ -23,6 +38,34 @@ final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
 final userClassesProvider = FutureProvider<List<ClassModel>>((ref) async {
   final service = ref.read(classManagementServiceProvider);
   return await service.getUserClasses();
+});
+
+// Provider for recent class updates across all user's classes
+final recentUpdatesProvider =
+    FutureProvider<List<ClassUpdateWithClass>>((ref) async {
+  final classes = await ref.read(userClassesProvider.future);
+  final updateService = ref.read(classUpdatesServiceProvider);
+
+  List<ClassUpdateWithClass> allUpdates = [];
+
+  for (final classModel in classes) {
+    try {
+      final updates =
+          await updateService.getClassUpdates(classModel.id, limit: 3);
+      allUpdates.addAll(updates.map((update) => ClassUpdateWithClass(
+            update: update,
+            className: classModel.name,
+            classId: classModel.id,
+          )));
+    } catch (e) {
+      // Skip if error fetching updates for this class
+      continue;
+    }
+  }
+
+  // Sort by creation time and take most recent 5
+  allUpdates.sort((a, b) => b.update.createdAt.compareTo(a.update.createdAt));
+  return allUpdates.take(5).toList();
 });
 
 // Provider for class activity summary (mock data for now)
@@ -538,79 +581,136 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildRecentActivityList() {
-    // Mock data - in real app, this would come from a provider
-    final activities = [
-      _RecentActivity(
-        title: 'New assignment posted',
-        subtitle: 'Mathematics',
-        time: '2 hours ago',
-        type: _ActivityType.assignment,
-        icon: Icons.assignment,
-        color: AppTheme.warningColor,
-      ),
-      _RecentActivity(
-        title: 'Message from Teacher',
-        subtitle: 'English Literature',
-        time: '4 hours ago',
-        type: _ActivityType.message,
-        icon: Icons.message,
-        color: AppTheme.successColor,
-      ),
-      _RecentActivity(
-        title: 'Class update posted',
-        subtitle: 'Science',
-        time: '1 day ago',
-        type: _ActivityType.update,
-        icon: Icons.announcement,
-        color: AppTheme.infoColor,
-      ),
-    ];
+    final recentUpdatesAsync = ref.watch(recentUpdatesProvider);
 
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: activities.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        return _buildActivityTile(activities[index]);
+    return recentUpdatesAsync.when(
+      loading: () => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(),
+        ),
+      ),
+      error: (error, stack) => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Text(
+            'Unable to load recent activities',
+            style: TextStyle(color: AppTheme.textSecondary),
+          ),
+        ),
+      ),
+      data: (updates) {
+        if (updates.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.announcement_outlined,
+                    size: 48,
+                    color: Colors.grey,
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'No recent activities',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: updates.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            return _buildUpdateActivityTile(updates[index]);
+          },
+        );
       },
     );
   }
 
-  Widget _buildActivityTile(_RecentActivity activity) {
+  Widget _buildUpdateActivityTile(ClassUpdateWithClass updateWithClass) {
+    final update = updateWithClass.update;
+
+    IconData icon;
+    Color color;
+
+    switch (update.updateType) {
+      case UpdateType.homework:
+        icon = Icons.book;
+        color = AppTheme.errorColor;
+        break;
+      case UpdateType.announcement:
+        icon = Icons.announcement;
+        color = AppTheme.infoColor;
+        break;
+      case UpdateType.event:
+        icon = Icons.event;
+        color = AppTheme.successColor;
+        break;
+      case UpdateType.reminder:
+        icon = Icons.schedule;
+        color = AppTheme.warningColor;
+        break;
+    }
+
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: activity.color.withValues(alpha: 0.1),
-          child: Icon(
-            activity.icon,
-            color: activity.color,
-            size: 20,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _navigateToSpecificUpdate(updateWithClass),
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: color.withValues(alpha: 0.1),
+            child: Icon(
+              icon,
+              color: color,
+              size: 20,
+            ),
           ),
-        ),
-        title: Text(
-          activity.title,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimary,
+          title: Text(
+            update.title ?? 'Class Update',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-        subtitle: Text(
-          '${activity.subtitle} • ${activity.time}',
-          style: const TextStyle(
-            fontSize: 12,
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                updateWithClass.className,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                app_date_utils.DateUtils.formatRelativeTime(update.createdAt),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          trailing: const Icon(
+            Icons.arrow_forward_ios,
+            size: 16,
             color: AppTheme.textSecondary,
           ),
         ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: AppTheme.textSecondary,
-        ),
-        onTap: () => _handleActivityTap(activity),
       ),
     );
   }
@@ -864,18 +964,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         ),
       ),
     );
-  }
-
-  void _handleActivityTap(_RecentActivity activity) {
-    switch (activity.type) {
-      case _ActivityType.message:
-        setState(() => _currentIndex = 1);
-        break;
-      case _ActivityType.assignment:
-      case _ActivityType.update:
-        setState(() => _currentIndex = 2);
-        break;
-    }
   }
 
   // Other tabs (keeping existing implementation)
@@ -1180,6 +1268,19 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
     );
   }
+
+  void _navigateToSpecificUpdate(ClassUpdateWithClass updateWithClass) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ClassUpdatesPage(
+          classId: updateWithClass.classId,
+          className: updateWithClass.className,
+          highlightUpdateId: updateWithClass.update.id,
+          scrollToUpdate: true,
+        ),
+      ),
+    );
+  }
 }
 
 // Quick Stats Delegate for pinned header
@@ -1256,26 +1357,3 @@ class _QuickStatsDelegate extends SliverPersistentHeaderDelegate {
 }
 
 // Supporting data classes
-class _RecentActivity {
-  final String title;
-  final String subtitle;
-  final String time;
-  final _ActivityType type;
-  final IconData icon;
-  final Color color;
-
-  _RecentActivity({
-    required this.title,
-    required this.subtitle,
-    required this.time,
-    required this.type,
-    required this.icon,
-    required this.color,
-  });
-}
-
-enum _ActivityType {
-  message,
-  assignment,
-  update,
-}
