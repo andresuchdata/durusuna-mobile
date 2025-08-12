@@ -245,7 +245,7 @@ class SchoolAttendanceSettings {
 @JsonSerializable()
 class AttendanceHours {
   final String start; // HH:MM format
-  final String end;   // HH:MM format
+  final String end; // HH:MM format
 
   AttendanceHours({
     required this.start,
@@ -489,10 +489,11 @@ class AttendanceSessionResponse {
 class StudentWithAttendance {
   @JsonKey(name: 'user_id')
   final String userId;
-  @JsonKey(name: 'first_name')
+  @JsonKey(name: 'first_name', defaultValue: '')
   final String firstName;
-  @JsonKey(name: 'last_name')
+  @JsonKey(name: 'last_name', defaultValue: '')
   final String lastName;
+  @JsonKey(name: 'email', defaultValue: '')
   final String email;
   @JsonKey(name: 'avatar_url')
   final String? avatarUrl;
@@ -510,8 +511,19 @@ class StudentWithAttendance {
     this.attendance,
   });
 
-  factory StudentWithAttendance.fromJson(Map<String, dynamic> json) =>
-      _$StudentWithAttendanceFromJson(json);
+  factory StudentWithAttendance.fromJson(Map<String, dynamic> json) {
+    // Support both flattened fields and nested { user: {...} }
+    final Map<String, dynamic> flattened = Map<String, dynamic>.from(json);
+    final dynamic user = json['user'];
+    if (user is Map<String, dynamic>) {
+      flattened['first_name'] = user['first_name'] ?? '';
+      flattened['last_name'] = user['last_name'] ?? '';
+      flattened['email'] = user['email'] ?? '';
+      flattened['avatar_url'] = user['avatar_url'];
+      flattened['student_id'] = user['student_id'];
+    }
+    return _$StudentWithAttendanceFromJson(flattened);
+  }
   Map<String, dynamic> toJson() => _$StudentWithAttendanceToJson(this);
 
   String get displayName => '$firstName $lastName';

@@ -357,9 +357,9 @@ StudentWithAttendance _$StudentWithAttendanceFromJson(
         Map<String, dynamic> json) =>
     StudentWithAttendance(
       userId: json['user_id'] as String,
-      firstName: json['first_name'] as String,
-      lastName: json['last_name'] as String,
-      email: json['email'] as String,
+      firstName: json['first_name'] as String? ?? '',
+      lastName: json['last_name'] as String? ?? '',
+      email: json['email'] as String? ?? '',
       avatarUrl: json['avatar_url'] as String?,
       studentId: json['student_id'] as String?,
       attendance: json['attendance'] == null
