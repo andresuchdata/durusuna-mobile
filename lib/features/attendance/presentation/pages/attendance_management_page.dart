@@ -125,19 +125,10 @@ class _AttendanceManagementPageState
                     : const SizedBox.shrink(),
             orElse: () => const SizedBox.shrink(),
           ),
-          attendanceSessionAsync.maybeWhen(
-            data: (sessionResponse) => IconButton(
-              icon: const Icon(Icons.more_vert),
-              onPressed: sessionResponse.session.isFinalized
-                  ? null
-                  : () => _showMoreOptions(context),
-              tooltip: 'More options',
-            ),
-            orElse: () => IconButton(
-              icon: const Icon(Icons.more_vert),
-              onPressed: null,
-              tooltip: 'More options',
-            ),
+          IconButton(
+            icon: const Icon(Icons.more_vert),
+            onPressed: () => _showMoreOptions(context),
+            tooltip: 'More options',
           ),
         ],
       ),
