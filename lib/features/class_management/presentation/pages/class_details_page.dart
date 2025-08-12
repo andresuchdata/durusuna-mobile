@@ -517,67 +517,76 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
   }
 
   Widget _buildUpdatePreviewTile(ClassUpdate update) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: Color(0xFFE5E5E5),
-            width: 0.5,
-          ),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(top: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor,
-              borderRadius: BorderRadius.circular(4),
+    return InkWell(
+      onTap: () => _navigateToSpecificUpdate(update),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Color(0xFFE5E5E5),
+              width: 0.5,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  update.title ?? 'Update',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.textPrimary,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (update.content.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(top: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    update.content,
+                    update.title ?? 'Update',
                     style: const TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textPrimary,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                ],
-                const SizedBox(height: 4),
-                Text(
-                  app_date_utils.DateUtils.formatRelativeTime(update.createdAt),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.textSecondary,
+                  if (update.content.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      update.content,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text(
+                    app_date_utils.DateUtils.formatRelativeTime(
+                        update.createdAt),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: AppTheme.textSecondary,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -588,6 +597,19 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
         builder: (context) => ClassUpdatesPage(
           classId: widget.classModel.id,
           className: widget.classModel.name,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToSpecificUpdate(ClassUpdate update) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ClassUpdatesPage(
+          classId: widget.classModel.id,
+          className: widget.classModel.name,
+          highlightUpdateId: update.id,
+          scrollToUpdate: true,
         ),
       ),
     );
