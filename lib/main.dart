@@ -131,7 +131,7 @@ class DurusunaMobileApp extends ConsumerWidget {
     });
 
     return PerformanceMonitor(
-      enabled: PlatformOptimization.shouldShowPerformanceMonitor,
+      enabled: false, // Disable performance monitor frame info panel
       child: MaterialApp(
         title: 'Durusuna Mobile',
         debugShowCheckedModeBanner: false,

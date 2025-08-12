@@ -16,6 +16,7 @@ import '../../../class_management/presentation/pages/class_management_page.dart'
 import '../../../class_management/presentation/pages/class_details_page.dart';
 import '../../../class_management/presentation/widgets/class_card.dart';
 import '../../../class_management/presentation/widgets/create_class_dialog.dart';
+import '../../../attendance/presentation/pages/student_attendance_page.dart';
 
 // Import the existing provider to avoid conflicts
 import '../../../class_management/presentation/pages/class_management_page.dart'
@@ -661,36 +662,103 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
             ),
           ),
           const SizedBox(height: 12),
+          _buildQuickActionsGrid(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsGrid() {
+    final authState = ref.watch(authStateProvider);
+    final currentUser = authState.user;
+
+    List<Widget> quickActions = [];
+
+    // Common actions for all users
+    quickActions.add(
+      _buildQuickActionCard(
+        title: 'New Message',
+        icon: Icons.add_comment,
+        color: AppTheme.successColor,
+        onTap: () => ref
+            .read(globalBottomNavigationProvider.notifier)
+            .setCurrentIndex(1),
+      ),
+    );
+
+    // Student-specific actions
+    if (currentUser?.userType == UserType.student) {
+      quickActions.add(
+        _buildQuickActionCard(
+          title: 'Mark Attendance',
+          icon: Icons.location_on,
+          color: AppTheme.primaryColor,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const StudentAttendancePage(),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // General actions for all users
+    quickActions.add(
+      _buildQuickActionCard(
+        title: 'View Schedule',
+        icon: Icons.schedule,
+        color: AppTheme.infoColor,
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Schedule feature coming soon')),
+          );
+        },
+      ),
+    );
+
+    // If teacher, add class management shortcut
+    if (currentUser?.userType == UserType.teacher) {
+      quickActions.add(
+        _buildQuickActionCard(
+          title: 'Manage Classes',
+          icon: Icons.class_,
+          color: AppTheme.accentColor,
+          onTap: () => ref
+              .read(globalBottomNavigationProvider.notifier)
+              .setCurrentIndex(2), // Assuming class management is at index 2
+        ),
+      );
+    }
+
+    // Build grid layout
+    return Column(
+      children: [
+        Row(
+          children: [
+            if (quickActions.isNotEmpty) Expanded(child: quickActions[0]),
+            if (quickActions.length > 1) ...[
+              const SizedBox(width: 12),
+              Expanded(child: quickActions[1]),
+            ],
+          ],
+        ),
+        if (quickActions.length > 2) ...[
+          const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _buildQuickActionCard(
-                  title: 'New Message',
-                  icon: Icons.add_comment,
-                  color: AppTheme.successColor,
-                  onTap: () => ref
-                      .read(globalBottomNavigationProvider.notifier)
-                      .setCurrentIndex(1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuickActionCard(
-                  title: 'View Schedule',
-                  icon: Icons.schedule,
-                  color: AppTheme.infoColor,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Schedule feature coming soon')),
-                    );
-                  },
-                ),
-              ),
+              Expanded(child: quickActions[2]),
+              if (quickActions.length > 3) ...[
+                const SizedBox(width: 12),
+                Expanded(child: quickActions[3]),
+              ] else
+                const Expanded(child: SizedBox()),
             ],
           ),
         ],
-      ),
+      ],
     );
   }
 

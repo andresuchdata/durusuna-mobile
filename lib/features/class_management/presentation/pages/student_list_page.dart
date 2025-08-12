@@ -4,6 +4,8 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/class_management_service.dart';
+import '../../../../shared/services/auth_service.dart';
+import '../../../attendance/presentation/pages/attendance_management_page.dart';
 import 'student_detail_page.dart';
 
 // Provider for paginated students list with search
@@ -50,6 +52,8 @@ class _StudentListPageState extends ConsumerState<StudentListPage> {
   Widget build(BuildContext context) {
     final studentsAsync = ref.watch(studentsListWithSearchProvider(
         (widget.classModel.id, _searchQuery.isEmpty ? null : _searchQuery)));
+    final authState = ref.watch(authStateProvider);
+    final currentUser = authState.user;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -79,6 +83,26 @@ class _StudentListPageState extends ConsumerState<StudentListPage> {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         iconTheme: const IconThemeData(color: AppTheme.textPrimary),
+        actions: [
+          // Show attendance management button for teachers
+          if (currentUser?.userType == UserType.teacher)
+            IconButton(
+              icon: const Icon(Icons.check_circle_outline,
+                  color: AppTheme.primaryColor),
+              tooltip: 'Manage Attendance',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AttendanceManagementPage(
+                      classModel: widget.classModel,
+                    ),
+                  ),
+                );
+              },
+            ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [
