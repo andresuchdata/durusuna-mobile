@@ -14,28 +14,46 @@ class AttendanceDateSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 120,
+    final startOfWeek = _getStartOfWeek(selectedDate);
+    final days =
+        List<DateTime>.generate(7, (i) => startOfWeek.add(Duration(days: i)));
+
+    return SizedBox(
+      height: 132,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Select Date',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimary,
-            ),
+          // Month/Year header
+          Row(
+            children: [
+              Text(
+                DateFormat('MMMM yyyy').format(selectedDate),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _formatWeekRange(startOfWeek),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: 80,
-            child: ListView.builder(
+            height: 88,
+            child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: 30, // Show 30 days (past and future)
+              itemCount: days.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
-                final date =
-                    DateTime.now().subtract(Duration(days: 15 - index));
+                final date = days[index];
                 final isSelected = _isSameDay(date, selectedDate);
                 final isToday = _isSameDay(date, DateTime.now());
                 final isWeekend = date.weekday == DateTime.saturday ||
@@ -44,8 +62,7 @@ class AttendanceDateSelector extends StatelessWidget {
                 return GestureDetector(
                   onTap: () => onDateChanged(date),
                   child: Container(
-                    width: 60,
-                    margin: const EdgeInsets.only(right: 8),
+                    width: 64,
                     decoration: BoxDecoration(
                       color: isSelected
                           ? AppTheme.primaryColor
@@ -64,7 +81,7 @@ class AttendanceDateSelector extends StatelessWidget {
                           DateFormat('EEE').format(date),
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
                             color: isSelected
                                 ? Colors.white
                                 : isWeekend
@@ -74,10 +91,10 @@ class AttendanceDateSelector extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          date.day.toString(),
+                          DateFormat('d').format(date),
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
                             color: isSelected
                                 ? Colors.white
                                 : isWeekend
@@ -85,16 +102,6 @@ class AttendanceDateSelector extends StatelessWidget {
                                     : AppTheme.textPrimary,
                           ),
                         ),
-                        if (isToday && !isSelected)
-                          Container(
-                            width: 4,
-                            height: 4,
-                            margin: const EdgeInsets.only(top: 2),
-                            decoration: const BoxDecoration(
-                              color: AppTheme.primaryColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -111,5 +118,21 @@ class AttendanceDateSelector extends StatelessWidget {
     return date1.year == date2.year &&
         date1.month == date2.month &&
         date1.day == date2.day;
+  }
+
+  DateTime _getStartOfWeek(DateTime date) {
+    // Monday as start of week
+    final int daysToMonday = date.weekday - DateTime.monday; // 0 for Monday
+    return DateTime(date.year, date.month, date.day)
+        .subtract(Duration(days: daysToMonday));
+  }
+
+  String _formatWeekRange(DateTime startOfWeek) {
+    final endOfWeek = startOfWeek.add(const Duration(days: 6));
+    final sameMonth = startOfWeek.month == endOfWeek.month;
+    if (sameMonth) {
+      return '${DateFormat('MMM d').format(startOfWeek)} - ${DateFormat('d').format(endOfWeek)}';
+    }
+    return '${DateFormat('MMM d').format(startOfWeek)} - ${DateFormat('MMM d').format(endOfWeek)}';
   }
 }

@@ -7,6 +7,7 @@ class StudentAttendanceTile extends StatelessWidget {
   final StudentWithAttendance studentWithAttendance;
   final bool isSelected;
   final bool isSelectionMode;
+  final bool isDisabled;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final Function(AttendanceStatus) onAttendanceChanged;
@@ -16,6 +17,7 @@ class StudentAttendanceTile extends StatelessWidget {
     required this.studentWithAttendance,
     required this.isSelected,
     required this.isSelectionMode,
+    required this.isDisabled,
     required this.onTap,
     required this.onLongPress,
     required this.onAttendanceChanged,
@@ -40,8 +42,8 @@ class StudentAttendanceTile extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
+          onTap: isDisabled ? null : onTap,
+          onLongPress: isDisabled ? null : onLongPress,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -51,7 +53,7 @@ class StudentAttendanceTile extends StatelessWidget {
                 if (isSelectionMode) ...[
                   Checkbox(
                     value: isSelected,
-                    onChanged: (_) => onTap(),
+                    onChanged: isDisabled ? null : (_) => onTap(),
                     activeColor: AppTheme.primaryColor,
                   ),
                   const SizedBox(width: 12),
@@ -92,8 +94,7 @@ class StudentAttendanceTile extends StatelessWidget {
                           ),
                         ),
                       ],
-                      if (attendance?.notes != null &&
-                          attendance!.notes!.isNotEmpty) ...[
+                      if ((attendance?.notes ?? '').isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
                           'Note: ${attendance!.notes}',
@@ -196,6 +197,7 @@ class StudentAttendanceTile extends StatelessWidget {
             color: AppTheme.successColor,
             status: AttendanceStatus.present,
             tooltip: 'Present',
+            enabled: !isDisabled,
           ),
           const SizedBox(width: 8),
           _buildQuickActionButton(
@@ -203,6 +205,7 @@ class StudentAttendanceTile extends StatelessWidget {
             color: AppTheme.errorColor,
             status: AttendanceStatus.absent,
             tooltip: 'Absent',
+            enabled: !isDisabled,
           ),
           const SizedBox(width: 8),
           _buildQuickActionButton(
@@ -210,6 +213,7 @@ class StudentAttendanceTile extends StatelessWidget {
             color: AppTheme.warningColor,
             status: AttendanceStatus.late,
             tooltip: 'Late',
+            enabled: !isDisabled,
           ),
         ],
       );
@@ -255,23 +259,31 @@ class StudentAttendanceTile extends StatelessWidget {
     required Color color,
     required AttendanceStatus status,
     required String tooltip,
+    required bool enabled,
   }) {
+    final button = Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Icon(
+        icon,
+        size: 18,
+        color: color,
+      ),
+    );
     return Tooltip(
       message: tooltip,
-      child: GestureDetector(
-        onTap: () => onAttendanceChanged(status),
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
-          ),
-          child: Icon(
-            icon,
-            size: 18,
-            color: color,
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.4,
+        child: IgnorePointer(
+          ignoring: !enabled,
+          child: GestureDetector(
+            onTap: () => onAttendanceChanged(status),
+            child: button,
           ),
         ),
       ),

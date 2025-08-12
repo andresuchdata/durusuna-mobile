@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import '../models/attendance_models.dart';
@@ -136,15 +137,32 @@ class AttendanceService {
         'date': _formatDateToString(date),
       });
 
+      if (kDebugMode) {
+        debugPrint('[ATTENDANCE] POST /attendance/sessions/$classId/open');
+        debugPrint('[ATTENDANCE] body: $body');
+      }
+
       final response = await http.post(
         Uri.parse('$_baseUrl/attendance/sessions/$classId/open'),
         headers: headers,
         body: body,
       );
 
+      if (kDebugMode) {
+        debugPrint('[ATTENDANCE] status: ${response.statusCode}');
+        debugPrint('[ATTENDANCE] resp: ${response.body}');
+      }
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
-        return AttendanceSessionResponse.fromJson(data);
+        try {
+          return AttendanceSessionResponse.fromJson(data);
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[ATTENDANCE] decode error (openAttendanceSession): $e');
+          }
+          throw Exception('Invalid session payload');
+        }
       } else if (response.statusCode == 401) {
         throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
@@ -174,15 +192,33 @@ class AttendanceService {
 
       final body = json.encode(requestData);
 
+      if (kDebugMode) {
+        debugPrint('[ATTENDANCE] POST /attendance/mark/$classId/$studentId');
+        debugPrint('[ATTENDANCE] body: $body');
+      }
+
       final response = await http.post(
         Uri.parse('$_baseUrl/attendance/mark/$classId/$studentId'),
         headers: headers,
         body: body,
       );
 
+      if (kDebugMode) {
+        debugPrint('[ATTENDANCE] status: ${response.statusCode}');
+        debugPrint('[ATTENDANCE] resp: ${response.body}');
+      }
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
-        return AttendanceRecord.fromJson(data['record']);
+        try {
+          return AttendanceRecord.fromJson(data['record']);
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[ATTENDANCE] decode error (markStudentAttendance): $e');
+            debugPrint('[ATTENDANCE] payload: ${response.body}');
+          }
+          throw Exception('Invalid record payload');
+        }
       } else if (response.statusCode == 401) {
         throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {

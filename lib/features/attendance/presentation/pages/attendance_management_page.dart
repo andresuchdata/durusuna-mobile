@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
@@ -18,7 +17,8 @@ final attendanceServiceProvider = Provider<AttendanceService>((ref) {
 });
 
 // Provider for attendance session
-final attendanceSessionProvider = FutureProvider.family<AttendanceSessionResponse, (String, DateTime)>(
+final attendanceSessionProvider =
+    FutureProvider.family<AttendanceSessionResponse, (String, DateTime)>(
   (ref, params) async {
     final (classId, date) = params;
     final service = ref.read(attendanceServiceProvider);
@@ -27,7 +27,8 @@ final attendanceSessionProvider = FutureProvider.family<AttendanceSessionRespons
 );
 
 // Provider for attendance stats
-final attendanceStatsProvider = FutureProvider.family<AttendanceStats, (String, DateTime)>(
+final attendanceStatsProvider =
+    FutureProvider.family<AttendanceStats, (String, DateTime)>(
   (ref, params) async {
     final (classId, date) = params;
     final service = ref.read(attendanceServiceProvider);
@@ -44,10 +45,12 @@ class AttendanceManagementPage extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<AttendanceManagementPage> createState() => _AttendanceManagementPageState();
+  ConsumerState<AttendanceManagementPage> createState() =>
+      _AttendanceManagementPageState();
 }
 
-class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementPage> {
+class _AttendanceManagementPageState
+    extends ConsumerState<AttendanceManagementPage> {
   DateTime _selectedDate = DateTime.now();
   final Set<String> _selectedStudentIds = {};
   bool _isSelectionMode = false;
@@ -71,11 +74,9 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
     }
 
     final attendanceSessionAsync = ref.watch(
-      attendanceSessionProvider((widget.classModel.id, _selectedDate))
-    );
-    final attendanceStatsAsync = ref.watch(
-      attendanceStatsProvider((widget.classModel.id, _selectedDate))
-    );
+        attendanceSessionProvider((widget.classModel.id, _selectedDate)));
+    final attendanceStatsAsync = ref
+        .watch(attendanceStatsProvider((widget.classModel.id, _selectedDate)));
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -86,17 +87,17 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
             const Text(
               'Attendance',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
+                color: AppTheme.textTertiary,
               ),
             ),
             Text(
               widget.classModel.displayName,
               style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-                color: AppTheme.textSecondary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
               ),
             ),
           ],
@@ -106,21 +107,37 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
         surfaceTintColor: Colors.transparent,
         iconTheme: const IconThemeData(color: AppTheme.textPrimary),
         actions: [
-          if (_isSelectionMode) ...[
-            IconButton(
-              icon: const Icon(Icons.select_all),
-              onPressed: _selectAllStudents,
-              tooltip: 'Select All',
+          attendanceSessionAsync.maybeWhen(
+            data: (sessionResponse) =>
+                _isSelectionMode && !sessionResponse.session.isFinalized
+                    ? Row(children: [
+                        IconButton(
+                          icon: const Icon(Icons.select_all),
+                          onPressed: _selectAllStudents,
+                          tooltip: 'Select All',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: _clearSelection,
+                          tooltip: 'Clear Selection',
+                        ),
+                      ])
+                    : const SizedBox.shrink(),
+            orElse: () => const SizedBox.shrink(),
+          ),
+          attendanceSessionAsync.maybeWhen(
+            data: (sessionResponse) => IconButton(
+              icon: const Icon(Icons.more_vert),
+              onPressed: sessionResponse.session.isFinalized
+                  ? null
+                  : () => _showMoreOptions(context),
+              tooltip: 'More options',
             ),
-            IconButton(
-              icon: const Icon(Icons.clear),
-              onPressed: _clearSelection,
-              tooltip: 'Clear Selection',
+            orElse: () => IconButton(
+              icon: const Icon(Icons.more_vert),
+              onPressed: null,
+              tooltip: 'More options',
             ),
-          ],
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () => _showMoreOptions(context),
           ),
         ],
       ),
@@ -138,7 +155,8 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
 
           // Stats Card
           attendanceStatsAsync.when(
-            loading: () => const SizedBox(height: 100, child: Center(child: CircularProgressIndicator())),
+            loading: () => const SizedBox(
+                height: 100, child: Center(child: CircularProgressIndicator())),
             error: (error, stack) => Container(
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(16),
@@ -165,14 +183,19 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
           ),
         ],
       ),
-      floatingActionButton: _isSelectionMode && _selectedStudentIds.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: () => _showBulkActionsSheet(context),
-              icon: const Icon(Icons.edit),
-              label: Text('Edit ${_selectedStudentIds.length}'),
-              backgroundColor: AppTheme.primaryColor,
-            )
-          : null,
+      floatingActionButton: attendanceSessionAsync.maybeWhen(
+        data: (sessionResponse) => sessionResponse.session.isFinalized
+            ? null
+            : (_isSelectionMode && _selectedStudentIds.isNotEmpty
+                ? FloatingActionButton.extended(
+                    onPressed: () => _showBulkActionsSheet(context),
+                    icon: const Icon(Icons.edit),
+                    label: Text('Edit ${_selectedStudentIds.length}'),
+                    backgroundColor: AppTheme.primaryColor,
+                  )
+                : null),
+        orElse: () => null,
+      ),
       bottomNavigationBar: attendanceSessionAsync.maybeWhen(
         data: (sessionResponse) => _buildBottomActions(sessionResponse),
         orElse: () => null,
@@ -258,6 +281,7 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
       );
     }
 
+    final bool isDisabled = sessionResponse.session.isFinalized;
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: sessionResponse.students.length,
@@ -265,8 +289,10 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
         final studentWithAttendance = sessionResponse.students[index];
         return StudentAttendanceTile(
           studentWithAttendance: studentWithAttendance,
-          isSelected: _selectedStudentIds.contains(studentWithAttendance.userId),
+          isSelected:
+              _selectedStudentIds.contains(studentWithAttendance.userId),
           isSelectionMode: _isSelectionMode,
+          isDisabled: isDisabled,
           onTap: () => _onStudentTap(studentWithAttendance),
           onLongPress: () => _onStudentLongPress(studentWithAttendance),
           onAttendanceChanged: (status) => _onAttendanceChanged(
@@ -296,7 +322,9 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _isSelectionMode ? null : () => _toggleSelectionMode(),
+                onPressed: sessionResponse.session.isFinalized
+                    ? null
+                    : (_isSelectionMode ? null : () => _toggleSelectionMode()),
                 icon: const Icon(Icons.checklist),
                 label: const Text('Bulk Edit'),
               ),
@@ -304,16 +332,18 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: sessionResponse.session.isFinalized 
-                    ? null 
+                onPressed: sessionResponse.session.isFinalized
+                    ? null
                     : () => _finalizeAttendance(),
                 icon: const Icon(Icons.check_circle),
                 label: Text(
-                  sessionResponse.session.isFinalized ? 'Finalized' : 'Finalize',
+                  sessionResponse.session.isFinalized
+                      ? 'Finalized'
+                      : 'Finalize',
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: sessionResponse.session.isFinalized 
-                      ? Colors.grey 
+                  backgroundColor: sessionResponse.session.isFinalized
+                      ? Colors.grey
                       : AppTheme.successColor,
                 ),
               ),
@@ -356,14 +386,16 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
     }
   }
 
-  void _onAttendanceChanged(StudentWithAttendance student, AttendanceStatus status) async {
+  void _onAttendanceChanged(
+      StudentWithAttendance student, AttendanceStatus status) async {
     try {
       final service = ref.read(attendanceServiceProvider);
       final request = CreateAttendanceRequest(
         studentId: student.userId,
         status: status,
-        checkInTime: status == AttendanceStatus.present || status == AttendanceStatus.late 
-            ? DateTime.now() 
+        checkInTime: status == AttendanceStatus.present ||
+                status == AttendanceStatus.late
+            ? DateTime.now()
             : null,
         markedVia: AttendanceMarkedVia.manual,
       );
@@ -409,7 +441,8 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
   }
 
   void _selectAllStudents() {
-    final sessionResponse = ref.read(attendanceSessionProvider((widget.classModel.id, _selectedDate)));
+    final sessionResponse = ref
+        .read(attendanceSessionProvider((widget.classModel.id, _selectedDate)));
     sessionResponse.whenData((response) {
       setState(() {
         _selectedStudentIds.addAll(
@@ -470,11 +503,13 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
     try {
       final service = ref.read(attendanceServiceProvider);
       final bulkUpdate = BulkAttendanceUpdate(
-        records: _selectedStudentIds.map((studentId) => BulkAttendanceRecord(
-          studentId: studentId,
-          status: status,
-          notes: notes,
-        )).toList(),
+        records: _selectedStudentIds
+            .map((studentId) => BulkAttendanceRecord(
+                  studentId: studentId,
+                  status: status,
+                  notes: notes,
+                ))
+            .toList(),
         markedVia: AttendanceMarkedVia.manual,
       );
 
@@ -496,7 +531,8 @@ class _AttendanceManagementPageState extends ConsumerState<AttendanceManagementP
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Bulk attendance updated for ${_selectedStudentIds.length} students'),
+            content: Text(
+                'Bulk attendance updated for ${_selectedStudentIds.length} students'),
             backgroundColor: AppTheme.successColor,
           ),
         );
