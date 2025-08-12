@@ -42,6 +42,8 @@ class RealtimeService with WidgetsBindingObserver {
   final _fileUploadController = StreamController<FileUploadEvent>.broadcast();
   final _voiceRecordController = StreamController<VoiceRecordEvent>.broadcast();
   final _lastSeenController = StreamController<LastSeenEvent>.broadcast();
+  final _notificationController =
+      StreamController<RealtimeNotificationEvent>.broadcast();
 
   // Public streams
   Stream<bool> get connectionStream => _connectionController.stream;
@@ -59,6 +61,8 @@ class RealtimeService with WidgetsBindingObserver {
   Stream<VoiceRecordEvent> get voiceRecordStream =>
       _voiceRecordController.stream;
   Stream<LastSeenEvent> get lastSeenStream => _lastSeenController.stream;
+  Stream<RealtimeNotificationEvent> get notificationStream =>
+      _notificationController.stream;
 
   // Connection management
   bool get isConnected => _isConnected;
@@ -465,6 +469,25 @@ class RealtimeService with WidgetsBindingObserver {
     _socket!.on('user:lastseen', (data) {
       final event = LastSeenEvent.fromJson(data);
       _lastSeenController.add(event);
+    });
+
+    // Notifications
+    _socket!.on('notification:new', (data) {
+      debugPrint('🔔 RealtimeService: Received notification:new event: $data');
+      try {
+        final event = RealtimeNotificationEvent.fromJson(data);
+        debugPrint(
+            '🔔 RealtimeService: Parsed notification event: ${event.notificationId} - ${event.title}');
+        _notificationController.add(event);
+        // Optimistic ack to server
+        _socket!
+            .emit('notification:ack', {'notificationId': event.notificationId});
+        debugPrint(
+            '🔔 RealtimeService: Sent ack for notification ${event.notificationId}');
+      } catch (e) {
+        debugPrint('❌ RealtimeService: Error processing notification:new: $e');
+        debugPrint('❌ RealtimeService: Raw data was: $data');
+      }
     });
   }
 
@@ -912,6 +935,33 @@ class LastSeenEvent {
   }
 }
 
+class RealtimeNotificationEvent {
+  final String notificationId;
+  final String title;
+  final String content;
+  final String type;
+  final DateTime timestamp;
+
+  RealtimeNotificationEvent({
+    required this.notificationId,
+    required this.title,
+    required this.content,
+    required this.type,
+    required this.timestamp,
+  });
+
+  factory RealtimeNotificationEvent.fromJson(Map<String, dynamic> json) {
+    final n = json['notification'] as Map<String, dynamic>;
+    return RealtimeNotificationEvent(
+      notificationId: n['id'] as String,
+      title: n['title'] as String,
+      content: n['content'] as String,
+      type: n['notification_type'] as String,
+      timestamp: DateTime.parse(json['timestamp'] as String),
+    );
+  }
+}
+
 // === Providers ===
 
 final realtimeServiceProvider = Provider<RealtimeService>((ref) {
@@ -1019,4 +1069,10 @@ final realtimeMessageReactionUpdatedProvider =
     StreamProvider<MessageReactionUpdatedEvent>((ref) {
   final service = ref.watch(realtimeServiceProvider);
   return service.messageReactionUpdatedStream;
+});
+
+final realtimeNotificationProvider =
+    StreamProvider<RealtimeNotificationEvent>((ref) {
+  final service = ref.watch(realtimeServiceProvider);
+  return service.notificationStream;
 });

@@ -5,7 +5,7 @@ import '../models/notification.dart';
 import '../models/user.dart';
 import '../../core/constants/api_constants.dart';
 import 'api_service.dart';
-import 'auth_service.dart';
+import 'realtime_service.dart';
 
 class NotificationService {
   final ApiService _apiService;
@@ -227,9 +227,88 @@ class NotificationsState {
 class NotificationsNotifier extends StateNotifier<NotificationsState> {
   final NotificationService _notificationService;
   final Ref _ref;
+  StreamSubscription<RealtimeNotificationEvent>? _realtimeSubscription;
 
   NotificationsNotifier(this._notificationService, this._ref)
-      : super(const NotificationsState());
+      : super(const NotificationsState()) {
+    _setupRealtimeListener();
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupRealtimeListener() {
+    // Listen to real-time notifications via the service directly
+    _realtimeSubscription =
+        _ref.read(realtimeServiceProvider).notificationStream.listen(
+      (realtimeNotification) {
+        _handleRealtimeNotification(realtimeNotification);
+      },
+      onError: (error) {
+        debugPrint('❌ Error listening to realtime notifications: $error');
+      },
+    );
+  }
+
+  void _handleRealtimeNotification(RealtimeNotificationEvent realtimeEvent) {
+    try {
+      debugPrint(
+          '🔔 NotificationsNotifier: Handling realtime notification: ${realtimeEvent.notificationId}');
+
+      // Convert RealtimeNotificationEvent to NotificationModel
+      final notification = NotificationModel(
+        id: realtimeEvent.notificationId,
+        title: realtimeEvent.title,
+        content: realtimeEvent.content,
+        type: _parseNotificationType(realtimeEvent.type),
+        priority: NotificationPriority.normal,
+        isRead: false,
+        userId: '', // Will be filled by the current user
+        createdAt: realtimeEvent.timestamp,
+        updatedAt: realtimeEvent.timestamp,
+      );
+
+      // Add to the beginning of notifications list
+      final updatedNotifications = [notification, ...state.notifications];
+
+      // Increment unread count
+      final newUnreadCount = state.unreadCount + 1;
+
+      state = state.copyWith(
+        notifications: updatedNotifications,
+        unreadCount: newUnreadCount,
+      );
+
+      debugPrint(
+          '🔔 NotificationsNotifier: Added real-time notification: ${notification.title}');
+      debugPrint('🔔 NotificationsNotifier: New unread count: $newUnreadCount');
+      debugPrint(
+          '🔔 NotificationsNotifier: Total notifications: ${updatedNotifications.length}');
+    } catch (e) {
+      debugPrint(
+          '❌ NotificationsNotifier: Error handling realtime notification: $e');
+    }
+  }
+
+  NotificationType _parseNotificationType(String type) {
+    switch (type.toLowerCase()) {
+      case 'message':
+        return NotificationType.message;
+      case 'assignment':
+        return NotificationType.assignment;
+      case 'announcement':
+        return NotificationType.announcement;
+      case 'event':
+        return NotificationType.event;
+      case 'system':
+        return NotificationType.system;
+      default:
+        return NotificationType.announcement;
+    }
+  }
 
   /// Load notifications
   Future<void> loadNotifications({bool refresh = false}) async {

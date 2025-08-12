@@ -48,9 +48,39 @@ class ChatDatabase {
               .serverIdEqualTo(message.serverId!)
               .findFirst();
           if (existingByServerId != null) {
-            print(
-                '🐛 [DATABASE] Skipping duplicate message with serverId: ${message.serverId}');
-            return;
+            if (existingByServerId.conversationId != message.conversationId) {
+              // Migrate existing row to the correct conversation (backend reset or sample data moved)
+              final migrated = existingByServerId.copyWith(
+                conversationId: message.conversationId,
+                // Prefer fresher timestamps/status/metadata from incoming server message
+                createdAt: message.createdAt,
+                updatedAt: message.updatedAt ?? existingByServerId.updatedAt,
+                deliveredAt:
+                    message.deliveredAt ?? existingByServerId.deliveredAt,
+                readAt: message.readAt ?? existingByServerId.readAt,
+                readStatus: message.readStatus ?? existingByServerId.readStatus,
+                metadataJson:
+                    message.metadataJson ?? existingByServerId.metadataJson,
+                attachmentUrl:
+                    message.attachmentUrl ?? existingByServerId.attachmentUrl,
+                attachmentType:
+                    message.attachmentType ?? existingByServerId.attachmentType,
+                attachmentSize:
+                    message.attachmentSize ?? existingByServerId.attachmentSize,
+                thumbnailPath:
+                    message.thumbnailPath ?? existingByServerId.thumbnailPath,
+                reactions: message.reactions ?? existingByServerId.reactions,
+                isSynced: true,
+              );
+              await _isar.localMessages.put(migrated);
+              print(
+                  '🔄 [DATABASE] Migrated message ${message.serverId} to conversation ${message.conversationId}');
+              return;
+            } else {
+              print(
+                  '🐛 [DATABASE] Skipping duplicate message with serverId: ${message.serverId}');
+              return;
+            }
           }
         }
 
@@ -82,7 +112,46 @@ class ChatDatabase {
       });
     } catch (e) {
       if (e.toString().contains('Unique index violated')) {
-        // Duplicate message, ignore silently
+        // If a row with same serverId exists in another conversation, migrate it
+        try {
+          final existing = message.serverId != null
+              ? await _isar.localMessages
+                  .where()
+                  .serverIdEqualTo(message.serverId!)
+                  .findFirst()
+              : null;
+          if (existing != null &&
+              existing.conversationId != message.conversationId) {
+            await _isar.writeTxn(() async {
+              final migrated = existing.copyWith(
+                conversationId: message.conversationId,
+                createdAt: message.createdAt,
+                updatedAt: message.updatedAt ?? existing.updatedAt,
+                deliveredAt: message.deliveredAt ?? existing.deliveredAt,
+                readAt: message.readAt ?? existing.readAt,
+                readStatus: message.readStatus ?? existing.readStatus,
+                metadataJson: message.metadataJson ?? existing.metadataJson,
+                attachmentUrl: message.attachmentUrl ?? existing.attachmentUrl,
+                attachmentType:
+                    message.attachmentType ?? existing.attachmentType,
+                attachmentSize:
+                    message.attachmentSize ?? existing.attachmentSize,
+                thumbnailPath: message.thumbnailPath ?? existing.thumbnailPath,
+                reactions: message.reactions ?? existing.reactions,
+                isSynced: true,
+              );
+              await _isar.localMessages.put(migrated);
+            });
+            print(
+                '🔄 [DATABASE] Migrated message ${message.serverId} to conversation ${message.conversationId}');
+            return;
+          }
+        } catch (migrateErr) {
+          print(
+              '⚠️ [DATABASE] Migration after unique conflict failed: $migrateErr');
+        }
+
+        // Otherwise ignore duplicate
         print(
             '🐛 [DATABASE] Skipping duplicate message (unique index violated): ${message.serverId ?? message.id}');
         return;

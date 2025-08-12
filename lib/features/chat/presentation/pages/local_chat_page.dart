@@ -224,16 +224,43 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           final DateTime? conversationTime =
               widget.conversation.lastMessageAt ??
                   widget.conversation.lastMessage?.createdAt;
+
+          final chatService = ref.read(localChatServiceProvider);
+
+          // Fallback: if there are no local messages yet, proactively pull a recent window
+          if (latestLocal == null) {
+            await chatService.fetchLatestFromServer(
+              widget.conversation.id,
+              limit: 20,
+            );
+            await chatService.forceSyncMessagesFromServer(
+              widget.conversation.id,
+            );
+            // Force a provider refresh to reflect newly saved messages immediately
+            try {
+              await ref
+                  .read(localMessagesProvider(widget.conversation.id).notifier)
+                  .refresh();
+            } catch (_) {}
+            return;
+          }
+
           if (conversationTime != null &&
-              (latestLocal == null ||
-                  conversationTime.isAfter(latestLocal.createdAt))) {
-            final chatService = ref.read(localChatServiceProvider);
+              conversationTime.isAfter(latestLocal.createdAt)) {
             // Try cursor-based first
             await chatService
                 .forceSyncMessagesFromServer(widget.conversation.id);
             // Fallback direct latest fetch in case cursor yields no new items
-            await chatService.fetchLatestFromServer(widget.conversation.id,
-                limit: 20);
+            await chatService.fetchLatestFromServer(
+              widget.conversation.id,
+              limit: 20,
+            );
+            // Ensure UI reflects any new messages
+            try {
+              await ref
+                  .read(localMessagesProvider(widget.conversation.id).notifier)
+                  .refresh();
+            } catch (_) {}
           }
         } catch (_) {}
       });
