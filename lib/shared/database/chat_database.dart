@@ -48,8 +48,6 @@ class ChatDatabase {
               .serverIdEqualTo(message.serverId!)
               .findFirst();
           if (existingByServerId != null) {
-            print(
-                '🐛 [DATABASE] Skipping duplicate message with serverId: ${message.serverId}');
             return;
           }
         }
@@ -70,25 +68,17 @@ class ChatDatabase {
           final timeDiff =
               message.createdAt.difference(existing.createdAt).abs();
           if (timeDiff.inSeconds <= 5) {
-            print(
-                '🐛 [DATABASE] Skipping duplicate message with similar content/time - serverId: ${message.serverId}, existing ID: ${existing.id}');
             return;
           }
         }
 
         await _isar.localMessages.put(message);
-        print(
-            '🐛 [DATABASE] Saved new message: ${message.serverId ?? message.id}');
       });
     } catch (e) {
       if (e.toString().contains('Unique index violated')) {
         // Duplicate message, ignore silently
-        print(
-            '🐛 [DATABASE] Skipping duplicate message (unique index violated): ${message.serverId ?? message.id}');
         return;
       }
-      print(
-          '❌ [DATABASE] Failed to save message: ${message.serverId ?? message.id} - $e');
       rethrow; // Re-throw other errors
     }
   }
@@ -103,20 +93,14 @@ class ChatDatabase {
   /// If a matching optimistic message is found, we upgrade it with server fields
   /// and do NOT insert a new row. Returns true if adopted, false otherwise.
   static Future<bool> adoptServerMessage(LocalMessage serverMessage) async {
-    print(
-        '🔄 [DATABASE] adoptServerMessage called for serverId: ${serverMessage.serverId}, clientMessageId: ${serverMessage.clientMessageId}, content: "${serverMessage.content}"');
 
     return await _isar.writeTxn(() async {
       // 1) Try match by clientMessageId first (best-effort, in-memory scan to avoid codegen dependency)
       if (serverMessage.clientMessageId != null) {
-        print(
-            '🔍 [DATABASE] Looking for optimistic message with clientMessageId: ${serverMessage.clientMessageId}');
         final allInConv = await _isar.localMessages
             .where()
             .conversationIdEqualTo(serverMessage.conversationId)
             .findAll();
-        print(
-            '🔍 [DATABASE] Found ${allInConv.length} messages in conversation for adoption check');
 
         final optimistic = allInConv.firstWhere(
           (m) => m.clientMessageId == serverMessage.clientMessageId,
@@ -147,8 +131,6 @@ class ChatDatabase {
         );
         // Check sentinel
         if (optimistic.conversationId.isNotEmpty) {
-          print(
-              '🔄 [DATABASE] Found matching optimistic message (localId: ${optimistic.id}, readStatus: ${optimistic.readStatus}) - upgrading to server message');
           final upgraded = optimistic.copyWith(
             serverId: serverMessage.serverId,
             isSynced: true,
@@ -165,8 +147,6 @@ class ChatDatabase {
             reactions: serverMessage.reactions,
           );
           await _isar.localMessages.put(upgraded);
-          print(
-              '✅ [DATABASE] Adopted by clientMessageId ${serverMessage.clientMessageId} - updated readStatus from "${optimistic.readStatus}" to "${upgraded.readStatus}"');
           // Cleanup any other optimistic duplicates (same content, same sender) after adoption
           try {
             final duplicates = await _isar.localMessages
@@ -182,15 +162,11 @@ class ChatDatabase {
             for (final dup in duplicates) {
               if (dup.id != upgraded.id) {
                 await _isar.localMessages.delete(dup.id);
-                print(
-                    '🧹 [DATABASE] Deleted optimistic duplicate ${dup.id} after clientMessageId adoption');
               }
             }
           } catch (_) {}
           return true;
         } else {
-          print(
-              '🔍 [DATABASE] No optimistic message found with clientMessageId: ${serverMessage.clientMessageId}');
         }
       }
 
@@ -222,8 +198,6 @@ class ChatDatabase {
               .findAll();
           for (final dup in duplicates) {
             await _isar.localMessages.delete(dup.id);
-            print(
-                '🧹 [DATABASE] Deleted optimistic duplicate ${dup.id} (server row already existed)');
           }
         } catch (_) {}
         return true;
@@ -269,8 +243,6 @@ class ChatDatabase {
           reactions: serverMessage.reactions,
         );
         await _isar.localMessages.put(upgraded);
-        print(
-            '🔄 [DATABASE] Adopted server message ${serverMessage.serverId} into optimistic local ${best.id}');
         // Cleanup any other optimistic duplicates (same content, same sender)
         try {
           final duplicates = await _isar.localMessages
@@ -286,8 +258,6 @@ class ChatDatabase {
           for (final dup in duplicates) {
             if (dup.id != upgraded.id) {
               await _isar.localMessages.delete(dup.id);
-              print(
-                  '🧹 [DATABASE] Deleted optimistic duplicate ${dup.id} after content/time adoption');
             }
           }
         } catch (_) {}
@@ -297,8 +267,6 @@ class ChatDatabase {
       // No adopt candidate; insert new server row directly within this txn (no nested txn)
       try {
         await _isar.localMessages.put(serverMessage);
-        print(
-            '🆕 [DATABASE] Inserted server message ${serverMessage.serverId}');
         // Cleanup any leftover optimistic duplicates (same content, same sender)
         try {
           final duplicates = await _isar.localMessages
@@ -313,8 +281,6 @@ class ChatDatabase {
               .findAll();
           for (final dup in duplicates) {
             await _isar.localMessages.delete(dup.id);
-            print(
-                '🧹 [DATABASE] Deleted optimistic duplicate ${dup.id} after server insert');
           }
         } catch (_) {}
         return false;
@@ -335,8 +301,6 @@ class ChatDatabase {
               readAt: serverMessage.readAt ?? existing.readAt,
             );
             await _isar.localMessages.put(updated);
-            print(
-                'ℹ️ [DATABASE] Race on insert resolved by updating existing ${existing.serverId}');
             return true;
           }
         }
@@ -360,6 +324,28 @@ class ChatDatabase {
   /// Get all messages (for debugging)
   static Future<List<LocalMessage>> getAllMessages() async {
     return await _isar.localMessages.where().findAll();
+  }
+
+  /// Debug method: Get conversation IDs in database
+  static Future<Set<String>> getAllConversationIds() async {
+    final messages = await _isar.localMessages.where().findAll();
+    return messages.map((m) => m.conversationId).toSet();
+  }
+
+  /// Debug method: Print detailed info about a conversation
+  static Future<void> debugConversation(String conversationId) async {
+
+    final messages = await _isar.localMessages
+        .where()
+        .conversationIdEqualTo(conversationId)
+        .sortByCreatedAt()
+        .findAll();
+
+
+    for (int i = 0; i < messages.length; i++) {
+      final msg = messages[i];
+    }
+
   }
 
   /// Get message by local ID
@@ -417,8 +403,6 @@ class ChatDatabase {
     String conversationId, {
     int? limit,
   }) {
-    print(
-        '🔍 [DATABASE] watchMessages called for conversationId: "$conversationId"');
 
     final query = _isar.localMessages
         .where()
@@ -427,11 +411,7 @@ class ChatDatabase {
 
     // Isar doesn't support limit directly on watch queries; consumers can trim.
     return query.watch(fireImmediately: true).map((messages) {
-      print(
-          '🔍 [DATABASE] watchMessages found ${messages.length} messages for "$conversationId"');
       for (int i = 0; i < messages.length && i < 3; i++) {
-        print(
-            '🔍 [DATABASE]   Message $i: "${messages[i].content}" (serverId: ${messages[i].serverId})');
       }
 
       if (limit != null && messages.length > limit) {
@@ -581,10 +561,7 @@ class ChatDatabase {
 
       if (message != null) {
         await _isar.localMessages.delete(message.id);
-        print(
-            '✅ [DATABASE] Deleted message: $messageId (localId: ${message.id})');
       } else {
-        print('⚠️ [DATABASE] Message not found for deletion: $messageId');
       }
     });
   }
@@ -691,8 +668,6 @@ class ChatDatabase {
       return true;
     }).toList();
 
-    print(
-        '🔄 [DATABASE] Found ${validPendingMessages.length} valid pending messages (filtered ${pendingMessages.length - validPendingMessages.length} failed)');
     return validPendingMessages;
   }
 
@@ -723,7 +698,6 @@ class ChatDatabase {
           serverId: 'deleted_${DateTime.now().millisecondsSinceEpoch}',
         );
         await _isar.localMessages.put(updated);
-        print('✅ [DATABASE] Removed message from pending sync: $messageId');
       }
     });
   }
@@ -754,8 +728,6 @@ class ChatDatabase {
         if (optimisticLocal != null &&
             optimisticLocal.id != updatedServerRow.id) {
           await _isar.localMessages.delete(optimisticLocal.id);
-          print(
-              '🧹 [DATABASE] Deleted optimistic duplicate localId=$localId in favor of serverId=$serverId');
         }
         return;
       }
@@ -765,8 +737,6 @@ class ChatDatabase {
         // If optimistic already has a different serverId, keep first serverId
         if (optimisticLocal.serverId != null &&
             optimisticLocal.serverId != serverId) {
-          print(
-              '⚠️ [DATABASE] Optimistic message already linked to different serverId: ${optimisticLocal.serverId} vs $serverId');
         } else {
           final updated = optimisticLocal.copyWith(
             serverId: serverId,
@@ -774,11 +744,8 @@ class ChatDatabase {
             readStatus: 'sent',
           );
           await _isar.localMessages.put(updated);
-          print('✅ [DATABASE] Marked message as synced: $localId -> $serverId');
         }
       } else {
-        print(
-            '⚠️ [DATABASE] Local optimistic message not found for sync: $localId');
       }
     });
   }
@@ -798,7 +765,6 @@ class ChatDatabase {
             'failed_${DateTime.now().millisecondsSinceEpoch}',
       );
       await _isar.localMessages.put(updated);
-      print('🚫 [DATABASE] Marked message as failed: localId=$localId');
     });
   }
 
@@ -864,19 +830,15 @@ class ChatDatabase {
 
       if (await dbFile.exists()) {
         await dbFile.delete();
-        print('🗑️ Deleted corrupted database file');
       }
 
       if (await lockFile.exists()) {
         await lockFile.delete();
-        print('🗑️ Deleted database lock file');
       }
 
       // Reinitialize fresh database
       await initialize();
-      print('✅ Database recreated successfully');
     } catch (e) {
-      print('❌ Failed to recreate database: $e');
       // Fallback to normal initialization
       await initialize();
     }

@@ -13,11 +13,10 @@ import 'shared/providers/app_providers.dart';
 import 'shared/providers/local_chat_providers.dart';
 import 'shared/services/realtime_service.dart';
 
-import 'shared/services/realtime_dispatcher.dart';
 import 'shared/services/chat_service.dart';
 import 'shared/services/auth_service.dart';
 import 'shared/services/notification_service.dart' as notification_service
-    show unreadNotificationsCountProvider;
+    show unreadNotificationsCountProvider, notificationsProvider;
 import 'shared/database/chat_database.dart';
 import 'shared/widgets/performance_optimized_list.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
@@ -125,9 +124,11 @@ class DurusunaMobileApp extends ConsumerWidget {
       GlobalAuthHandler.initialize(navigatorKey, ref);
 
       // Initialize RealtimeService for app-wide socket connection
-      print('🏗️ Main: Initializing RealtimeService provider...');
-      ref.read(realtimeServiceProvider);
-      print('✅ Main: RealtimeService provider initialized');
+      final realtime = ref.read(realtimeServiceProvider);
+      // Bind realtime notifications to state updates
+      ref
+          .read(notification_service.notificationsProvider.notifier)
+          .bindRealtime(realtime);
     });
 
     return PerformanceMonitor(

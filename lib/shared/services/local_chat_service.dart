@@ -96,18 +96,13 @@ class LocalChatService {
     Map<String, dynamic>? metadata,
   }) async {
     final serviceStartTime = DateTime.now();
-    print(
-        '🐛 [SERVICE] LocalChatService.sendMessage called at ${serviceStartTime.millisecondsSinceEpoch}');
 
     final currentUser = StorageService.getUser();
     if (currentUser == null) {
-      print('🐛 [SERVICE] No authenticated user found');
       throw LocalChatException('User not authenticated');
     }
 
     final userCheckTime = DateTime.now();
-    print(
-        '🐛 [SERVICE] User auth check took: ${userCheckTime.difference(serviceStartTime).inMilliseconds}ms');
 
     // Create local message instantly
     // Generate a clientMessageId for deterministic merging/dedupe
@@ -128,8 +123,6 @@ class LocalChatService {
     );
 
     final messageCreateTime = DateTime.now();
-    print(
-        '🐛 [SERVICE] LocalMessage creation took: ${messageCreateTime.difference(userCheckTime).inMilliseconds}ms');
 
     // 🚀 Persist immediately to get a stable localId used for dedupe
     try {
@@ -137,8 +130,6 @@ class LocalChatService {
     } catch (_) {}
 
     final returnTime = DateTime.now();
-    print(
-        '🐛 [SERVICE] ✅ Returning message instantly after: ${returnTime.difference(serviceStartTime).inMilliseconds}ms');
 
     // Return the persisted message (has local id)
     return localMessage;
@@ -174,11 +165,8 @@ class LocalChatService {
     } catch (e) {
       if (e.toString().contains('Unique index violated')) {
         // Duplicate message, this is ok - just log and continue
-        print(
-            '🐛 [SERVICE] Duplicate message detected during local save: ${message.serverId}');
         return; // Don't rethrow for duplicates
       }
-      print('Failed to save message locally: $e');
       rethrow;
     }
   }
@@ -220,7 +208,6 @@ class LocalChatService {
         isFromMe: serverMessage['sender_id'] == currentUserId,
       );
     } catch (e) {
-      print('Failed to sync message to server: $e');
       // Mark failed and rethrow to allow caller to decide UI handling
       try {
         await ChatDatabase.markMessageFailed(localMessage.id.toString());
@@ -239,7 +226,6 @@ class LocalChatService {
       _syncReadStatusToServer(conversationId);
     } catch (e) {
       // Just log the error instead of throwing to avoid crashes
-      print('Failed to mark conversation as read: $e');
       // Still try to sync to server even if local update failed
       _syncReadStatusToServer(conversationId);
     }
@@ -271,7 +257,6 @@ class LocalChatService {
 
   void _startBackgroundSync() {
     // 🚫 DISABLED: Temporarily stop background sync to prevent message loops
-    print('⚠️ Background sync DISABLED to stop pending message loops');
     return;
   }
 
@@ -290,7 +275,6 @@ class LocalChatService {
       _isInitialSyncComplete = true;
     } catch (e) {
       // Log error but don't block app
-      print('Initial sync failed: $e');
     }
   }
 
@@ -306,7 +290,6 @@ class LocalChatService {
       // await _syncConversationUpdatesFromServer();
     } catch (e) {
       // Log error but don't block app
-      print('Background sync failed: $e');
     }
   }
 
@@ -316,7 +299,6 @@ class LocalChatService {
       try {
         await _syncConversationsFromServer();
       } catch (e) {
-        print('Conversations sync failed: $e');
       }
     });
   }
@@ -326,7 +308,6 @@ class LocalChatService {
     try {
       await _syncConversationsFromServer();
     } catch (e) {
-      print('Conversations sync failed: $e');
     }
   }
 
@@ -336,7 +317,6 @@ class LocalChatService {
       try {
         await _syncMessagesFromServer(conversationId);
       } catch (e) {
-        print('Messages sync failed for $conversationId: $e');
       }
     });
   }
@@ -362,8 +342,6 @@ class LocalChatService {
           await ChatDatabase.saveConversation(conversation);
         } catch (e) {
           // Skip duplicate conversations instead of crashing
-          print(
-              'Skipping duplicate conversation: ${conversation.serverId} - $e');
         }
       }
     } catch (e) {
@@ -373,12 +351,9 @@ class LocalChatService {
 
   /// Force immediate sync of messages from server (for empty conversations)
   Future<void> forceSyncMessagesFromServer(String conversationId) async {
-    print(
-        '🔄 Force syncing messages from server for conversation: $conversationId');
 
     // Skip sync for new conversations that don't exist on server yet
     if (conversationId.startsWith('new_')) {
-      print('🔄 Skipping sync for new conversation: $conversationId');
       return;
     }
 
@@ -398,27 +373,19 @@ class LocalChatService {
         // Use cursor-based pagination if we have a last sync time
         queryParams['cursor'] = lastSyncTime.toIso8601String();
         queryParams['loadDirection'] = 'after';
-        print(
-            '🌐 [forceSyncMessagesFromServer] Using cursor: ${queryParams['cursor']}');
       } else {
         // If no local messages, fetch the first page
         queryParams['page'] = 1;
-        print('🌐 [forceSyncMessagesFromServer] Using page: 1');
       }
 
       // Get messages from API
-      print(
-          '🌐 [forceSyncMessagesFromServer] GET $path with params: $queryParams');
       final response = await _apiService.get(
         path,
         queryParameters: queryParams,
       );
 
       final data = response.data as Map<String, dynamic>;
-      print('🌐 [forceSyncMessagesFromServer] response keys: ${data.keys}');
       final messagesList = data['messages'] as List;
-      print(
-          '🌐 [forceSyncMessagesFromServer] Got ${messagesList.length} messages');
 
       final currentUserId = StorageService.getUser()?['id'];
 
@@ -433,14 +400,9 @@ class LocalChatService {
       // Save all messages with error handling
       try {
         await ChatDatabase.saveMessages(localMessages);
-        print(
-            '✅ [forceSyncMessagesFromServer] Saved ${localMessages.length} messages from server for $conversationId');
       } catch (e) {
-        print(
-            '⚠️ [forceSyncMessagesFromServer] Error saving messages from server: $e');
       }
     } catch (e) {
-      print('❌ Force sync messages from server failed: $e');
       rethrow;
     }
   }
@@ -451,8 +413,6 @@ class LocalChatService {
       {int limit = 10}) async {
     // Skip sync for new conversations that don't exist on server yet
     if (conversationId.startsWith('new_')) {
-      print(
-          '🔄 Skipping fetchLatestFromServer for new conversation: $conversationId');
       return;
     }
 
@@ -481,7 +441,6 @@ class LocalChatService {
       await ChatDatabase.saveMessages(localMessages);
     } catch (e) {
       // Swallow errors; this is a best-effort helper
-      print('fetchLatestFromServer failed: $e');
     }
   }
 
@@ -493,20 +452,14 @@ class LocalChatService {
       final allMessages = await ChatDatabase.getAllMessages();
       final uniqueConversationIds =
           allMessages.map((m) => m.conversationId).toSet();
-      print(
-          '🔍 [DEBUG] All conversation IDs in database: $uniqueConversationIds');
-      print('🔍 [DEBUG] Looking for conversationId: "$conversationId"');
 
       // Only reconcile if we have pending messages to avoid unnecessary work
       final pending =
           await ChatDatabase.getPendingMessagesForConversation(conversationId);
       if (pending.isEmpty) {
-        print('🔄 No pending messages to reconcile for $conversationId');
         return;
       }
 
-      print(
-          '🔄 Reconciling ${pending.length} pending messages for $conversationId');
 
       // STEP 1: Clean up existing duplicates FIRST before syncing more
       await _cleanupDuplicateMessages(conversationId);
@@ -519,8 +472,6 @@ class LocalChatService {
           await ChatDatabase.getPendingMessagesForConversation(conversationId);
 
       if (remainingPending.isNotEmpty) {
-        print(
-            '🔄 ${remainingPending.length} messages still pending after cleanup, syncing from server...');
 
         // Pull a recent window so we can adopt - but catch any unique violations
         try {
@@ -528,8 +479,6 @@ class LocalChatService {
               limit: 50); // Reduced limit
         } catch (e) {
           if (e.toString().contains('Unique index violated')) {
-            print(
-                'ℹ️ Some messages already exist during reconcile sync - continuing');
           } else {
             rethrow;
           }
@@ -547,7 +496,6 @@ class LocalChatService {
                 // Skip if already exists
                 continue;
               }
-              print('⚠️ Failed to adopt message ${m.serverId}: $e');
             }
           }
         }
@@ -555,7 +503,6 @@ class LocalChatService {
         // STEP 3: Clean up again after sync in case new duplicates were created
         await _cleanupDuplicateMessages(conversationId);
       } else {
-        print('🔄 No pending messages after cleanup, skipping server sync');
       }
 
       // Any remaining pending older than threshold become failed
@@ -568,9 +515,7 @@ class LocalChatService {
         }
       }
 
-      print('🔄 Reconcile completed for $conversationId');
     } catch (e) {
-      print('⚠️ reconcilePendingOnOpen failed: $e');
     }
   }
 
@@ -595,8 +540,6 @@ class LocalChatService {
       // For each group with multiple messages, keep only the best one
       for (final group in messageGroups.values) {
         if (group.length > 1) {
-          print(
-              '🧹 Found ${group.length} duplicate messages with content: "${group.first.content}"');
 
           // Sort by priority: delivered > sent > failed > sending
           group.sort((a, b) {
@@ -613,18 +556,13 @@ class LocalChatService {
           final toKeep = group.first;
           final toDelete = group.skip(1).toList();
 
-          print(
-              '🧹 Keeping message: ${toKeep.serverId ?? toKeep.id} (${toKeep.readStatus}) at ${toKeep.createdAt}');
 
           for (final duplicate in toDelete) {
-            print(
-                '🧹 Deleting duplicate: ${duplicate.serverId ?? duplicate.id} (${duplicate.readStatus}) at ${duplicate.createdAt}');
             await ChatDatabase.deleteMessage(duplicate.id.toString());
           }
         }
       }
     } catch (e) {
-      print('⚠️ Failed to cleanup duplicate messages: $e');
     }
   }
 
@@ -686,23 +624,17 @@ class LocalChatService {
           .toList();
 
       if (orphaned.isNotEmpty) {
-        print(
-            '🧹 Found ${orphaned.length} orphaned messages without clientMessageId');
 
         for (final orphan in orphaned) {
-          print(
-              '🧹 Marking orphaned message as failed: "${orphan.content}" (age: ${DateTime.now().difference(orphan.createdAt).inMinutes}min)');
           await ChatDatabase.markMessageFailed(orphan.id.toString());
         }
       }
     } catch (e) {
-      print('⚠️ Failed to cleanup orphaned messages: $e');
     }
   }
 
   /// Manual cleanup for testing - can be called directly
   Future<void> manualCleanupDuplicates(String conversationId) async {
-    print('🧹 Manual cleanup requested for $conversationId');
     await _cleanupDuplicateMessages(conversationId);
     await _cleanupOrphanedMessages(conversationId);
   }
@@ -713,9 +645,7 @@ class LocalChatService {
     try {
       await _apiService
           .delete('/conversations/$conversationId/messages/$messageId');
-      print('✅ Message deleted on server: $messageId');
     } catch (e) {
-      print('❌ Failed to delete message on server: $e');
       rethrow;
     }
   }
@@ -732,12 +662,9 @@ class LocalChatService {
       );
 
       final result = response.data as Map<String, dynamic>;
-      print(
-          '✅ Batch delete response: ${result['deleted_count']} deleted, ${result['failed_count']} failed');
 
       return result;
     } catch (e) {
-      print('❌ Failed to delete batch messages on server: $e');
       rethrow;
     }
   }
@@ -746,7 +673,6 @@ class LocalChatService {
       {int limit = 50}) async {
     // Skip sync for new conversations that don't exist on server yet
     if (conversationId.startsWith('new_')) {
-      print('🔄 Skipping message sync for new conversation: $conversationId');
       return;
     }
 
@@ -768,18 +694,10 @@ class LocalChatService {
       }
 
       // Get messages from API
-      print('🌐 [_syncMessagesFromServer] GET ' +
-          ApiConstants.getConversationMessages(conversationId) +
-          ' params=' +
-          queryParams.toString());
       final response = await _apiService.get(
         ApiConstants.getConversationMessages(conversationId),
         queryParameters: queryParams,
       );
-      print('🌐 [_syncMessagesFromServer] response keys: ' +
-          (response.data is Map<String, dynamic>
-              ? (response.data as Map<String, dynamic>).keys.join(',')
-              : 'not a map'));
 
       final data = response.data as Map<String, dynamic>;
       final messagesList =
@@ -803,14 +721,12 @@ class LocalChatService {
         await ChatDatabase.saveMessages(localMessages);
       } catch (e) {
         // Skip duplicate messages instead of crashing
-        print('Some messages already exist, skipping duplicates: $e');
         // Try saving individual messages to identify which ones are duplicates
         for (final message in localMessages) {
           try {
             await ChatDatabase.saveMessage(message);
           } catch (duplicateError) {
             // Skip this specific message
-            print('Skipping duplicate message: ${message.serverId}');
           }
         }
       }
@@ -842,8 +758,6 @@ class LocalChatService {
         data.remove(
             'conversation_id'); // Remove conversation_id for direct messages
 
-        print(
-            '🔄 Sending message to new conversation via direct message endpoint');
       } else {
         // Use existing conversation endpoint
         endpoint = '/conversations/${message.conversationId}/messages';
@@ -862,13 +776,10 @@ class LocalChatService {
         serverMessage['id'],
       );
 
-      print('✅ Message synced successfully: ${serverMessage['id']}');
     } catch (e) {
-      print('❌ Failed to sync message to server: $e');
 
       // 🔥 CRITICAL: Mark failed explicitly to stop infinite retries
       await ChatDatabase.markMessageFailed(message.id.toString());
-      print('🚫 Message marked as failed - will not retry: ${message.id}');
       // Don't rethrow - we handled the failure by marking it as "failed"
     }
   }
@@ -879,8 +790,6 @@ class LocalChatService {
       final now = DateTime.now();
       if (_lastSyncTime != null &&
           now.difference(_lastSyncTime!) < _syncThrottleDelay) {
-        print(
-            '⏳ Sync throttled - last sync was ${now.difference(_lastSyncTime!).inSeconds}s ago');
         return;
       }
       _lastSyncTime = now;
@@ -889,15 +798,12 @@ class LocalChatService {
 
       // STOP: Don't sync if there are too many pending messages (indicates a loop)
       if (pendingMessages.length > 20) {
-        print(
-            '⚠️ Too many pending messages (${pendingMessages.length}) - stopping sync to prevent loops');
         return;
       }
 
       // Limit to prevent infinite loops
       final messagesToSync =
           pendingMessages.take(5).toList(); // Reduced from 10 to 5
-      print('🔄 Syncing ${messagesToSync.length} pending messages');
 
       if (messagesToSync.isEmpty) {
         return; // No messages to sync
@@ -908,7 +814,6 @@ class LocalChatService {
         await _syncMessageToServer(message);
       }
     } catch (e) {
-      print('Failed to sync pending messages: $e');
     }
   }
 
@@ -916,14 +821,11 @@ class LocalChatService {
     try {
       // Skip sync for new conversations that don't exist on server yet
       if (conversationId.startsWith('new_')) {
-        print(
-            '🔄 Skipping read status sync for new conversation: $conversationId');
         return;
       }
 
       await _apiService.put('/conversations/$conversationId/mark-read');
     } catch (e) {
-      print('Failed to sync read status to server: $e');
     }
   }
 
@@ -936,7 +838,6 @@ class LocalChatService {
         await _syncMessagesFromServer(conversation.serverId, limit: 10);
       }
     } catch (e) {
-      print('Failed to sync new messages from server: $e');
     }
   }
 
@@ -1058,7 +959,6 @@ class LocalChatService {
           } catch (_) {}
         }
       } catch (e) {
-        print('Failed to handle real-time message: $e');
       }
     });
   }
