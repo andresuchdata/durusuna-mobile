@@ -216,6 +216,15 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         } catch (_) {}
       });
 
+      // Debug: Check what's in the database for this conversation
+      Future.delayed(const Duration(milliseconds: 100), () async {
+        try {
+          final allConversationIds = await ChatDatabase.getAllConversationIds();
+          await ChatDatabase.debugConversation(widget.conversation.id);
+        } catch (e) {
+        }
+      });
+
       // Ensure the most recent messages are present when opening chat, even if local DB isn't empty
       Future.delayed(const Duration(milliseconds: 400), () async {
         try {
@@ -420,8 +429,6 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           .toList();
 
       if (unreadFromOthers.isNotEmpty) {
-        print(
-            '📖 Sending read receipts for ${unreadFromOthers.length} unread messages');
         final realtimeService = ref.read(realtimeServiceProvider);
         realtimeService.markAsRead(unreadFromOthers, widget.conversation.id);
       }
@@ -821,12 +828,8 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   Future<void> _sendMessage({String? content}) async {
     final uiStartTime = DateTime.now();
-    print(
-        '🐛 [UI] _sendMessage called at ${uiStartTime.millisecondsSinceEpoch}');
-    print('🐛 [UI] Content: "$content"');
 
     if (content?.trim().isEmpty ?? true) {
-      print('🐛 [UI] Empty content, returning early');
       return;
     }
 
@@ -834,7 +837,6 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       // Convert LocalMessageType to match the message type system
       LocalMessageType messageType = LocalMessageType.text;
 
-      print('🐛 [UI] Calling provider.sendMessage...');
       final providerCallStart = DateTime.now();
 
       // Send message through local provider (instant UI update)
@@ -847,10 +849,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           );
 
       final providerCallEnd = DateTime.now();
-      print(
-          '🐛 [UI] Provider.sendMessage took: ${providerCallEnd.difference(providerCallStart).inMilliseconds}ms');
 
-      print('🐛 [UI] Clearing message controller...');
       _messageController.clear();
 
       // Clear reply state after sending
@@ -860,7 +859,6 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         });
       }
 
-      print('🐛 [UI] Scrolling to bottom...');
       // Wait for UI to update then scroll to bottom
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -876,10 +874,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       });
 
       final uiEndTime = DateTime.now();
-      print(
-          '🐛 [UI] ✅ _sendMessage COMPLETED in: ${uiEndTime.difference(uiStartTime).inMilliseconds}ms');
     } catch (e) {
-      print('🐛 [UI] ❌ _sendMessage FAILED: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -893,12 +888,9 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    print(
-        '🔍 [UI] LocalChatPage.build() called for conversationId: "${widget.conversation.id}"');
     final authState = ref.watch(authStateProvider);
     final messagesAsync =
         ref.watch(localMessagesProvider(widget.conversation.id));
-    print('🔍 [UI] messagesAsync state: ${messagesAsync.runtimeType}');
 
     // Real-time messages are now handled by the centralized RealtimeDispatcher
     // This ensures no duplicate processing and better performance
@@ -956,11 +948,6 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
     // DEBUG: Log message count and conversation details
     messagesAsync.whenData((messages) {
-      print(
-          '🐛 [DEBUG] LocalChatPage: conversationId="${widget.conversation.id}" has ${messages.length} messages');
-      print('🐛 [DEBUG] Conversation type: ${widget.conversation.type}');
-      print(
-          '🐛 [DEBUG] Last message in conversation model: ${widget.conversation.lastMessage?.content ?? "null"}');
     });
 
     return Scaffold(

@@ -17,16 +17,12 @@ class DebugSyncService {
   /// Force complete resync from backend (useful for testing)
   Future<void> forceCompleteResync() async {
     try {
-      print('🔄 Starting FORCE RESYNC from backend...');
 
       // Step 1: Clear local database
-      print('1️⃣ Clearing local database...');
       await ChatDatabase.clearAllData();
 
       // Step 2: Sync conversations from backend
-      print('2️⃣ Syncing conversations from backend...');
       final apiConversations = await _chatService.getConversations();
-      print('📱 Found ${apiConversations.length} conversations on backend');
 
       final currentUserId = StorageService.getUser()?['id'];
       if (currentUserId == null) {
@@ -55,16 +51,12 @@ class DebugSyncService {
       }
 
       // Step 3: Sync recent messages for each conversation
-      print('3️⃣ Syncing messages for each conversation...');
       for (final apiConv in apiConversations.take(10)) {
         // Top 10 conversations
         try {
-          print(
-              '📨 Syncing messages for: ${apiConv.name ?? apiConv.otherUser?.displayName ?? apiConv.id}');
 
           final apiMessages =
               await _chatService.getMessages(apiConv.id, limit: 50);
-          print('   Found ${apiMessages.length} messages');
 
           // Convert and save messages
           for (final apiMsg in apiMessages) {
@@ -85,14 +77,10 @@ class DebugSyncService {
             await ChatDatabase.saveMessage(localMsg);
           }
         } catch (e) {
-          print('⚠️ Failed to sync messages for ${apiConv.id}: $e');
         }
       }
 
-      print('✅ FORCE RESYNC COMPLETED!');
-      print('📱 You should now see all your conversations and messages');
     } catch (e) {
-      print('❌ FORCE RESYNC FAILED: $e');
       rethrow;
     }
   }

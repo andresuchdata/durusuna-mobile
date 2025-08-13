@@ -5,7 +5,8 @@ import '../models/notification.dart';
 import '../models/user.dart';
 import '../../core/constants/api_constants.dart';
 import 'api_service.dart';
-import 'auth_service.dart';
+
+import 'realtime_service.dart';
 
 class NotificationService {
   final ApiService _apiService;
@@ -230,6 +231,14 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
 
   NotificationsNotifier(this._notificationService, this._ref)
       : super(const NotificationsState());
+
+  /// Wire realtime notifications to state updates
+  void bindRealtime(RealtimeService realtime) {
+    realtime.notificationStream.listen((evt) async {
+      // Fetch fresh from server to keep parity
+      await loadNotifications(refresh: true);
+    });
+  }
 
   /// Load notifications
   Future<void> loadNotifications({bool refresh = false}) async {

@@ -117,8 +117,6 @@ class LocalConversationsNotifier
 final localMessagesProvider = StateNotifierProvider.family<
     LocalMessagesNotifier, AsyncValue<List<LocalMessage>>, String>(
   (ref, conversationId) {
-    print(
-        '🔍 [PROVIDER] Creating LocalMessagesNotifier for conversationId: "$conversationId"');
     return LocalMessagesNotifier(
       ref.read(localChatServiceProvider),
       conversationId,
@@ -140,46 +138,41 @@ class LocalMessagesNotifier
 
   LocalMessagesNotifier(this._chatService, this._conversationId, this._ref)
       : super(const AsyncValue.loading()) {
-    print(
-        '🔍 [PROVIDER] LocalMessagesNotifier created for conversationId: "$_conversationId"');
     _watchMessages();
   }
 
   void _watchMessages() {
-    print(
-        '🔍 [PROVIDER] _watchMessages() called for conversationId: "$_conversationId"');
     _streamSub?.cancel();
-    _streamSub = ChatDatabase.watchMessages(_conversationId, limit: _pageSize)
-        .listen((messages) async {
-      print(
-          '🔍 [PROVIDER] Stream received ${messages.length} messages for "$_conversationId"');
 
-      // If DB is empty on first open (e.g., after reset), fetch recent messages from server once
-      if (!_initialSyncTriggered && messages.isEmpty) {
-        _initialSyncTriggered = true;
-        print(
-            '🔄 [PROVIDER] Messages empty for "$_conversationId" → triggering initial force sync');
-        print('🔍 [PROVIDER] _chatService type: ${_chatService.runtimeType}');
-        Future.microtask(() async {
-          try {
-            print('🔄 [PROVIDER] Calling forceSyncMessagesFromServer...');
-            await _chatService.forceSyncMessagesFromServer(_conversationId);
-            print(
-                '✅ [PROVIDER] Initial force sync completed for "$_conversationId"');
-          } catch (e, stackTrace) {
-            print('⚠️ Initial force sync failed for $_conversationId: $e');
-            print('⚠️ Stack trace: $stackTrace');
-          }
-        });
-      }
-      if (mounted) {
-        state = AsyncValue.data(messages);
-        _currentOffset = messages.length;
-        _hasMore = messages.length >= _pageSize;
-      }
-    }, onError: (e, st) {
-      print('🔍 [PROVIDER] Stream error for "$_conversationId": $e');
-      if (mounted) state = AsyncValue.error(e, st);
+    // Small delay to ensure database operations are complete
+    Future.delayed(const Duration(milliseconds: 50), () {
+      _streamSub = ChatDatabase.watchMessages(_conversationId, limit: _pageSize)
+          .listen((messages) async {
+
+        // If DB is empty on first open (e.g., after reset), fetch recent messages from server once
+        if (!_initialSyncTriggered && messages.isEmpty) {
+          _initialSyncTriggered = true;
+          Future.microtask(() async {
+            try {
+              await _chatService.forceSyncMessagesFromServer(_conversationId);
+
+              // Debug: Check what happened after sync
+              await ChatDatabase.debugConversation(_conversationId);
+
+              // Force refresh the stream listener to pick up new messages
+              _watchMessages();
+            } catch (e, stackTrace) {
+            }
+          });
+        }
+        if (mounted) {
+          state = AsyncValue.data(messages);
+          _currentOffset = messages.length;
+          _hasMore = messages.length >= _pageSize;
+        }
+      }, onError: (e, st) {
+        if (mounted) state = AsyncValue.error(e, st);
+      });
     });
   }
 
@@ -222,19 +215,14 @@ class LocalMessagesNotifier
     String? replyToId,
   }) async {
     final startTime = DateTime.now();
-    print(
-        '🐛 [DEBUG] sendMessage called at ${startTime.millisecondsSinceEpoch}');
 
     // 🚀 INSTANT OPTIMISTIC UPDATE - Message appears immediately!
     final currentUser = StorageService.getUser();
     if (currentUser == null) {
-      print('🐛 [DEBUG] No current user, returning early');
       return;
     }
 
     final userCheckTime = DateTime.now();
-    print(
-        '🐛 [DEBUG] User check took: ${userCheckTime.difference(startTime).inMilliseconds}ms');
 
     // Generate a clientMessageId for deterministic merging/dedupe
     final clientMessageId =
@@ -256,15 +244,11 @@ class LocalMessagesNotifier
     );
 
     final messageCreateTime = DateTime.now();
-    print(
-        '🐛 [DEBUG] Message creation took: ${messageCreateTime.difference(userCheckTime).inMilliseconds}ms');
 
     // 🚀 STEP 1: Persist immediately to get a stable localId used for dedupe
     // This will trigger the stream and update the UI instantly
     try {
       await ChatDatabase.saveMessage(optimisticMessage);
-      print(
-          '🐛 [DEBUG] Optimistic message saved to DB: ${optimisticMessage.id}');
 
       // 🚀 CRITICAL: Register immediately to prevent real-time duplicates using SINGLETON
       final dispatcher = RealtimeDispatcher.instance;
@@ -275,7 +259,6 @@ class LocalMessagesNotifier
       dispatcher.registerRecentlySent(
           optimisticMessage.content ?? ''); // Content fallback
     } catch (e) {
-      print('🐛 [DEBUG] Failed to save optimistic message locally: $e');
       // If local save fails, mark as failed and return
       if (mounted) {
         state.whenData((messages) {
@@ -300,29 +283,22 @@ class LocalMessagesNotifier
     _syncMessageInBackground(optimisticMessage);
 
     final totalTime = DateTime.now();
-    print(
-        '🐛 [DEBUG] ✅ sendMessage COMPLETED in: ${totalTime.difference(startTime).inMilliseconds}ms');
   }
 
   /// Background operation - doesn't block UI
   Future<void> _syncMessageInBackground(LocalMessage optimisticMessage) async {
     final bgStartTime = DateTime.now();
-    print(
-        '🐛 [BACKGROUND] Starting background sync at ${bgStartTime.millisecondsSinceEpoch}');
 
     // Message already registered earlier to prevent real-time duplicates
 
     try {
       // Now sync to server
-      print('🐛 [BACKGROUND] Syncing to server...');
       final serverStart = DateTime.now();
 
       final serverMessage =
           await _chatService.syncMessageToServer(optimisticMessage);
 
       final serverEnd = DateTime.now();
-      print(
-          '🐛 [BACKGROUND] Server sync took: ${serverEnd.difference(serverStart).inMilliseconds}ms');
 
       // Persist sync state in local DB (replace local optimistic with real serverId)
       // This will trigger the stream and update the UI
@@ -331,40 +307,28 @@ class LocalMessagesNotifier
         final existingServerMessage =
             await ChatDatabase.getMessageByServerId(serverMessage.serverId!);
         if (existingServerMessage != null) {
-          print(
-              '✅ [BACKGROUND] Server message ${serverMessage.serverId} already exists - skipping adoption');
           return; // Server message already processed by real-time handler
         }
 
         // Check if the optimistic message still exists and needs adoption
         final optimisticStillExists =
             await ChatDatabase.getMessage(optimisticMessage.id.toString());
-        print(
-            '🔍 [BACKGROUND] Checking optimistic message ${optimisticMessage.id}: serverId=${optimisticStillExists?.serverId}, exists=${optimisticStillExists != null}');
 
         if (optimisticStillExists?.serverId == null) {
-          print(
-              '🔄 [BACKGROUND] Optimistic message needs adoption - proceeding');
           // Only try adoption if the optimistic message still exists and hasn't been adopted yet
           try {
             final adopted =
                 await ChatDatabase.adoptServerMessage(serverMessage);
             if (adopted) {
-              print(
-                  '🔄 [BACKGROUND] Server message adopted into existing optimistic message.');
             } else {
               // Fallback if adoption failed (e.g., optimistic message was deleted)
               await ChatDatabase.markMessageSynced(
                 optimisticMessage.id.toString(),
                 serverMessage.serverId!,
               );
-              print(
-                  '⚠️ [BACKGROUND] Server message not adopted, marked as synced instead.');
             }
           } catch (e) {
             if (e.toString().contains('Unique index violated')) {
-              print(
-                  '✅ [BACKGROUND] Message already adopted by real-time handler - skipping duplicate adoption.');
               // This is expected when real-time handler beats the background sync
               // The message is already properly synced, so we're done
             } else {
@@ -372,23 +336,16 @@ class LocalMessagesNotifier
             }
           }
         } else {
-          print(
-              '✅ [BACKGROUND] Optimistic message already adopted by real-time handler - skipping background adoption.');
         }
       }
 
       // The adoptServerMessage method should handle deduplication via clientMessageId matching
 
       final totalBgTime = DateTime.now();
-      print(
-          '🐛 [BACKGROUND] ✅ Background sync completed in: ${totalBgTime.difference(bgStartTime).inMilliseconds}ms');
     } catch (e) {
-      print('🐛 [BACKGROUND] ❌ Background sync FAILED: $e');
 
       // Mark message as failed for genuine errors
       await ChatDatabase.markMessageFailed(optimisticMessage.id.toString());
-      print(
-          '🚫 Message marked as failed - will not retry: ${optimisticMessage.id}');
     }
   }
 
@@ -458,7 +415,6 @@ class LocalMessagesNotifier
           await _deleteMessageLocally(message);
           successCount++;
         } catch (e) {
-          print('❌ Failed to delete message locally: ${message.id} - $e');
           failCount++;
         }
       }
@@ -470,8 +426,6 @@ class LocalMessagesNotifier
             await _deleteMessageOnServer(
                 message.serverId!, message.conversationId);
           } catch (e) {
-            print(
-                '⚠️ Failed to delete message on server: ${message.serverId} - $e');
             // Continue - local deletion already succeeded
           }
         }
@@ -506,7 +460,6 @@ class LocalMessagesNotifier
 
       return failCount == 0;
     } catch (e) {
-      print('❌ Failed to delete messages: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -569,8 +522,6 @@ class LocalMessagesNotifier
     // CRITICAL: Remove from pending sync queue to prevent reappearing
     await ChatDatabase.removePendingMessage(messageId);
 
-    print(
-        '🗑️ Deleted message locally and removed from pending sync: $messageId');
   }
 
   /// Delete message on server
