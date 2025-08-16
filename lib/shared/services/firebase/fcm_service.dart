@@ -30,6 +30,13 @@ class FCMService {
         return;
       }
 
+      // Ensure iOS foreground notifications present as system alerts
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
       // Initialize local notifications
       await _notificationHandler.initialize();
 

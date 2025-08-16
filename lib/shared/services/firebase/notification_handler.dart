@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
+import '../notification_deeplink_router.dart';
 
 /// Handles local notifications and navigation from Firebase messages
 class NotificationHandler {
@@ -92,12 +93,7 @@ class NotificationHandler {
 
   /// Handle navigation from notification data
   void handleNotificationNavigation(Map<String, dynamic> data) {
-    final actionUrl = data['actionUrl'] as String?;
-    if (actionUrl?.isNotEmpty == true) {
-      debugPrint('🔔 Should navigate to: $actionUrl');
-      // TODO: Implement navigation logic
-      // NavigationService.navigateFromNotification(actionUrl);
-    }
+    NotificationDeepLinkRouter.handleFCMNavigation(data);
   }
 
   /// Handle local notification tap
