@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-// import 'package:firebase_core/firebase_core.dart'; // TEMPORARILY DISABLED
 
 import 'core/constants/app_theme.dart';
 
@@ -13,7 +12,6 @@ import 'shared/providers/app_providers.dart';
 import 'shared/providers/local_chat_providers.dart';
 import 'shared/services/realtime_service.dart';
 
-import 'shared/services/realtime_dispatcher.dart';
 import 'shared/services/chat_service.dart';
 import 'shared/services/auth_service.dart';
 import 'shared/services/notification_service.dart' as notification_service
@@ -25,12 +23,18 @@ import 'features/auth/presentation/pages/login_page.dart';
 import 'features/home/presentation/pages/enhanced_home_page_concept.dart';
 import 'features/class_management/presentation/pages/class_management_page.dart'
     show userClassesProvider;
+import 'shared/services/firebase/firebase_service.dart';
+import 'shared/services/firebase/fcm_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase - TEMPORARILY DISABLED FOR TESTING
-  // await Firebase.initializeApp();
+  // Initialize Firebase
+  final firebaseInitialized = await FirebaseService().initialize();
+  if (!firebaseInitialized) {
+    debugPrint(
+        '🔥 Firebase initialization skipped due to missing configuration');
+  }
 
   // Initialize Hive
   await Hive.initFlutter();
@@ -41,6 +45,11 @@ void main() async {
 
   // Initialize platform-specific optimizations
   await PlatformOptimization.initialize();
+
+  // Initialize Firebase Cloud Messaging
+  if (firebaseInitialized) {
+    await FCMService().initialize();
+  }
 
   // Enable high refresh rate displays (120Hz, 90Hz, etc.)
   try {
@@ -125,9 +134,9 @@ class DurusunaMobileApp extends ConsumerWidget {
       GlobalAuthHandler.initialize(navigatorKey, ref);
 
       // Initialize RealtimeService for app-wide socket connection
-      print('🏗️ Main: Initializing RealtimeService provider...');
+      debugPrint('🏗️ Main: Initializing RealtimeService provider...');
       ref.read(realtimeServiceProvider);
-      print('✅ Main: RealtimeService provider initialized');
+      debugPrint('✅ Main: RealtimeService provider initialized');
     });
 
     return PerformanceMonitor(

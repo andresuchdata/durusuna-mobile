@@ -390,6 +390,27 @@ class ApiService {
     return 'An error occurred';
   }
 
+  // Update FCM token
+  Future<void> updateFCMToken(String token) async {
+    try {
+      final response = await put('/users/fcm-token', data: {
+        'fcm_token': token,
+      });
+
+      if (response.statusCode == 200) {
+        debugPrint('✅ FCM token updated successfully');
+      } else {
+        throw ApiException(
+          message: 'Failed to update FCM token',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Failed to update FCM token: $e');
+      rethrow;
+    }
+  }
+
   void dispose() {
     _dio.close();
   }
