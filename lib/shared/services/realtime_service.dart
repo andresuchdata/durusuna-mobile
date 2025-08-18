@@ -140,6 +140,10 @@ class RealtimeService with WidgetsBindingObserver {
     _currentUserId = null;
     _connectionController.add(false);
     _stopConnectionCheck();
+
+    // Clear pending read receipts on disconnect to prevent memory leaks
+    _pendingReadReceipts.clear();
+    _pendingPresenceRequests.clear();
   }
 
   /// App lifecycle handling for Android
@@ -276,6 +280,7 @@ class RealtimeService with WidgetsBindingObserver {
       // Ensure we join any conversations that were requested before connect
       _rejoinAllConversations();
       _flushPendingPresenceRequests();
+      _flushPendingReadReceipts();
     });
 
     _socket!.onDisconnect((reason) {
@@ -293,6 +298,7 @@ class RealtimeService with WidgetsBindingObserver {
       _setupUserPresence();
       _rejoinAllConversations(); // Re-join all conversation rooms after reconnect
       _flushPendingPresenceRequests();
+      _flushPendingReadReceipts();
     });
 
     _socket!.onReconnectAttempt((attempt) {});
@@ -574,15 +580,45 @@ class RealtimeService with WidgetsBindingObserver {
     });
   }
 
-  /// Mark messages as read
+  // Queue for pending read receipts when connection is down
+  final List<Map<String, dynamic>> _pendingReadReceipts = [];
+  static const int _maxPendingReadReceipts =
+      50; // Limit to prevent memory issues
+
+  /// Mark messages as read with offline queuing support
   void markAsRead(List<String> messageIds, String conversationId) {
-    if (!_isConnected) return;
-    _socket!.emit('message:read', {
+    final readReceiptData = {
       'messageIds': messageIds,
       'conversationId': conversationId,
       'userId': _currentUserId,
       'readAt': DateTime.now().toIso8601String(),
-    });
+    };
+
+    if (_isConnected && _socket != null) {
+      // Send immediately if connected
+      _socket!.emit('message:read', readReceiptData);
+      print(
+          '✅ Read receipt sent for ${messageIds.length} messages in $conversationId');
+    } else {
+      // Queue for later if not connected (with size limit)
+      if (_pendingReadReceipts.length >= _maxPendingReadReceipts) {
+        // Remove oldest entry if queue is full
+        _pendingReadReceipts.removeAt(0);
+        print('⚠️ Read receipt queue full, removed oldest entry');
+      }
+
+      _pendingReadReceipts.add(readReceiptData);
+      print(
+          '📦 Read receipt queued for ${messageIds.length} messages in $conversationId (${_pendingReadReceipts.length}/$_maxPendingReadReceipts queued)');
+
+      // Attempt to reconnect if we have a token
+      if (StorageService.getToken() != null) {
+        print('🔄 Attempting reconnect to send queued read receipts...');
+        Future.delayed(const Duration(milliseconds: 1000), () {
+          reconnect();
+        });
+      }
+    }
   }
 
   /// Update user presence
@@ -662,6 +698,26 @@ class RealtimeService with WidgetsBindingObserver {
       print('🚀 RealtimeService: Flushed presence snapshot for $userId');
     }
     _pendingPresenceRequests.clear();
+  }
+
+  /// Send all queued read receipts when connection is restored
+  void _flushPendingReadReceipts() {
+    if (_pendingReadReceipts.isEmpty) return;
+    if (_socket?.connected != true) return;
+
+    print(
+        '🚀 RealtimeService: Flushing ${_pendingReadReceipts.length} pending read receipts');
+
+    for (final readReceiptData in _pendingReadReceipts) {
+      _socket!.emit('message:read', readReceiptData);
+      final messageIds = readReceiptData['messageIds'] as List<String>;
+      final conversationId = readReceiptData['conversationId'] as String;
+      print(
+          '✅ Flushed read receipt for ${messageIds.length} messages in $conversationId');
+    }
+
+    _pendingReadReceipts.clear();
+    print('🧹 All pending read receipts flushed');
   }
 
   /// Report file upload progress

@@ -178,7 +178,10 @@ extension LocalMessageExtension on LocalMessage {
       {required bool isFromMe}) {
     return LocalMessage(
       serverId: json['id'],
-      clientMessageId: json['client_message_id'],
+      // Use a deterministic surrogate so the unique index is satisfied and
+      // multiple server messages don't collide on null. This does not affect
+      // optimistic dedupe which uses real clientMessageId on the sender.
+      clientMessageId: 'svr_${json['id']}',
       conversationId: json['conversation_id'],
       senderId: json['sender_id'],
       content: json['content'],

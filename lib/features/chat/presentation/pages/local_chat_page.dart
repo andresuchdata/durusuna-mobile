@@ -53,8 +53,9 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   // Auto-scroll handling removed - not used
 
-  // Key for tracking highlighted message
+  // Key map for locating message bubbles
   final Map<String, GlobalKey> _messageKeys = {};
+  final Map<int, GlobalKey> _messageKeysByLocalId = {};
 
   // Selection mode state
   final Set<String> _selectedMessageIds = {};
@@ -217,53 +218,28 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       });
 
       // Ensure the most recent messages are present when opening chat, even if local DB isn't empty
+      // Always perform a lightweight fetch + force sync to cover cases where
+      // socket connection was delayed and message:new events were missed.
       Future.delayed(const Duration(milliseconds: 400), () async {
         try {
-          final latestLocal =
-              await ChatDatabase.getLatestMessage(widget.conversation.id);
-          final DateTime? conversationTime =
-              widget.conversation.lastMessageAt ??
-                  widget.conversation.lastMessage?.createdAt;
-
           final chatService = ref.read(localChatServiceProvider);
-
-          // Fallback: if there are no local messages yet, proactively pull a recent window
-          if (latestLocal == null) {
-            await chatService.fetchLatestFromServer(
-              widget.conversation.id,
-              limit: 20,
-            );
-            await chatService.forceSyncMessagesFromServer(
-              widget.conversation.id,
-            );
-            // Force a provider refresh to reflect newly saved messages immediately
-            try {
-              await ref
-                  .read(localMessagesProvider(widget.conversation.id).notifier)
-                  .refresh();
-            } catch (_) {}
-            return;
-          }
-
-          if (conversationTime != null &&
-              conversationTime.isAfter(latestLocal.createdAt)) {
-            // Try cursor-based first
-            await chatService
-                .forceSyncMessagesFromServer(widget.conversation.id);
-            // Fallback direct latest fetch in case cursor yields no new items
-            await chatService.fetchLatestFromServer(
-              widget.conversation.id,
-              limit: 20,
-            );
-            // Ensure UI reflects any new messages
-            try {
-              await ref
-                  .read(localMessagesProvider(widget.conversation.id).notifier)
-                  .refresh();
-            } catch (_) {}
-          }
+          await chatService.fetchLatestFromServer(
+            widget.conversation.id,
+            limit: 20,
+          );
+          await chatService.forceSyncMessagesFromServer(
+            widget.conversation.id,
+          );
+          // Ensure UI reflects any new messages
+          try {
+            await ref
+                .read(localMessagesProvider(widget.conversation.id).notifier)
+                .refresh();
+          } catch (_) {}
         } catch (_) {}
       });
+
+      // NOTE: realtime message listener is attached in build() via ref.listen
 
       // CRITICAL: Sync existing reactions when chat page loads
       Future.delayed(const Duration(milliseconds: 800), () async {
@@ -406,6 +382,18 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   // Track if we've already marked as read when at bottom to avoid multiple calls
   bool _hasMarkedAsReadAtBottom = false;
+  bool _isPullUpRefreshing = false;
+  bool _showBottomPullHint = false;
+
+  // Safely toggle bottom pull hint without mutating during layout
+  void _setBottomPullHint(bool value) {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() => _showBottomPullHint = value);
+      }
+    });
+  }
 
   void _markAsReadWhenAtBottom() {
     if (_hasMarkedAsReadAtBottom) return;
@@ -431,6 +419,34 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
     // Also send read receipts for unread messages from other users
     _sendReadReceiptsForUnreadMessages();
+  }
+
+  Future<void> _syncLatestFromServer() async {
+    try {
+      final chatService = ref.read(localChatServiceProvider);
+      await chatService.fetchLatestFromServer(
+        widget.conversation.id,
+        limit: 30,
+      );
+      await chatService.forceSyncMessagesFromServer(
+        widget.conversation.id,
+      );
+      await ref
+          .read(localMessagesProvider(widget.conversation.id).notifier)
+          .refresh();
+    } catch (_) {}
+  }
+
+  void _startPullUpRefresh() {
+    if (_isPullUpRefreshing) return;
+    _isPullUpRefreshing = true;
+    _setBottomPullHint(true);
+    _syncLatestFromServer().whenComplete(() {
+      Future.delayed(const Duration(milliseconds: 400), () {
+        _isPullUpRefreshing = false;
+        _setBottomPullHint(false);
+      });
+    });
   }
 
   void _sendReadReceiptsForUnreadMessages() {
@@ -663,6 +679,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   GlobalKey _getMessageKey(String messageId) {
     return _messageKeys.putIfAbsent(messageId, () => GlobalKey());
+  }
+
+  GlobalKey _getMessageKeyByLocalId(int localId) {
+    return _messageKeysByLocalId.putIfAbsent(localId, () => GlobalKey());
   }
 
   void _replyToMessage(LocalMessage message) {
@@ -944,6 +964,19 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       });
     });
 
+    // CRITICAL: Listen for real-time messages and refresh this conversation's list only
+    ref.listen(realtimeMessagesProvider, (previous, next) {
+      next.whenData((rtMessage) {
+        if (rtMessage.conversationId == widget.conversation.id) {
+          try {
+            ref
+                .read(localMessagesProvider(widget.conversation.id).notifier)
+                .refresh();
+          } catch (_) {}
+        }
+      });
+    });
+
     // CRITICAL: Listen for real-time typing indicators
     ref.listen(realtimeTypingProvider, (previous, next) {
       next.whenData((typingEvent) {
@@ -1014,6 +1047,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                 }
                 _lastMessageCount = messages.length;
 
+                // Use bottom pull-up to refresh latest instead of top indicator
                 return _buildMessagesList(messages, authState);
               },
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -1093,125 +1127,170 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   Widget _buildMessagesList(List<LocalMessage> messages, dynamic authState) {
-    if (messages.isEmpty) {
-      return _buildEmptyState();
-    }
-
+    // AlwaysScrollable so RefreshIndicator can trigger even with few/no items
     // Calculate item count including typing indicator
-    final itemCount = messages.length + (_isOtherUserTyping ? 1 : 0);
+    final itemCount =
+        (messages.isEmpty ? 0 : messages.length) + (_isOtherUserTyping ? 1 : 0);
 
-    return ListView.builder(
-      controller: _scrollController,
-      reverse: false,
-      physics: const HighRefreshScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(4, 2, 4, 24),
-      itemCount: itemCount,
-      cacheExtent: 500, // Cache more items for smoother scrolling
-      addRepaintBoundaries: true, // Isolate repaints
-      itemBuilder: (context, index) {
-        // Show typing indicator at the end of the list
-        if (index == messages.length && _isOtherUserTyping) {
-          return _buildTypingIndicator();
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        final position = _scrollController.position;
+        // Detect pull-up gesture near bottom to sync latest
+        if (notification is OverscrollNotification &&
+            notification.overscroll > 8 &&
+            position.pixels >= position.maxScrollExtent - 8 &&
+            !_isPullUpRefreshing) {
+          _startPullUpRefresh();
         }
-
-        if (index >= messages.length) {
-          return const SizedBox.shrink();
-        }
-        final message = messages[index];
-        final isMe = message.isFromMe;
-        final showTimestamp = _shouldShowTimestamp(
-          message,
-          index > 0 ? messages[index - 1] : null,
-        );
-
-        return Column(
-          children: [
-            if (showTimestamp)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  _formatTimestamp(message.createdAt),
-                  style: const TextStyle(
-                    color: AppTheme.textTertiary,
-                    fontSize: 12,
+        return false;
+      },
+      child: ListView.builder(
+        controller: _scrollController,
+        reverse: false,
+        physics: const AlwaysScrollableScrollPhysics(
+            parent: HighRefreshScrollPhysics()),
+        padding: const EdgeInsets.fromLTRB(4, 2, 4, 32),
+        itemCount: itemCount + 1, // add spacer for bottom-overscroll affordance
+        cacheExtent: 500, // Cache more items for smoother scrolling
+        addRepaintBoundaries: true, // Isolate repaints
+        itemBuilder: (context, index) {
+          if (index == itemCount) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Center(
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity:
+                      _isPullUpRefreshing || _showBottomPullHint ? 1.0 : 0.0,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: _isPullUpRefreshing
+                            ? const CircularProgressIndicator(strokeWidth: 2)
+                            : const Icon(Icons.arrow_upward, size: 16),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isPullUpRefreshing
+                            ? 'Syncing latest…'
+                            : 'Pull up to fetch latest',
+                        style: const TextStyle(
+                            fontSize: 12, color: AppTheme.textSecondary),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            // 🚀 Enhanced message bubble with selection support
-            RepaintBoundary(
-              child: LocalMessageBubble(
-                // Stable key: prefer serverId; fallback to clientMessageId; last resort: local id
-                key: _getMessageKey(message.serverId ??
-                    message.clientMessageId ??
-                    message.id.toString()),
-                message: message,
-                isMe: isMe,
-                isGroup: widget.conversation.type == 'group',
-                isSelectionMode: _isSelectionMode,
-                isSelected: _selectedMessageIds
-                    .contains(message.serverId ?? message.id.toString()),
-                senderName: _getSenderDisplayName(message),
-                senderAvatarUrl: _getSenderAvatarUrl(message),
-                participants: widget.conversation.participants,
-                reactionsJson: message.reactions,
-                currentUserId: authState.user?.id,
-                onReactionTap: (emoji) async {
-                  try {
-                    if (message.serverId == null) return;
-                    final reactionsMap = await ref
-                        .read(localChatServiceProvider)
-                        .toggleReactionOnServer(message.serverId!, emoji);
-                    await ChatDatabase.updateMessageReactions(
-                      serverId: message.serverId,
-                      reactionsJson: jsonEncode(reactionsMap),
-                    );
-                  } catch (_) {}
-                },
-                onTap: () {
-                  if (_isSelectionMode) {
-                    _toggleMessageSelection(message);
-                  }
-                },
-                onLongPress: () {
-                  if (_isSelectionMode) {
-                    _toggleMessageSelection(message);
-                  } else {
-                    _enterSelectionMode(message);
-                  }
-                },
-                onDoubleTap: () {
-                  // Quick react: show bar centered over bubble for now
-                  final key = _getMessageKey(message.serverId ??
-                      message.clientMessageId ??
-                      message.id.toString());
-                  final ctx = key.currentContext;
-                  if (ctx != null) {
-                    final box = ctx.findRenderObject() as RenderBox?;
-                    if (box != null) {
-                      final rect = box.localToGlobal(Offset.zero) & box.size;
-                      _showReactionBar(context, rect, message);
+            );
+          }
+          if (messages.isEmpty) {
+            // Render a spacer so the list still lays out and allows pull-to-refresh
+            return SizedBox(
+              height: MediaQuery.of(context).size.height * 0.5,
+              child: _buildEmptyState(),
+            );
+          }
+          // Show typing indicator at the end of the list
+          if (index == messages.length && _isOtherUserTyping) {
+            return _buildTypingIndicator();
+          }
+
+          if (index >= messages.length) {
+            return const SizedBox.shrink();
+          }
+          final message = messages[index];
+          final isMe = message.isFromMe;
+          final showTimestamp = _shouldShowTimestamp(
+            message,
+            index > 0 ? messages[index - 1] : null,
+          );
+
+          return Column(
+            children: [
+              if (showTimestamp)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    _formatTimestamp(message.createdAt),
+                    style: const TextStyle(
+                      color: AppTheme.textTertiary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              // 🚀 Enhanced message bubble with selection support
+              RepaintBoundary(
+                child: LocalMessageBubble(
+                  // Use localId-based key to avoid duplicate GlobalKey errors when serverId/clientId change
+                  key: _getMessageKeyByLocalId(message.id),
+                  message: message,
+                  isMe: isMe,
+                  isGroup: widget.conversation.type == 'group',
+                  isSelectionMode: _isSelectionMode,
+                  isSelected: _selectedMessageIds
+                      .contains(message.serverId ?? message.id.toString()),
+                  senderName: _getSenderDisplayName(message),
+                  senderAvatarUrl: _getSenderAvatarUrl(message),
+                  participants: widget.conversation.participants,
+                  reactionsJson: message.reactions,
+                  currentUserId: authState.user?.id,
+                  onReactionTap: (emoji) async {
+                    try {
+                      if (message.serverId == null) return;
+                      final reactionsMap = await ref
+                          .read(localChatServiceProvider)
+                          .toggleReactionOnServer(message.serverId!, emoji);
+                      await ChatDatabase.updateMessageReactions(
+                        serverId: message.serverId,
+                        reactionsJson: jsonEncode(reactionsMap),
+                      );
+                    } catch (_) {}
+                  },
+                  onTap: () {
+                    if (_isSelectionMode) {
+                      _toggleMessageSelection(message);
                     }
-                  }
-                },
-                onAddReaction: () {
-                  final key = _getMessageKey(message.serverId ??
-                      message.clientMessageId ??
-                      message.id.toString());
-                  final ctx = key.currentContext;
-                  if (ctx != null) {
-                    final box = ctx.findRenderObject() as RenderBox?;
-                    if (box != null) {
-                      final rect = box.localToGlobal(Offset.zero) & box.size;
-                      _showReactionBar(context, rect, message);
+                  },
+                  onLongPress: () {
+                    if (_isSelectionMode) {
+                      _toggleMessageSelection(message);
+                    } else {
+                      _enterSelectionMode(message);
                     }
-                  }
-                },
+                  },
+                  onDoubleTap: () {
+                    // Quick react: show bar centered over bubble for now
+                    final key = _getMessageKeyByLocalId(message.id);
+                    final ctx = key.currentContext;
+                    if (ctx != null) {
+                      final box = ctx.findRenderObject() as RenderBox?;
+                      if (box != null) {
+                        final rect = box.localToGlobal(Offset.zero) & box.size;
+                        _showReactionBar(context, rect, message);
+                      }
+                    }
+                  },
+                  onAddReaction: () {
+                    final key = _getMessageKeyByLocalId(message.id);
+                    final ctx = key.currentContext;
+                    if (ctx != null) {
+                      final box = ctx.findRenderObject() as RenderBox?;
+                      if (box != null) {
+                        final rect = box.localToGlobal(Offset.zero) & box.size;
+                        _showReactionBar(context, rect, message);
+                      }
+                    }
+                  },
+                ),
               ),
-            ),
-            // Reactions are now handled internally by LocalMessageBubble
-          ],
-        );
-      },
+              // Reactions are now handled internally by LocalMessageBubble
+            ],
+          );
+        },
+      ),
     );
   }
 

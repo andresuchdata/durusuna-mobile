@@ -344,29 +344,43 @@ class LocalChatService {
   Future<void> _syncConversationsFromServer() async {
     try {
       // Get conversations from API
+      print('🌐 [CONVERSATIONS] Fetching conversations from server...');
       final response = await _apiService.get('/conversations');
       final data = response.data as Map<String, dynamic>;
       final conversationsList = data['conversations'] as List;
+      print(
+          '🌐 [CONVERSATIONS] Server returned ${conversationsList.length} conversations');
 
       final currentUserId = StorageService.getUser()?['id'];
+      print('🌐 [CONVERSATIONS] Current user ID: $currentUserId');
 
       // Convert and save to local database
       final localConversations = conversationsList
           .map((json) =>
               LocalConversationExtension.fromApiJson(json, currentUserId))
           .toList();
+      print(
+          '🌐 [CONVERSATIONS] Converted ${localConversations.length} conversations to local format');
 
       // Save all conversations with error handling
+      int saved = 0;
+      int skipped = 0;
       for (final conversation in localConversations) {
         try {
           await ChatDatabase.saveConversation(conversation);
+          saved++;
+          print(
+              '✅ [CONVERSATIONS] Saved: ${conversation.serverId} (${conversation.displayName})');
         } catch (e) {
           // Skip duplicate conversations instead of crashing
+          skipped++;
           print(
-              'Skipping duplicate conversation: ${conversation.serverId} - $e');
+              '⚠️ [CONVERSATIONS] Skipping duplicate conversation: ${conversation.serverId} - $e');
         }
       }
+      print('📊 [CONVERSATIONS] Sync complete: $saved saved, $skipped skipped');
     } catch (e) {
+      print('❌ [CONVERSATIONS] Sync failed: $e');
       throw LocalChatException('Failed to sync conversations from server: $e');
     }
   }
@@ -751,6 +765,16 @@ class LocalChatService {
     }
 
     try {
+      // Determine how many messages we currently have locally.
+      // If we have very few (e.g., after a fresh install), avoid cursor mode
+      // and fetch the first page explicitly to rebuild a baseline.
+      final recentLocal = await ChatDatabase.getLatestMessages(
+        conversationId,
+        limit: 3,
+        offsetFromLatest: 0,
+      );
+      final bool shallowLocal = recentLocal.length < 3;
+
       // Get last sync time for this conversation based on latest local message
       // This prevents the server from re-sending messages we already have locally
       final lastSyncTime = await _getLastMessageSyncTime(conversationId);
@@ -761,10 +785,16 @@ class LocalChatService {
         'page': 1,
       };
 
-      if (lastSyncTime != null) {
+      if (!shallowLocal && lastSyncTime != null) {
+        // Normal incremental sync via cursor when we already have a healthy local baseline
         queryParams.remove('page');
         queryParams['cursor'] = lastSyncTime.toIso8601String();
         queryParams['loadDirection'] = 'after';
+      } else {
+        // Fallback baseline fetch: explicitly request page 1 to repopulate local cache
+        // Useful when local DB is empty or nearly empty and cursor would return 0 items
+        print(
+            '🌐 [_syncMessagesFromServer] Using baseline page fetch (shallowLocal=$shallowLocal, lastSyncTime=${lastSyncTime?.toIso8601String()})');
       }
 
       // Get messages from API

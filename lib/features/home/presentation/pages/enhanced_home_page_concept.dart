@@ -5,6 +5,7 @@ import '../../../../core/utils/global_auth_handler.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/models/notification.dart';
+import '../../../../shared/models/conversation.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/notification_service.dart';
 import '../../../../shared/widgets/global_app_drawer.dart';
@@ -12,11 +13,14 @@ import '../../../../shared/widgets/global_bottom_navigation.dart';
 
 import '../../../notifications/presentation/pages/notifications_page.dart';
 import '../../../chat/presentation/pages/conversations_page.dart';
+import '../../../chat/presentation/pages/local_chat_page.dart';
 import '../../../class_management/presentation/pages/class_management_page.dart';
 import '../../../class_management/presentation/pages/class_details_page.dart';
 import '../../../class_management/presentation/widgets/class_card.dart';
 import '../../../class_management/presentation/widgets/create_class_dialog.dart';
+import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../attendance/presentation/pages/student_attendance_page.dart';
+import '../../../../shared/services/chat_service.dart';
 
 // Import the existing provider to avoid conflicts
 import '../../../class_management/presentation/pages/class_management_page.dart'
@@ -1082,25 +1086,156 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     );
   }
 
-  void _handleNotificationTap(NotificationModel notification) {
+  void _handleNotificationTap(NotificationModel notification) async {
     // Mark notification as read when tapped
     if (!notification.isRead) {
       ref.read(notificationsProvider.notifier).markAsRead(notification.id);
     }
 
-    // Navigate based on notification type
-    switch (notification.type) {
-      case NotificationType.message:
+    // Navigate based on notification type and action data
+    try {
+      switch (notification.type) {
+        case NotificationType.message:
+          await _navigateToConversation(notification);
+          break;
+        case NotificationType.assignment:
+          await _navigateToClassUpdates(notification);
+          break;
+        case NotificationType.announcement:
+          await _navigateToClassUpdates(notification);
+          break;
+        case NotificationType.event:
+        case NotificationType.system:
+          // For other types, just navigate to notifications page
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const NotificationsPage(),
+            ),
+          );
+          break;
+      }
+    } catch (e) {
+      debugPrint('Error handling notification tap: $e');
+      // Fallback: navigate to notifications page
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const NotificationsPage(),
+        ),
+      );
+    }
+  }
+
+  Future<void> _navigateToConversation(NotificationModel notification) async {
+    final actionData = notification.actionData;
+    if (actionData == null) {
+      // Fallback: navigate to conversations tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(1);
+      return;
+    }
+
+    final conversationId = actionData['conversation_id'] as String?;
+    final messageId = actionData['message_id'] as String?;
+
+    if (conversationId == null) {
+      // Fallback: navigate to conversations tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(1);
+      return;
+    }
+
+    try {
+      // Load the specific conversation
+      final conversation = await _loadConversation(conversationId);
+      if (conversation == null) {
+        // Fallback: navigate to conversations tab
         ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(1);
-        break;
-      case NotificationType.assignment:
-        ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(2);
-        break;
-      case NotificationType.announcement:
-      case NotificationType.event:
-      case NotificationType.system:
-        // Stay on current page
-        break;
+        return;
+      }
+
+      // Navigate to chat page with message highlighting support
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => LocalChatPage(
+            conversation: conversation,
+            highlightMessageId: messageId,
+            scrollToMessage: messageId != null,
+          ),
+        ),
+      );
+
+      debugPrint(
+          'Navigating to conversation: $conversationId, message: $messageId');
+    } catch (e) {
+      debugPrint('Error navigating to conversation: $e');
+      // Fallback: navigate to conversations tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(1);
+    }
+  }
+
+  Future<void> _navigateToClassUpdates(NotificationModel notification) async {
+    final actionData = notification.actionData;
+    if (actionData == null) {
+      // Fallback: navigate to classes tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(2);
+      return;
+    }
+
+    final classId = actionData['class_id'] as String?;
+    final updateId = actionData['update_id'] as String?;
+    final className = actionData['class_name'] as String?;
+
+    if (classId == null) {
+      // Fallback: navigate to classes tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(2);
+      return;
+    }
+
+    try {
+      // Navigate to class updates page with update highlighting
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ClassUpdatesPage(
+            classId: classId,
+            className: className ?? 'Class Updates',
+            highlightUpdateId: updateId,
+            scrollToUpdate: updateId != null,
+          ),
+        ),
+      );
+
+      debugPrint('Navigating to class updates: $classId, update: $updateId');
+    } catch (e) {
+      debugPrint('Error navigating to class updates: $e');
+      // Fallback: navigate to classes tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(2);
+    }
+  }
+
+  Future<Conversation?> _loadConversation(String conversationId) async {
+    try {
+      // First check if conversation is already in cache
+      final conversationsState = ref.read(conversationsProvider);
+      final cachedConversation =
+          conversationsState.conversations.cast<Conversation?>().firstWhere(
+                (conv) => conv?.id == conversationId,
+                orElse: () => null,
+              );
+
+      if (cachedConversation != null) {
+        return cachedConversation;
+      }
+
+      // If not in cache, load from service
+      await ref.read(conversationsProvider.notifier).loadConversations();
+
+      // Try to find it again after refresh
+      final updatedState = ref.read(conversationsProvider);
+      return updatedState.conversations.cast<Conversation?>().firstWhere(
+            (conv) => conv?.id == conversationId,
+            orElse: () => null,
+          );
+    } catch (e) {
+      debugPrint('Error loading conversation: $e');
+      return null;
     }
   }
 

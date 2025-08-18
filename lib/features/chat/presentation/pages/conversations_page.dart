@@ -54,10 +54,6 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       return;
     }
 
-    if (!realtimeService.isConnected) {
-      return;
-    }
-
     for (final conversation in conversationsState.conversations) {
       if (Platform.isAndroid) {}
       realtimeService.joinConversation(conversation.id);
@@ -170,6 +166,26 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           next.conversations.isNotEmpty) {
         _joinAllConversationRooms();
       }
+    });
+
+    // Ensure rooms are (re)joined when the socket connects
+    ref.listen(realtimeConnectionProvider, (previous, next) {
+      next.whenData((isConnected) {
+        if (isConnected) {
+          _joinAllConversationRooms();
+        }
+      });
+    });
+
+    // Instantly refresh conversation list when a new message arrives so the
+    // last message preview and timestamp update without manual refresh.
+    ref.listen(realtimeMessagesProvider, (previous, next) {
+      next.whenData((rtMessage) {
+        // Minimal fallback: reload conversations list to reflect last-message update
+        // The centralized dispatcher already attempts an incremental update,
+        // but this ensures UI stays fresh if that path was skipped.
+        ref.read(conversationsProvider.notifier).loadConversations();
+      });
     });
 
     // Listen for real-time conversation events (creation, updates)

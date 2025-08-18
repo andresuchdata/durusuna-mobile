@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_theme.dart';
 import '../../features/home/presentation/pages/enhanced_home_page_concept.dart';
-import '../services/notification_service.dart';
+import '../providers/local_chat_providers.dart';
 
 /// Provider to manage global bottom navigation state
 final globalBottomNavigationProvider =
@@ -38,7 +38,7 @@ class GlobalBottomNavigation extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final globalIndex = ref.watch(globalBottomNavigationProvider);
     final unreadCount =
-        showNotificationBadge ? ref.watch(unreadNotificationsCountProvider) : 0;
+        showNotificationBadge ? ref.watch(unreadMessagesCountProvider) : 0;
     final effectiveIndex = currentIndex ?? globalIndex;
 
     return Container(

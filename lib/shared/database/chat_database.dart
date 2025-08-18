@@ -77,8 +77,31 @@ class ChatDatabase {
                   '🔄 [DATABASE] Migrated message ${message.serverId} to conversation ${message.conversationId}');
               return;
             } else {
+              // Same conversation and same serverId exists — perform a gentle upsert
+              // to ensure watchers are notified and fields are up-to-date
+              final merged = existingByServerId.copyWith(
+                // Keep original createdAt but refresh metadata/status from incoming
+                updatedAt: message.updatedAt ?? existingByServerId.updatedAt,
+                deliveredAt:
+                    message.deliveredAt ?? existingByServerId.deliveredAt,
+                readAt: message.readAt ?? existingByServerId.readAt,
+                readStatus: message.readStatus ?? existingByServerId.readStatus,
+                metadataJson:
+                    message.metadataJson ?? existingByServerId.metadataJson,
+                attachmentUrl:
+                    message.attachmentUrl ?? existingByServerId.attachmentUrl,
+                attachmentType:
+                    message.attachmentType ?? existingByServerId.attachmentType,
+                attachmentSize:
+                    message.attachmentSize ?? existingByServerId.attachmentSize,
+                thumbnailPath:
+                    message.thumbnailPath ?? existingByServerId.thumbnailPath,
+                reactions: message.reactions ?? existingByServerId.reactions,
+                isSynced: true,
+              );
+              await _isar.localMessages.put(merged);
               print(
-                  '🐛 [DATABASE] Skipping duplicate message with serverId: ${message.serverId}');
+                  '🔁 [DATABASE] Upserted existing message ${message.serverId} in same conversation to refresh watchers');
               return;
             }
           }
@@ -120,31 +143,60 @@ class ChatDatabase {
                   .serverIdEqualTo(message.serverId!)
                   .findFirst()
               : null;
-          if (existing != null &&
-              existing.conversationId != message.conversationId) {
-            await _isar.writeTxn(() async {
-              final migrated = existing.copyWith(
-                conversationId: message.conversationId,
-                createdAt: message.createdAt,
-                updatedAt: message.updatedAt ?? existing.updatedAt,
-                deliveredAt: message.deliveredAt ?? existing.deliveredAt,
-                readAt: message.readAt ?? existing.readAt,
-                readStatus: message.readStatus ?? existing.readStatus,
-                metadataJson: message.metadataJson ?? existing.metadataJson,
-                attachmentUrl: message.attachmentUrl ?? existing.attachmentUrl,
-                attachmentType:
-                    message.attachmentType ?? existing.attachmentType,
-                attachmentSize:
-                    message.attachmentSize ?? existing.attachmentSize,
-                thumbnailPath: message.thumbnailPath ?? existing.thumbnailPath,
-                reactions: message.reactions ?? existing.reactions,
-                isSynced: true,
-              );
-              await _isar.localMessages.put(migrated);
-            });
-            print(
-                '🔄 [DATABASE] Migrated message ${message.serverId} to conversation ${message.conversationId}');
-            return;
+          if (existing != null) {
+            if (existing.conversationId != message.conversationId) {
+              // Cross-conversation migration
+              await _isar.writeTxn(() async {
+                final migrated = existing.copyWith(
+                  conversationId: message.conversationId,
+                  createdAt: message.createdAt,
+                  updatedAt: message.updatedAt ?? existing.updatedAt,
+                  deliveredAt: message.deliveredAt ?? existing.deliveredAt,
+                  readAt: message.readAt ?? existing.readAt,
+                  readStatus: message.readStatus ?? existing.readStatus,
+                  metadataJson: message.metadataJson ?? existing.metadataJson,
+                  attachmentUrl:
+                      message.attachmentUrl ?? existing.attachmentUrl,
+                  attachmentType:
+                      message.attachmentType ?? existing.attachmentType,
+                  attachmentSize:
+                      message.attachmentSize ?? existing.attachmentSize,
+                  thumbnailPath:
+                      message.thumbnailPath ?? existing.thumbnailPath,
+                  reactions: message.reactions ?? existing.reactions,
+                  isSynced: true,
+                );
+                await _isar.localMessages.put(migrated);
+              });
+              print(
+                  '🔄 [DATABASE] Migrated message ${message.serverId} to conversation ${message.conversationId}');
+              return;
+            } else {
+              // Same conversation, same serverId - upsert to refresh watchers even in catch block
+              await _isar.writeTxn(() async {
+                final merged = existing.copyWith(
+                  updatedAt: message.updatedAt ?? existing.updatedAt,
+                  deliveredAt: message.deliveredAt ?? existing.deliveredAt,
+                  readAt: message.readAt ?? existing.readAt,
+                  readStatus: message.readStatus ?? existing.readStatus,
+                  metadataJson: message.metadataJson ?? existing.metadataJson,
+                  attachmentUrl:
+                      message.attachmentUrl ?? existing.attachmentUrl,
+                  attachmentType:
+                      message.attachmentType ?? existing.attachmentType,
+                  attachmentSize:
+                      message.attachmentSize ?? existing.attachmentSize,
+                  thumbnailPath:
+                      message.thumbnailPath ?? existing.thumbnailPath,
+                  reactions: message.reactions ?? existing.reactions,
+                  isSynced: true,
+                );
+                await _isar.localMessages.put(merged);
+              });
+              print(
+                  '🔁 [DATABASE] Upserted duplicate in catch block ${message.serverId} to refresh watchers');
+              return;
+            }
           }
         } catch (migrateErr) {
           print(
@@ -476,7 +528,10 @@ class ChatDatabase {
         .offset(offsetFromLatest)
         .limit(limit)
         .findAll();
-    return desc.reversed.toList(growable: false);
+    final result = desc.reversed.toList(growable: false);
+    print(
+        '🔍 [DATABASE] getLatestMessages for "$conversationId": found ${desc.length} desc, returning ${result.length} chronological');
+    return result;
   }
 
   /// Watch messages for a conversation as a stream.

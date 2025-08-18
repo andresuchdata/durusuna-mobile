@@ -14,9 +14,19 @@ class ChatService {
   /// Get conversations list for current user
   Future<List<Conversation>> getConversations() async {
     try {
+      // DEBUG: Log before hitting API
+      // This will appear as: 🌐 [ChatService] GET /conversations
+      // so we can confirm requests are made from UI
+      // ignore: avoid_print
+      print('🌐 [ChatService] GET conversations');
       final response = await _apiService.get(ApiConstants.getConversations);
+      // ignore: avoid_print
+      print(
+          '🌐 [ChatService] GET conversations -> status ${response.statusCode}');
 
       if (response.statusCode == 200) {
+        // ignore: avoid_print
+        print('✅ [ChatService] conversations response 200');
         final data = response.data as Map<String, dynamic>;
         final conversationsList = data['conversations'] as List;
 
@@ -29,8 +39,13 @@ class ChatService {
           }
         }).toList();
 
+        // ignore: avoid_print
+        print('📦 [ChatService] parsed ${conversations.length} conversations');
         return conversations;
       } else {
+        // ignore: avoid_print
+        print(
+            '❌ [ChatService] conversations failed status=${response.statusCode}');
         throw ApiException(
           message: 'Failed to get conversations',
           statusCode: response.statusCode ?? 0,
@@ -38,6 +53,8 @@ class ChatService {
       }
     } catch (e) {
       if (e is ApiException) rethrow;
+      // ignore: avoid_print
+      print('❌ [ChatService] getConversations error: $e');
       throw ApiException(
         message: 'Failed to get conversations: ${e.toString()}',
         statusCode: 0,

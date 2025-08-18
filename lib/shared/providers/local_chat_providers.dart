@@ -171,17 +171,10 @@ class LocalMessagesNotifier
               await _chatService.fetchLatestFromServer(_conversationId,
                   limit: 20);
             } catch (_) {}
-            // Refresh local snapshot immediately
-            if (mounted) {
-              final refreshed = await _chatService.getMessages(
-                _conversationId,
-                limit: _pageSize,
-                offset: 0,
-              );
-              state = AsyncValue.data(refreshed);
-              _currentOffset = refreshed.length;
-              _hasMore = refreshed.length >= _pageSize;
-            }
+            // Note: Don't override state here - let the database stream handle updates
+            // The stream will automatically emit updated data after the sync
+            print(
+                '✅ [PROVIDER] Initial force sync completed, letting stream handle state updates');
           } catch (e, stackTrace) {
             print('⚠️ Initial force sync failed for $_conversationId: $e');
             print('⚠️ Stack trace: $stackTrace');
@@ -189,9 +182,16 @@ class LocalMessagesNotifier
         });
       }
       if (mounted) {
+        print(
+            '🔍 [PROVIDER] Setting state with ${messages.length} messages for "$_conversationId"');
         state = AsyncValue.data(messages);
         _currentOffset = messages.length;
         _hasMore = messages.length >= _pageSize;
+        print(
+            '✅ [PROVIDER] State updated for "$_conversationId" - currentOffset: $_currentOffset, hasMore: $_hasMore');
+      } else {
+        print(
+            '⚠️ [PROVIDER] Not mounted, skipping state update for "$_conversationId"');
       }
     }, onError: (e, st) {
       print('🔍 [PROVIDER] Stream error for "$_conversationId": $e');
@@ -212,18 +212,26 @@ class LocalMessagesNotifier
         offset: offset,
       );
 
+      print(
+          '🔍 [PROVIDER] _loadMessages: got ${messages.length} messages for "$_conversationId" (loadMore: $loadMore, offset: $offset)');
+
       if (mounted) {
         if (loadMore) {
           state.whenData((existingMessages) {
             final combined = [...existingMessages, ...messages];
+            print(
+                '🔍 [PROVIDER] _loadMessages: combined ${existingMessages.length} + ${messages.length} = ${combined.length} messages');
             state = AsyncValue.data(combined);
           });
         } else {
+          print(
+              '🔍 [PROVIDER] _loadMessages: setting state with ${messages.length} messages');
           state = AsyncValue.data(messages);
         }
 
         _currentOffset = offset + messages.length;
         _hasMore = messages.length >= _pageSize;
+        print('✅ [PROVIDER] _loadMessages completed for "$_conversationId"');
       }
     } catch (e, stack) {
       if (mounted) {
@@ -415,7 +423,9 @@ class LocalMessagesNotifier
   Future<void> refresh() async {
     _currentOffset = 0;
     _hasMore = true;
-    await _loadMessages();
+    // Instead of manually loading, restart the stream watcher
+    // to ensure it reflects the latest database state
+    _watchMessages();
   }
 
   void addMessage(LocalMessage message) {
@@ -759,6 +769,21 @@ class LocalChatRealtime {
 
   // _handleRealtimeMessage no longer needed; DB-stream handles updates
 }
+
+/// Provider for total unread messages count across all conversations
+final unreadMessagesCountProvider = Provider<int>((ref) {
+  final conversationsAsync = ref.watch(localConversationsProvider);
+
+  return conversationsAsync.when(
+    data: (conversations) {
+      // Sum up unread counts from all conversations
+      return conversations.fold<int>(
+          0, (total, conversation) => total + conversation.unreadCount);
+    },
+    loading: () => 0,
+    error: (_, __) => 0,
+  );
+});
 
 /// Provider for RealtimeDispatcher (Singleton)
 final realtimeDispatcherProvider = Provider<RealtimeDispatcher>((ref) {
