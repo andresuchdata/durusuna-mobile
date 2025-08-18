@@ -87,11 +87,15 @@ class LocalConversationsNotifier
     state.whenData((conversations) {
       final updated = conversations.map((c) {
         if (c.serverId == conversationId) {
+          final newUnreadCount =
+              message.isFromMe ? c.unreadCount : c.unreadCount + 1;
+          print(
+              '🐛 [LOCAL] updateLastMessage: conversationId=$conversationId, isFromMe=${message.isFromMe}, oldUnread=${c.unreadCount}, newUnread=$newUnreadCount');
           return c.copyWith(
             lastMessage: message.content,
             lastMessageAt: message.createdAt,
             lastActivity: message.createdAt,
-            unreadCount: message.isFromMe ? c.unreadCount : c.unreadCount + 1,
+            unreadCount: newUnreadCount,
           );
         }
         return c;

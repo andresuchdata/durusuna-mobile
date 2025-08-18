@@ -551,6 +551,11 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
       final isViewingThisConversation =
           currentlyViewedConversationId == conversationId;
 
+      print(
+          '🐛 [LEGACY] updateConversationLastMessage: conversationId=$conversationId, currentlyViewed=$currentlyViewedConversationId, isViewing=$isViewingThisConversation');
+      print(
+          '🐛 [LEGACY] isFromOtherUser=$isFromOtherUser, senderId=${message.senderId}, currentUserId=$currentUserId');
+
       // Determine new unread count
       int newUnreadCount;
 
@@ -558,12 +563,17 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
         // If user is viewing this conversation, always set unread count to 0
         // regardless of who sent the message
         newUnreadCount = 0;
+        print(
+            '🐛 [LEGACY] Setting unread to 0 because user is viewing this conversation');
       } else if (isFromOtherUser && message.senderId?.isNotEmpty == true) {
         // Only increment if message is from another user and user is not viewing
         newUnreadCount = conversation.unreadCount + 1;
+        print(
+            '🐛 [LEGACY] Incrementing unread from ${conversation.unreadCount} to $newUnreadCount');
       } else {
         // Keep existing unread count for own messages when not viewing
         newUnreadCount = conversation.unreadCount;
+        print('🐛 [LEGACY] Keeping existing unread count: $newUnreadCount');
       }
 
       final updatedConversations = [...state.conversations];

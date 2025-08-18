@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/chat_database.dart';
 import '../models/local_message.dart';
@@ -398,7 +399,11 @@ class RealtimeDispatcher {
     final currentConversationId = _ref!.read(currentConversationProvider);
     print(
         '🐛 [DEBUG] _updateUIForIncomingMessage: conversationId=$conversationId, currentConversationId=$currentConversationId');
-    if (currentConversationId == conversationId) {
+    // Only auto-mark read if the chat page is actually open for this
+    // conversation AND the app is in foreground. Otherwise keep unread.
+    final appLifecycleState = WidgetsBinding.instance.lifecycleState;
+    final isForeground = appLifecycleState == AppLifecycleState.resumed;
+    if (currentConversationId == conversationId && isForeground) {
       await ChatDatabase.markConversationAsRead(conversationId);
       print('✅ [DEBUG] Conversation marked as read');
     } else {

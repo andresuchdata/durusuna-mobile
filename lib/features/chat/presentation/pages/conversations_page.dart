@@ -31,6 +31,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
 
     // Ensure conversations are loaded and provider is properly initialized
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Defensive: ensure we're NOT considered to be viewing any conversation
+      // while on the conversations list. This prevents accidental auto
+      // mark-as-read on incoming messages.
+      try {
+        ref.read(currentConversationProvider.notifier).state = null;
+      } catch (_) {}
+
       // Force load conversations to ensure provider is active
       ref.read(conversationsProvider.notifier).loadConversations();
 
@@ -177,16 +184,14 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       });
     });
 
-    // Instantly refresh conversation list when a new message arrives so the
-    // last message preview and timestamp update without manual refresh.
-    ref.listen(realtimeMessagesProvider, (previous, next) {
-      next.whenData((rtMessage) {
-        // Minimal fallback: reload conversations list to reflect last-message update
-        // The centralized dispatcher already attempts an incremental update,
-        // but this ensures UI stays fresh if that path was skipped.
-        ref.read(conversationsProvider.notifier).loadConversations();
-      });
-    });
+    // Real-time conversation updates are now handled by the centralized RealtimeDispatcher.
+    // Removed the loadConversations() call that was overriding local unread count increments.
+    // ref.listen(realtimeMessagesProvider, (previous, next) {
+    //   next.whenData((rtMessage) {
+    //     // This was causing auto-mark-as-read by overriding local increments with server data
+    //     ref.read(conversationsProvider.notifier).loadConversations();
+    //   });
+    // });
 
     // Listen for real-time conversation events (creation, updates)
     ref.listen(realtimeConversationProvider, (previous, next) {
