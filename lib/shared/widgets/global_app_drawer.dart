@@ -6,8 +6,9 @@ import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/class_management/presentation/pages/class_management_page.dart';
-import '../../features/home/presentation/pages/home_page.dart';
+import '../../features/home/presentation/pages/enhanced_home_page_concept.dart';
 import '../../features/chat/presentation/pages/conversations_page.dart';
+import '../../features/subjects/presentation/pages/subjects_main_page.dart';
 
 class GlobalAppDrawer extends ConsumerWidget {
   const GlobalAppDrawer({super.key});
@@ -46,6 +47,16 @@ class GlobalAppDrawer extends ConsumerWidget {
                     title: 'Classes',
                     onTap: () => _navigateToClasses(context),
                   ),
+                  if (user.userType == UserType.teacher ||
+                      user.role == UserRole.admin)
+                    _buildDrawerItem(
+                      context,
+                      icon: Icons.book,
+                      title: user.role == UserRole.admin
+                          ? 'All Subjects'
+                          : 'My Subjects',
+                      onTap: () => _navigateToSubjects(context),
+                    ),
                   _buildDrawerItem(
                     context,
                     icon: Icons.assignment,
@@ -251,6 +262,15 @@ class GlobalAppDrawer extends ConsumerWidget {
       const SnackBar(
         content:
             Text('Please select a class from Classes page to view updates'),
+      ),
+    );
+  }
+
+  void _navigateToSubjects(BuildContext context) {
+    Navigator.of(context).pop(); // Close drawer
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const SubjectsMainPage(),
       ),
     );
   }

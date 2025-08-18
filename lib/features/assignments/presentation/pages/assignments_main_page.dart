@@ -215,37 +215,37 @@ class _AssignmentsMainPageState extends ConsumerState<AssignmentsMainPage>
   }
 
   void _showAssignmentAnalytics(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AssignmentAnalyticsPage(),
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Assignment Analytics - Under Development'),
+        backgroundColor: AppTheme.infoColor,
       ),
     );
   }
 
   void _createNewAssignment(BuildContext context, User user) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const CreateAssignmentPage(),
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Create Assignment - Under Development'),
+        backgroundColor: AppTheme.infoColor,
       ),
     );
   }
 
   void _navigateToAssignmentSettings(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AssignmentSettingsPage(),
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Assignment Settings - Under Development'),
+        backgroundColor: AppTheme.infoColor,
       ),
     );
   }
 
   void _navigateToAssignmentTemplates(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AssignmentTemplatesPage(),
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Assignment Templates - Under Development'),
+        backgroundColor: AppTheme.infoColor,
       ),
     );
   }
@@ -264,52 +264,4 @@ enum AssignmentFilterType { all, dueSoon, submitted, graded }
 
 enum UserRoleType { admin, teacher, student }
 
-// Placeholder pages - these will be implemented separately
-class AssignmentAnalyticsPage extends StatelessWidget {
-  const AssignmentAnalyticsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Assignment Analytics')),
-      body: const Center(child: Text('Analytics Page - To be implemented')),
-    );
-  }
-}
-
-class CreateAssignmentPage extends StatelessWidget {
-  const CreateAssignmentPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Create Assignment')),
-      body: const Center(
-          child: Text('Create Assignment Page - To be implemented')),
-    );
-  }
-}
-
-class AssignmentSettingsPage extends StatelessWidget {
-  const AssignmentSettingsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Assignment Settings')),
-      body: const Center(child: Text('Settings Page - To be implemented')),
-    );
-  }
-}
-
-class AssignmentTemplatesPage extends StatelessWidget {
-  const AssignmentTemplatesPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Assignment Templates')),
-      body: const Center(child: Text('Templates Page - To be implemented')),
-    );
-  }
-}
+// Placeholder classes removed - functionality replaced with snackbar notifications

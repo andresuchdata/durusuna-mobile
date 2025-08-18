@@ -6,6 +6,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../assignments/presentation/pages/assignments_main_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
 import '../../../grading/pages/formula_builder_page.dart';
+import '../../../subjects/presentation/pages/subjects_main_page.dart';
 
 class AcademicQuickActions extends ConsumerWidget {
   const AcademicQuickActions({super.key});
@@ -182,6 +183,20 @@ class AcademicQuickActions extends ConsumerWidget {
     final actions = <QuickAction>[];
 
     // Common actions for all users
+    if (user.userType == UserType.teacher || user.role == UserRole.admin) {
+      actions.add(
+        QuickAction(
+          title: user.role == UserRole.admin ? 'All Subjects' : 'My Subjects',
+          subtitle: user.role == UserRole.admin
+              ? 'Manage school subjects'
+              : 'View assigned subjects',
+          icon: Icons.book,
+          color: AppTheme.primaryColor,
+          onTap: () => _navigateToPage(context, const SubjectsMainPage()),
+        ),
+      );
+    }
+
     actions.add(
       QuickAction(
         title: 'Assignments',
@@ -189,7 +204,9 @@ class AcademicQuickActions extends ConsumerWidget {
             ? 'View my assignments'
             : 'Manage assignments',
         icon: Icons.assignment,
-        color: AppTheme.primaryColor,
+        color: user.userType == UserType.student
+            ? AppTheme.primaryColor
+            : AppTheme.successColor,
         badge: user.userType == UserType.student ? '3' : null,
         onTap: () => _navigateToPage(context, const AssignmentsMainPage()),
       ),
@@ -303,19 +320,6 @@ class AcademicQuickActions extends ConsumerWidget {
       user.userType.name[0],
       user.userType.name[0].toUpperCase(),
     );
-  }
-
-  String _getRoleDisplayText(User user) {
-    final role = user.role == UserRole.admin ? 'Admin' : '';
-    final userType = user.userType.name.replaceFirst(
-      user.userType.name[0],
-      user.userType.name[0].toUpperCase(),
-    );
-
-    if (role.isNotEmpty) {
-      return '$userType • $role';
-    }
-    return userType;
   }
 }
 
