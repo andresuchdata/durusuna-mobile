@@ -18,8 +18,10 @@ import '../../../class_management/presentation/pages/class_management_page.dart'
 import '../../../class_management/presentation/pages/class_details_page.dart';
 import '../../../class_management/presentation/widgets/class_card.dart';
 import '../../../class_management/presentation/widgets/create_class_dialog.dart';
+import '../../../../shared/services/assignments_service.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../attendance/presentation/pages/student_attendance_page.dart';
+import '../../../offerings/presentation/pages/teacher_offerings_page.dart';
 import '../../../../shared/services/chat_service.dart';
 
 // Import the existing provider to avoid conflicts
@@ -289,6 +291,11 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
             child: _buildRecentActivitySection(),
           ),
 
+          // Recent Assignments (Teacher)
+          SliverToBoxAdapter(
+            child: _buildRecentAssignmentsSection(),
+          ),
+
           // Quick Actions Section
           SliverToBoxAdapter(
             child: _buildQuickActionsSection(),
@@ -297,6 +304,142 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
       ),
     );
   }
+
+  Widget _buildRecentAssignmentsSection() {
+    final authState = ref.watch(authStateProvider);
+    final user = authState.user;
+    if (user == null || user.userType != UserType.teacher) {
+      return const SizedBox.shrink();
+    }
+
+    final assignmentsFuture = ref.watch(_recentAssignmentsProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Recent Assignments',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          assignmentsFuture.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(16),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+            error: (e, st) => const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Failed to load assignments',
+                style: TextStyle(color: AppTheme.errorColor),
+              ),
+            ),
+            data: (items) {
+              if (items.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'No recent assignments',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
+                );
+              }
+
+              return Column(
+                children:
+                    items.take(5).map((a) => _buildAssignmentRow(a)).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignmentRow(Map<String, dynamic> assignment) {
+    final title = assignment['title'] as String? ?? 'Assignment';
+    final type = assignment['type'] as String? ?? 'assignment';
+    final subjectName = assignment['subject'] != null
+        ? (assignment['subject']['name'] as String? ?? '')
+        : '';
+    final dueDateStr = assignment['due_date'] as String?;
+
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE5E5E5), width: 0.5),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Icon(
+            type == 'test'
+                ? Icons.quiz
+                : type == 'final_exam'
+                    ? Icons.fact_check
+                    : Icons.assignment,
+            color: AppTheme.primaryColor,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    if (subjectName.isNotEmpty)
+                      Text(
+                        subjectName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    if (subjectName.isNotEmpty && dueDateStr != null)
+                      const Text(' • '),
+                    if (dueDateStr != null)
+                      Text(
+                        dueDateStr,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right,
+              size: 18, color: AppTheme.textSecondary),
+        ],
+      ),
+    );
+  }
+
+  static final _recentAssignmentsProvider =
+      FutureProvider<List<Map<String, dynamic>>>((ref) async {
+    final service = ref.read(assignmentsServiceProvider);
+    return await service.getRecentAssignments(limit: 5);
+  });
 
   Widget _buildHeaderBackground(User user) {
     return Container(
@@ -723,13 +866,29 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
       ),
     );
 
-    // If teacher, add class management shortcut
+    // If teacher, add class management shortcuts
     if (currentUser?.userType == UserType.teacher) {
+      quickActions.add(
+        _buildQuickActionCard(
+          title: 'My Offerings',
+          icon: Icons.schedule,
+          color: AppTheme.accentColor,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const TeacherOfferingsPage(),
+              ),
+            );
+          },
+        ),
+      );
+
       quickActions.add(
         _buildQuickActionCard(
           title: 'Manage Classes',
           icon: Icons.class_,
-          color: AppTheme.accentColor,
+          color: AppTheme.primaryColor,
           onTap: () => ref
               .read(globalBottomNavigationProvider.notifier)
               .setCurrentIndex(2), // Assuming class management is at index 2
@@ -981,23 +1140,6 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
       ),
     );
   }
-
-  // This method is no longer needed as we're using GlobalBottomNavigation
-  // Widget _buildBottomNavigation() {
-  //   return BottomNavigationBar(
-  //     type: BottomNavigationBarType.fixed,
-  //     currentIndex: _currentIndex,
-  //     onTap: (index) => setState(() => _currentIndex = index),
-  //     selectedItemColor: AppTheme.primaryColor,
-  //     unselectedItemColor: AppTheme.textSecondary,
-  //     items: const [
-  //       BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Home'),
-  //       BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Messages'),
-  //       BottomNavigationBarItem(icon: Icon(Icons.class_), label: 'Classes'),
-  //       BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-  //     ],
-  //   );
-  // }
 
   Widget _buildNotificationButton() {
     final unreadCount = ref.watch(unreadNotificationsCountProvider);

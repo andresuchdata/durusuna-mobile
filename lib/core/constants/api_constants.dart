@@ -127,6 +127,7 @@ class ApiConstants {
   static const String conversations = '/conversations';
   static const String uploads = '/uploads';
   static const String classUpdates = '/class-updates';
+  static const String assignments = '/assignments';
 
   // Auth endpoints
   static const String login = '$auth/login';
@@ -160,6 +161,11 @@ class ApiConstants {
   static String getClassUpdates(String classId) => '$classes/$classId/updates';
   static String createClassUpdate(String classId) =>
       '$classes/$classId/updates';
+
+  // Assignments endpoints
+  static String get recentAssignments => '$assignments/recent';
+  static String getClassAssignments(String classId) =>
+      '$assignments/classes/$classId/assignments';
 
   // Class update endpoints - for individual class update operations
   static String uploadAttachments = '$classUpdates/upload-attachments';

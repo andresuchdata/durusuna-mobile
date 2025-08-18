@@ -7,6 +7,7 @@ import '../../../assignments/presentation/pages/assignments_main_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
 import '../../../grading/pages/formula_builder_page.dart';
 import '../../../subjects/presentation/pages/subjects_main_page.dart';
+import '../../../offerings/presentation/pages/teacher_offerings_page.dart';
 
 class AcademicQuickActions extends ConsumerWidget {
   const AcademicQuickActions({super.key});
@@ -211,6 +212,19 @@ class AcademicQuickActions extends ConsumerWidget {
         onTap: () => _navigateToPage(context, const AssignmentsMainPage()),
       ),
     );
+
+    // Teacher-specific offerings action
+    if (user.userType == UserType.teacher) {
+      actions.add(
+        QuickAction(
+          title: 'My Offerings',
+          subtitle: 'Teaching schedule & classes',
+          icon: Icons.schedule,
+          color: AppTheme.accentColor,
+          onTap: () => _navigateToPage(context, const TeacherOfferingsPage()),
+        ),
+      );
+    }
 
     // Teacher and Admin specific actions
     if (user.userType == UserType.teacher || user.role == UserRole.admin) {

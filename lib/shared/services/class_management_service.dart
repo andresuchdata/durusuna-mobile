@@ -230,6 +230,35 @@ class ClassManagementService {
     }
   }
 
+  /// Get assignments for a specific class
+  Future<List<Map<String, dynamic>>> getClassAssignments(String classId,
+      {int limit = 10}) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse(
+            '$_baseUrl/assignments/classes/$classId/assignments?limit=$limit'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> assignmentsJson = data['assignments'] ?? [];
+
+        return assignmentsJson.cast<Map<String, dynamic>>();
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied to this class');
+      } else {
+        throw Exception(
+            'Failed to fetch class assignments: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching class assignments: $e');
+    }
+  }
+
   /// Create a new class (teachers only)
   Future<ClassModel> createClass({
     required String name,

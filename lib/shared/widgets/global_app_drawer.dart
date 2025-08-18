@@ -9,6 +9,7 @@ import '../../features/class_management/presentation/pages/class_management_page
 import '../../features/home/presentation/pages/enhanced_home_page_concept.dart';
 import '../../features/chat/presentation/pages/conversations_page.dart';
 import '../../features/subjects/presentation/pages/subjects_main_page.dart';
+import '../../features/offerings/presentation/pages/teacher_offerings_page.dart';
 
 class GlobalAppDrawer extends ConsumerWidget {
   const GlobalAppDrawer({super.key});
@@ -56,6 +57,13 @@ class GlobalAppDrawer extends ConsumerWidget {
                           ? 'All Subjects'
                           : 'My Subjects',
                       onTap: () => _navigateToSubjects(context),
+                    ),
+                  if (user.userType == UserType.teacher)
+                    _buildDrawerItem(
+                      context,
+                      icon: Icons.schedule,
+                      title: 'My Offerings',
+                      onTap: () => _navigateToOfferings(context),
                     ),
                   _buildDrawerItem(
                     context,
@@ -271,6 +279,15 @@ class GlobalAppDrawer extends ConsumerWidget {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => const SubjectsMainPage(),
+      ),
+    );
+  }
+
+  void _navigateToOfferings(BuildContext context) {
+    Navigator.of(context).pop(); // Close drawer
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const TeacherOfferingsPage(),
       ),
     );
   }

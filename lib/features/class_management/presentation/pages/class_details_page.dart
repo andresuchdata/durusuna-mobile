@@ -103,31 +103,8 @@ final classTeachersProvider =
 final classAssignmentsProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>(
         (ref, classId) async {
-  // Mock assignments data - replace with actual API call
-  await Future.delayed(const Duration(milliseconds: 300));
-  return [
-    {
-      'id': '1',
-      'title': 'Math Homework Chapter 5',
-      'subject': 'Mathematics',
-      'dueDate': DateTime.now().add(const Duration(days: 2)),
-      'isSubmitted': false,
-    },
-    {
-      'id': '2',
-      'title': 'Science Lab Report',
-      'subject': 'Science',
-      'dueDate': DateTime.now().add(const Duration(days: 5)),
-      'isSubmitted': true,
-    },
-    {
-      'id': '3',
-      'title': 'English Essay',
-      'subject': 'English',
-      'dueDate': DateTime.now().add(const Duration(days: 7)),
-      'isSubmitted': false,
-    },
-  ];
+  final service = ref.read(classManagementServiceProvider);
+  return await service.getClassAssignments(classId, limit: 3);
 });
 
 class ClassDetailsPage extends ConsumerStatefulWidget {
@@ -1002,9 +979,18 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
   }
 
   Widget _buildAssignmentTile(Map<String, dynamic> assignment) {
-    final dueDate = assignment['dueDate'] as DateTime;
-    final isSubmitted = assignment['isSubmitted'] as bool;
-    final isOverdue = dueDate.isBefore(DateTime.now()) && !isSubmitted;
+    // Parse due date from API response
+    DateTime? dueDate;
+    try {
+      if (assignment['due_date'] != null) {
+        dueDate = DateTime.parse(assignment['due_date']);
+      }
+    } catch (e) {
+      // Handle parsing error gracefully
+    }
+
+    final isPublished = assignment['is_published'] as bool? ?? false;
+    final isOverdue = dueDate != null && dueDate.isBefore(DateTime.now());
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1024,8 +1010,8 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
             height: 8,
             margin: const EdgeInsets.only(top: 6),
             decoration: BoxDecoration(
-              color: isSubmitted
-                  ? AppTheme.successColor
+              color: !isPublished
+                  ? AppTheme.textSecondary
                   : isOverdue
                       ? AppTheme.errorColor
                       : AppTheme.warningColor,
@@ -1051,24 +1037,26 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 Row(
                   children: [
                     Text(
-                      assignment['subject'] ?? '',
+                      assignment['type'] ?? 'assignment',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textSecondary,
                       ),
                     ),
-                    const Text(' • '),
-                    Text(
-                      app_date_utils.DateUtils.formatDueDate(dueDate),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isOverdue
-                            ? AppTheme.errorColor
-                            : AppTheme.textSecondary,
-                        fontWeight:
-                            isOverdue ? FontWeight.w500 : FontWeight.normal,
+                    if (dueDate != null) ...[
+                      const Text(' • '),
+                      Text(
+                        app_date_utils.DateUtils.formatDueDate(dueDate),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isOverdue
+                              ? AppTheme.errorColor
+                              : AppTheme.textSecondary,
+                          fontWeight:
+                              isOverdue ? FontWeight.w500 : FontWeight.normal,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -1076,27 +1064,27 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isSubmitted
-                        ? AppTheme.successColor.withValues(alpha: 0.1)
+                    color: !isPublished
+                        ? AppTheme.textSecondary.withValues(alpha: 0.1)
                         : isOverdue
                             ? AppTheme.errorColor.withValues(alpha: 0.1)
-                            : AppTheme.warningColor.withValues(alpha: 0.1),
+                            : AppTheme.successColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    isSubmitted
-                        ? 'Submitted'
+                    !isPublished
+                        ? 'Draft'
                         : isOverdue
                             ? 'Overdue'
-                            : 'Pending',
+                            : 'Active',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
-                      color: isSubmitted
-                          ? AppTheme.successColor
+                      color: !isPublished
+                          ? AppTheme.textSecondary
                           : isOverdue
                               ? AppTheme.errorColor
-                              : AppTheme.warningColor,
+                              : AppTheme.successColor,
                     ),
                   ),
                 ),
