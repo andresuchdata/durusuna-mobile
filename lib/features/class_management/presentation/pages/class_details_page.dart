@@ -13,17 +13,54 @@ import '../../../../shared/widgets/global_app_drawer.dart';
 import '../../../../shared/widgets/global_bottom_navigation.dart';
 import '../../../../core/utils/date_utils.dart' as app_date_utils;
 
-import 'subject_details_page.dart';
 import 'student_list_page.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../attendance/presentation/pages/attendance_management_page.dart';
+import '../../../subjects/presentation/pages/subjects_main_page.dart';
 
 // Providers for class details data
 final classSubjectsProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, String>(
-        (ref, classId) async {
-  final service = ref.read(classManagementServiceProvider);
-  return await service.getClassSubjects(classId);
+    FutureProvider.family<List<MockSubject>, String>((ref, classId) async {
+  // Mock data similar to subjects main page but filtered for this class
+  await Future.delayed(const Duration(milliseconds: 300));
+  return [
+    MockSubject(
+      id: '1',
+      name: 'Mathematics',
+      code: 'MATH101',
+      grade: 'Grade 10',
+      studentCount: 32,
+      assignmentsCount: 8,
+      pendingGrades: 5,
+      teacher: 'Ahmad Rahman',
+      color: Colors.blue,
+      schedule: 'Mon, Wed, Fri - 08:00',
+    ),
+    MockSubject(
+      id: '2',
+      name: 'English Literature',
+      code: 'ENG201',
+      grade: 'Grade 11',
+      studentCount: 28,
+      assignmentsCount: 12,
+      pendingGrades: 3,
+      teacher: 'Sarah Johnson',
+      color: Colors.green,
+      schedule: 'Tue, Thu - 10:00',
+    ),
+    MockSubject(
+      id: '3',
+      name: 'Islamic Studies',
+      code: 'ISL101',
+      grade: 'Grade 10',
+      studentCount: 30,
+      assignmentsCount: 6,
+      pendingGrades: 2,
+      teacher: 'Ustadz Mahmoud',
+      color: Colors.teal,
+      schedule: 'Daily - 07:30',
+    ),
+  ];
 });
 
 final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
@@ -150,7 +187,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
 
             return CustomScrollView(
               slivers: [
-                _buildSliverAppBar(subjects),
+                _buildSliverAppBar(),
                 SliverToBoxAdapter(
                   child: _buildClassStatistics(),
                 ),
@@ -193,7 +230,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
-  Widget _buildSliverAppBar(List<Map<String, dynamic>> subjects) {
+  Widget _buildSliverAppBar() {
     final teacher = widget.classModel.teachers?.isNotEmpty == true
         ? widget.classModel.teachers!.first
         : null;
@@ -798,7 +835,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
-  Widget _buildSubjectsPreview(List<Map<String, dynamic>> subjects) {
+  Widget _buildSubjectsPreview(List<MockSubject> subjects) {
     final limitedSubjects = subjects.take(3).toList();
     final hasMore = subjects.length > 3;
 
@@ -1071,63 +1108,86 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
-  Widget _buildSubjectCard(Map<String, dynamic> subject) {
-    final lessons = subject['lessons'] as List<dynamic>? ?? [];
-    final teacher = subject['teacher'] as Map<String, dynamic>? ?? {};
-
+  Widget _buildSubjectCard(MockSubject subject) {
     return Material(
       color: Colors.white,
       child: InkWell(
         onTap: () => _navigateToSubjectDetails(subject),
         child: Container(
-          width: double.infinity, // Full width
+          width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(
+              bottom: const BorderSide(
                 color: Color(0xFFE5E5E5),
                 width: 0.5,
+              ),
+              left: BorderSide(
+                color: subject.color,
+                width: 4,
               ),
             ),
           ),
           child: Row(
             children: [
-              // Subject icon - clean and minimal
+              // Subject icon with color
               Container(
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                  color: subject.color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  _getSubjectIcon(subject['subject_name']),
-                  color: AppTheme.primaryColor,
+                  _getSubjectIcon(subject.name),
+                  color: subject.color,
                   size: 26,
                 ),
               ),
               const SizedBox(width: 16),
 
-              // Subject content - expanded to take available space
+              // Subject content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Subject name - clean typography
-                    Text(
-                      subject['subject_name'] ?? 'Subject',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: -0.2,
-                      ),
+                    // Subject name and code
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            subject.name,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: subject.color.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            subject.code,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: subject.color,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
 
-                    // Stats row - hours and lessons
+                    // Stats row
                     Text(
-                      '${subject['hours_per_week'] ?? 0} hours/week • ${lessons.length} lessons',
+                      '${subject.studentCount} students • ${subject.assignmentsCount} assignments',
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppTheme.textSecondary,
@@ -1136,15 +1196,39 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                     ),
                     const SizedBox(height: 4),
 
-                    // Teacher name - minimal design
-                    Text(
-                      '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'
-                          .trim(),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textSecondary.withValues(alpha: 0.8),
-                        fontWeight: FontWeight.w400,
-                      ),
+                    // Teacher and schedule
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            subject.teacher,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color:
+                                  AppTheme.textSecondary.withValues(alpha: 0.8),
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                        if (subject.pendingGrades > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppTheme.warningColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${subject.pendingGrades} pending',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: AppTheme.warningColor,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
@@ -1488,16 +1572,12 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     }
   }
 
-  void _navigateToSubjectDetails(Map<String, dynamic> subject) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SubjectDetailsPage(
-          subject: subject,
-          classModel: widget.classModel,
-          bottomNavigationBar: widget.bottomNavigationBar,
-          showBackButton: widget.showBackButton,
-        ),
+  void _navigateToSubjectDetails(MockSubject subject) {
+    // For now, show a snackbar since SubjectDetailsPage may need updating
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Subject Details: ${subject.name} - Under Development'),
+        backgroundColor: AppTheme.infoColor,
       ),
     );
   }
