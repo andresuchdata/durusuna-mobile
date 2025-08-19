@@ -196,8 +196,8 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
         ),
       ),
       actions: [
-        // Attendance management button for teachers
-        if (currentUser?.userType == UserType.teacher)
+        // Attendance management button for homeroom teachers only
+        if (_isCurrentUserHomeroomTeacher(currentUser))
           IconButton(
             icon: const Icon(Icons.fact_check, color: Colors.white),
             tooltip: 'Manage Attendance',
@@ -1235,8 +1235,8 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     final authState = ref.watch(authStateProvider);
     final currentUser = authState.user;
 
-    // Only show quick actions for teachers
-    if (currentUser?.userType != UserType.teacher) {
+    // Only show quick actions for homeroom teachers
+    if (!_isCurrentUserHomeroomTeacher(currentUser)) {
       return const SizedBox.shrink();
     }
 
@@ -1643,6 +1643,28 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
             SubjectOfferingDetailsPage(offering: subjectOffering),
       ),
     );
+  }
+
+  /// Check if current user is the homeroom teacher of this class
+  bool _isCurrentUserHomeroomTeacher(User? currentUser) {
+    if (currentUser?.userType != UserType.teacher) return false;
+
+    // Check class settings for homeroom teacher info
+    final settings = widget.classModel.settings;
+    if (settings != null) {
+      final homeroomTeacherId = settings['homeroom_teacher_id'] as String?;
+      if (homeroomTeacherId != null && homeroomTeacherId == currentUser?.id) {
+        return true;
+      }
+    }
+
+    // Fallback: check if user is in teachers list (for backward compatibility)
+    final classTeachers = widget.classModel.teachers;
+    if (classTeachers != null && currentUser != null) {
+      return classTeachers.any((teacher) => teacher.id == currentUser.id);
+    }
+
+    return false;
   }
 
   // Removed _buildDefaultBottomNavigation method - now using GlobalBottomNavigation

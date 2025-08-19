@@ -380,6 +380,8 @@ class _AttendanceManagementPageState
   void _onAttendanceChanged(
       StudentWithAttendance student, AttendanceStatus status) async {
     try {
+      debugPrint('Marking attendance for ${student.displayName} as $status');
+
       final service = ref.read(attendanceServiceProvider);
       final request = CreateAttendanceRequest(
         studentId: student.userId,
@@ -397,6 +399,8 @@ class _AttendanceManagementPageState
         _selectedDate,
         request,
       );
+
+      debugPrint('Attendance marked successfully, refreshing data...');
 
       // Refresh the attendance session
       ref.invalidate(attendanceSessionProvider);
