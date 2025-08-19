@@ -30,7 +30,11 @@ class StudentAttendanceTile extends StatelessWidget {
 
     // Debug print to check attendance data
     debugPrint(
-        '${studentWithAttendance.displayName}: hasAttendance=$hasAttendance, attendance=$attendance');
+        '🎯 ${studentWithAttendance.displayName}: hasAttendance=$hasAttendance, attendance=$attendance');
+    if (attendance != null) {
+      debugPrint('  -> Attendance status: ${attendance.status}');
+      debugPrint('  -> Should show background color: ${_getAttendanceColor()}');
+    }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -490,16 +494,11 @@ class StudentAttendanceTile extends StatelessWidget {
 
   Color _getBackgroundColor(bool hasAttendance) {
     if (isSelected) {
-      return AppTheme.primaryColor.withValues(alpha: 0.1);
-    }
-
-    // Debug highlighting for development
-    if (_showDebugIndicator()) {
-      return Colors.orange.withValues(alpha: 0.2);
+      return AppTheme.primaryColor.withValues(alpha: 0.15);
     }
 
     if (hasAttendance) {
-      return _getAttendanceColor().withValues(alpha: 0.25);
+      return _getAttendanceColor().withValues(alpha: 0.20);
     }
 
     return Colors.white;
@@ -512,7 +511,7 @@ class StudentAttendanceTile extends StatelessWidget {
 
     if (hasAttendance) {
       return Border.all(
-          color: _getAttendanceColor().withValues(alpha: 0.6), width: 2);
+          color: _getAttendanceColor().withValues(alpha: 0.8), width: 1.5);
     }
 
     return Border.all(color: Colors.grey[200]!, width: 1);
@@ -557,23 +556,7 @@ class StudentAttendanceTile extends StatelessWidget {
   /// Show debug indicator for development purposes
   /// Can be customized based on specific student ID, name, or other criteria
   bool _showDebugIndicator() {
-    // In development, you can customize this condition:
-    // - Check for specific student IDs
-    // - Check for test data patterns
-    // - Use environment variables
-    // - Check for specific names for testing
-
-    // Example: Show for students with specific pattern in name or ID
-    const debugStudentIds = ['student1@asdf.com', 'student2@asdf.com'];
-    if (debugStudentIds.contains(studentWithAttendance.email)) {
-      return true;
-    }
-
-    // Example: Show for test students (adjust as needed)
-    if (studentWithAttendance.displayName.toLowerCase().contains('test')) {
-      return true;
-    }
-
-    return false; // Set to true to show for all students during debugging
+    // Debug indicators disabled - highlighting should be based on attendance status
+    return false;
   }
 }

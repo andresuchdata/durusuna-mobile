@@ -18,23 +18,7 @@ class SubjectsMainPage extends ConsumerStatefulWidget {
   ConsumerState<SubjectsMainPage> createState() => _SubjectsMainPageState();
 }
 
-class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
-    with TickerProviderStateMixin {
-  late TabController _tabController;
-  // int _selectedIndex = 0; // Future use for navigation
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
+class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
@@ -48,12 +32,23 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
 
     final isTeacher = user.userType == UserType.teacher;
     final isAdmin = user.role == UserRole.admin;
+    final isStudent = user.userType == UserType.student;
+    final isParent = user.userType == UserType.parent;
+
+    String appBarTitle;
+    if (isAdmin) {
+      appBarTitle = 'All Subject Offerings';
+    } else if (isTeacher || isStudent || isParent) {
+      appBarTitle = 'My Subjects';
+    } else {
+      appBarTitle = 'Subjects';
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: Text(
-          isAdmin ? 'All Subjects' : 'My Subjects',
+          appBarTitle,
           style: const TextStyle(
             fontWeight: FontWeight.w600,
             color: Colors.white,
@@ -102,33 +97,15 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
             ],
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: [
-            Tab(text: isAdmin ? 'All Subjects' : 'Teaching'),
-            Tab(text: isAdmin ? 'By Grade' : 'Collaborating'),
-            const Tab(text: 'Archive'),
-          ],
-        ),
       ),
       body: Column(
         children: [
           // Stats Cards Section
           if (isTeacher || isAdmin) _buildStatsSection(user),
 
-          // Tab Content
+          // Subject Offerings List
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildSubjectsList(SubjectFilterType.active, user),
-                _buildSubjectsList(SubjectFilterType.grade, user),
-                _buildSubjectsList(SubjectFilterType.archived, user),
-              ],
-            ),
+            child: _buildRoleBasedSubjectsList(user),
           ),
         ],
       ),
@@ -248,10 +225,10 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
     );
   }
 
-  Widget _buildSubjectsList(SubjectFilterType filterType, User user) {
+  Widget _buildRoleBasedSubjectsList(User user) {
     return Consumer(
       builder: (context, ref, child) {
-        final subjectsAsync = ref.watch(userSubjectsProvider);
+        final subjectsAsync = ref.watch(roleBasedSubjectOfferingsProvider);
 
         return subjectsAsync.when(
           loading: () => const Center(
@@ -280,7 +257,8 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => ref.refresh(userSubjectsProvider),
+                    onPressed: () =>
+                        ref.refresh(roleBasedSubjectOfferingsProvider),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -288,18 +266,15 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
             ),
           ),
           data: (allSubjects) {
-            final filteredSubjects =
-                _filterSubjects(allSubjects, filterType, user);
-
-            if (filteredSubjects.isEmpty) {
-              return _buildEmptyState(filterType, user);
+            if (allSubjects.isEmpty) {
+              return _buildEmptyState(user);
             }
 
             return ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: filteredSubjects.length,
+              itemCount: allSubjects.length,
               itemBuilder: (context, index) {
-                final subjectOffering = filteredSubjects[index];
+                final subjectOffering = allSubjects[index];
                 // Convert SubjectOffering to MockSubject for compatibility
                 final mockSubject = _convertToMockSubject(subjectOffering);
                 return Padding(
@@ -319,19 +294,6 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
         );
       },
     );
-  }
-
-  List<SubjectOffering> _filterSubjects(
-      List<SubjectOffering> subjects, SubjectFilterType filterType, User user) {
-    switch (filterType) {
-      case SubjectFilterType.active:
-        return subjects; // All subjects are considered active
-      case SubjectFilterType.grade:
-        // Group by grade level or show collaborative subjects
-        return subjects.where((s) => s.gradeLevel.isNotEmpty).toList();
-      case SubjectFilterType.archived:
-        return []; // No archived subjects for now
-    }
   }
 
   MockSubject _convertToMockSubject(SubjectOffering offering) {
@@ -357,33 +319,31 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
     return 'See schedule'; // Placeholder
   }
 
-  Widget _buildEmptyState(SubjectFilterType filterType, User user) {
+  Widget _buildEmptyState(User user) {
     String message;
     String actionText;
     IconData icon;
 
-    switch (filterType) {
-      case SubjectFilterType.active:
-        if (user.role == UserRole.admin) {
-          message = 'No subjects found';
-          actionText = 'Create Subject';
-          icon = Icons.book;
-        } else {
-          message = 'No subjects assigned yet';
-          actionText = 'Contact Admin';
-          icon = Icons.school;
-        }
-        break;
-      case SubjectFilterType.grade:
-        message = 'No collaborative subjects';
-        actionText = 'Browse Available';
-        icon = Icons.group;
-        break;
-      case SubjectFilterType.archived:
-        message = 'No archived subjects';
-        actionText = 'View Active';
-        icon = Icons.archive;
-        break;
+    if (user.role == UserRole.admin) {
+      message = 'No subject offerings found';
+      actionText = 'Create Subject Offering';
+      icon = Icons.book;
+    } else if (user.userType == UserType.teacher) {
+      message = 'No subjects assigned yet';
+      actionText = 'Contact Admin';
+      icon = Icons.school;
+    } else if (user.userType == UserType.student) {
+      message = 'No subjects enrolled';
+      actionText = 'Contact Admin';
+      icon = Icons.school;
+    } else if (user.userType == UserType.parent) {
+      message = 'No subjects found for your children';
+      actionText = 'Contact School';
+      icon = Icons.family_restroom;
+    } else {
+      message = 'No subjects found';
+      actionText = 'Refresh';
+      icon = Icons.book;
     }
 
     return Center(
@@ -398,7 +358,7 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
           ),
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: () => _handleEmptyStateAction(filterType, user),
+            onPressed: () => _handleEmptyStateAction(user),
             child: Text(actionText),
           ),
         ],
@@ -453,24 +413,14 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
     );
   }
 
-  void _handleEmptyStateAction(SubjectFilterType filterType, User user) {
-    switch (filterType) {
-      case SubjectFilterType.active:
-        if (user.role == UserRole.admin) {
-          _createNewSubject(context);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Contact administrator for subject assignment')),
-          );
-        }
-        break;
-      case SubjectFilterType.grade:
-        _tabController.animateTo(0);
-        break;
-      case SubjectFilterType.archived:
-        _tabController.animateTo(0);
-        break;
+  void _handleEmptyStateAction(User user) {
+    if (user.role == UserRole.admin) {
+      _createNewSubject(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Contact administrator for subject assignment')),
+      );
     }
   }
 
@@ -502,8 +452,7 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
   }
 }
 
-// Enums and Models
-enum SubjectFilterType { active, grade, archived }
+// Models
 
 class MockSubject {
   final String id;

@@ -97,9 +97,278 @@ class SubjectsService {
         }
       }
 
-      return allOfferings;
+      return _sortSubjectOfferings(allOfferings);
     } catch (e) {
       throw Exception('Error fetching user subjects: $e');
+    }
+  }
+
+  /// Get all subject offerings for admin users
+  Future<List<SubjectOffering>> getAllSubjectOfferingsForAdmin() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/class-offerings/all'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> offeringsJson = data['offerings'] ?? [];
+
+        List<SubjectOffering> allOfferings = [];
+
+        for (final offering in offeringsJson) {
+          try {
+            // Get assignments for this offering
+            final assignments = await _getOfferingAssignments(
+                offering['class_id'] ?? '', offering['subject_id'] ?? '');
+
+            final subjectOffering = SubjectOffering(
+              id: offering['id'] ?? '',
+              subjectId: offering['subject_id'] ?? '',
+              subjectName: offering['subject_name'] ?? 'Unknown Subject',
+              subjectCode: offering['subject_code'] ?? '',
+              subjectDescription: offering['subject_description'] ?? '',
+              classId: offering['class_id'] ?? '',
+              className: offering['class_name'] ?? '',
+              gradeLevel: offering['grade_level'] ?? '',
+              hoursPerWeek: offering['hours_per_week'] ?? 0,
+              room: offering['room'] ?? '',
+              schedule: offering['schedule'] ?? {},
+              teacherId: offering['primary_teacher_id'],
+              teacherName: _getTeacherNameFromOffering(offering),
+              teacherEmail: offering['teacher_email'],
+              teacherAvatarUrl: offering['teacher_avatar_url'],
+              assignments: assignments,
+              studentCount: offering['enrollment_count'] ?? 0,
+              assignmentsCount: assignments.length,
+              pendingGrades: _countPendingGrades(assignments),
+              color: _getSubjectColor(offering['subject_name'] ?? ''),
+            );
+
+            allOfferings.add(subjectOffering);
+          } catch (e) {
+            debugPrint('Error processing offering ${offering['id']}: $e');
+            // Continue with offering but without assignments
+            final subjectOffering = SubjectOffering(
+              id: offering['id'] ?? '',
+              subjectId: offering['subject_id'] ?? '',
+              subjectName: offering['subject_name'] ?? 'Unknown Subject',
+              subjectCode: offering['subject_code'] ?? '',
+              subjectDescription: offering['subject_description'] ?? '',
+              classId: offering['class_id'] ?? '',
+              className: offering['class_name'] ?? '',
+              gradeLevel: offering['grade_level'] ?? '',
+              hoursPerWeek: offering['hours_per_week'] ?? 0,
+              room: offering['room'] ?? '',
+              schedule: offering['schedule'] ?? {},
+              teacherId: offering['primary_teacher_id'],
+              teacherName: _getTeacherNameFromOffering(offering),
+              teacherEmail: offering['teacher_email'],
+              teacherAvatarUrl: offering['teacher_avatar_url'],
+              assignments: [],
+              studentCount: offering['enrollment_count'] ?? 0,
+              assignmentsCount: 0,
+              pendingGrades: 0,
+              color: _getSubjectColor(offering['subject_name'] ?? ''),
+            );
+
+            allOfferings.add(subjectOffering);
+          }
+        }
+
+        return _sortSubjectOfferings(allOfferings);
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied');
+      } else {
+        throw Exception(
+            'Failed to fetch subject offerings: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching all subject offerings: $e');
+    }
+  }
+
+  /// Get subject offerings for student users (based on their enrollments)
+  Future<List<SubjectOffering>> getStudentSubjectOfferings() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/enrollments/my-offerings'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> offeringsJson = data['offerings'] ?? [];
+
+        List<SubjectOffering> allOfferings = [];
+
+        for (final offering in offeringsJson) {
+          try {
+            // Get assignments for this offering
+            final assignments = await _getOfferingAssignments(
+                offering['class_id'] ?? '', offering['subject_id'] ?? '');
+
+            final subjectOffering = SubjectOffering(
+              id: offering['class_offering_id'] ?? offering['id'] ?? '',
+              subjectId: offering['subject_id'] ?? '',
+              subjectName: offering['subject_name'] ?? 'Unknown Subject',
+              subjectCode: offering['subject_code'] ?? '',
+              subjectDescription: offering['subject_description'] ?? '',
+              classId: offering['class_id'] ?? '',
+              className: offering['class_name'] ?? '',
+              gradeLevel: offering['grade_level'] ?? '',
+              hoursPerWeek: offering['hours_per_week'] ?? 0,
+              room: offering['room'] ?? '',
+              schedule: offering['schedule'] ?? {},
+              teacherId: offering['primary_teacher_id'],
+              teacherName: _getTeacherNameFromOffering(offering),
+              teacherEmail: offering['teacher_email'],
+              teacherAvatarUrl: offering['teacher_avatar_url'],
+              assignments: assignments,
+              studentCount: offering['enrollment_count'] ?? 0,
+              assignmentsCount: assignments.length,
+              pendingGrades: _countPendingGrades(assignments),
+              color: _getSubjectColor(offering['subject_name'] ?? ''),
+            );
+
+            allOfferings.add(subjectOffering);
+          } catch (e) {
+            debugPrint(
+                'Error processing student offering ${offering['id']}: $e');
+            // Continue with offering but without assignments
+            final subjectOffering = SubjectOffering(
+              id: offering['class_offering_id'] ?? offering['id'] ?? '',
+              subjectId: offering['subject_id'] ?? '',
+              subjectName: offering['subject_name'] ?? 'Unknown Subject',
+              subjectCode: offering['subject_code'] ?? '',
+              subjectDescription: offering['subject_description'] ?? '',
+              classId: offering['class_id'] ?? '',
+              className: offering['class_name'] ?? '',
+              gradeLevel: offering['grade_level'] ?? '',
+              hoursPerWeek: offering['hours_per_week'] ?? 0,
+              room: offering['room'] ?? '',
+              schedule: offering['schedule'] ?? {},
+              teacherId: offering['primary_teacher_id'],
+              teacherName: _getTeacherNameFromOffering(offering),
+              teacherEmail: offering['teacher_email'],
+              teacherAvatarUrl: offering['teacher_avatar_url'],
+              assignments: [],
+              studentCount: offering['enrollment_count'] ?? 0,
+              assignmentsCount: 0,
+              pendingGrades: 0,
+              color: _getSubjectColor(offering['subject_name'] ?? ''),
+            );
+
+            allOfferings.add(subjectOffering);
+          }
+        }
+
+        return _sortSubjectOfferings(allOfferings);
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied');
+      } else {
+        throw Exception(
+            'Failed to fetch student subject offerings: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching student subject offerings: $e');
+    }
+  }
+
+  /// Get subject offerings for parent users (based on their children's enrollments)
+  Future<List<SubjectOffering>> getParentSubjectOfferings() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/enrollments/children-offerings'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> offeringsJson = data['offerings'] ?? [];
+
+        List<SubjectOffering> allOfferings = [];
+
+        for (final offering in offeringsJson) {
+          try {
+            // Get assignments for this offering
+            final assignments = await _getOfferingAssignments(
+                offering['class_id'] ?? '', offering['subject_id'] ?? '');
+
+            final subjectOffering = SubjectOffering(
+              id: offering['class_offering_id'] ?? offering['id'] ?? '',
+              subjectId: offering['subject_id'] ?? '',
+              subjectName: offering['subject_name'] ?? 'Unknown Subject',
+              subjectCode: offering['subject_code'] ?? '',
+              subjectDescription: offering['subject_description'] ?? '',
+              classId: offering['class_id'] ?? '',
+              className: offering['class_name'] ?? '',
+              gradeLevel: offering['grade_level'] ?? '',
+              hoursPerWeek: offering['hours_per_week'] ?? 0,
+              room: offering['room'] ?? '',
+              schedule: offering['schedule'] ?? {},
+              teacherId: offering['primary_teacher_id'],
+              teacherName: _getTeacherNameFromOffering(offering),
+              teacherEmail: offering['teacher_email'],
+              teacherAvatarUrl: offering['teacher_avatar_url'],
+              assignments: assignments,
+              studentCount: offering['enrollment_count'] ?? 0,
+              assignmentsCount: assignments.length,
+              pendingGrades: _countPendingGrades(assignments),
+              color: _getSubjectColor(offering['subject_name'] ?? ''),
+            );
+
+            allOfferings.add(subjectOffering);
+          } catch (e) {
+            debugPrint(
+                'Error processing parent offering ${offering['id']}: $e');
+            // Continue with offering but without assignments
+            final subjectOffering = SubjectOffering(
+              id: offering['class_offering_id'] ?? offering['id'] ?? '',
+              subjectId: offering['subject_id'] ?? '',
+              subjectName: offering['subject_name'] ?? 'Unknown Subject',
+              subjectCode: offering['subject_code'] ?? '',
+              subjectDescription: offering['subject_description'] ?? '',
+              classId: offering['class_id'] ?? '',
+              className: offering['class_name'] ?? '',
+              gradeLevel: offering['grade_level'] ?? '',
+              hoursPerWeek: offering['hours_per_week'] ?? 0,
+              room: offering['room'] ?? '',
+              schedule: offering['schedule'] ?? {},
+              teacherId: offering['primary_teacher_id'],
+              teacherName: _getTeacherNameFromOffering(offering),
+              teacherEmail: offering['teacher_email'],
+              teacherAvatarUrl: offering['teacher_avatar_url'],
+              assignments: [],
+              studentCount: offering['enrollment_count'] ?? 0,
+              assignmentsCount: 0,
+              pendingGrades: 0,
+              color: _getSubjectColor(offering['subject_name'] ?? ''),
+            );
+
+            allOfferings.add(subjectOffering);
+          }
+        }
+
+        return _sortSubjectOfferings(allOfferings);
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied');
+      } else {
+        throw Exception(
+            'Failed to fetch parent subject offerings: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching parent subject offerings: $e');
     }
   }
 
@@ -197,6 +466,42 @@ class SubjectsService {
 
     // Default color
     return {'primary': 0xFF757575, 'secondary': 0xFFF5F5F5};
+  }
+
+  /// Helper method to get teacher name from offering data
+  String _getTeacherNameFromOffering(Map<String, dynamic> offering) {
+    final firstName =
+        offering['teacher_first_name'] ?? offering['first_name'] ?? '';
+    final lastName =
+        offering['teacher_last_name'] ?? offering['last_name'] ?? '';
+    if (firstName.isNotEmpty && lastName.isNotEmpty) {
+      return '$firstName $lastName';
+    } else if (firstName.isNotEmpty) {
+      return firstName;
+    } else if (lastName.isNotEmpty) {
+      return lastName;
+    }
+    return 'Unknown Teacher';
+  }
+
+  /// Sort subject offerings by name, then by active status, then by creation date/academic year
+  List<SubjectOffering> _sortSubjectOfferings(List<SubjectOffering> offerings) {
+    offerings.sort((a, b) {
+      // First sort by subject name
+      int nameComparison =
+          a.subjectName.toLowerCase().compareTo(b.subjectName.toLowerCase());
+      if (nameComparison != 0) return nameComparison;
+
+      // Then by class name (for subjects with same name in different classes)
+      int classComparison =
+          a.className.toLowerCase().compareTo(b.className.toLowerCase());
+      if (classComparison != 0) return classComparison;
+
+      // Finally by grade level to group by academic progression
+      return a.gradeLevel.compareTo(b.gradeLevel);
+    });
+
+    return offerings;
   }
 }
 

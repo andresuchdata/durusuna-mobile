@@ -191,6 +191,7 @@ class AttendanceService {
 
       if (kDebugMode) {
         debugPrint('[ATTENDANCE] POST /attendance/sessions/$classId/open');
+        debugPrint('[ATTENDANCE] date: $date');
         debugPrint('[ATTENDANCE] body: $body');
       }
 
@@ -208,6 +209,18 @@ class AttendanceService {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         try {
+          if (kDebugMode) {
+            debugPrint(
+                '[ATTENDANCE] Received students data: ${data['students']}');
+            // Print first student data for debugging
+            if (data['students'] is List &&
+                (data['students'] as List).isNotEmpty) {
+              final firstStudent = (data['students'] as List)[0];
+              debugPrint('[ATTENDANCE] First student: $firstStudent');
+              debugPrint(
+                  '[ATTENDANCE] First student attendance: ${firstStudent['attendance']}');
+            }
+          }
           return AttendanceSessionResponse.fromJson(data);
         } catch (e) {
           if (kDebugMode) {
