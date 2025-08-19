@@ -4,7 +4,7 @@ import '../models/notification.dart';
 import '../models/conversation.dart';
 import '../../features/chat/presentation/pages/local_chat_page.dart';
 import '../../features/class_updates/presentation/pages/class_updates_page.dart';
-import '../../features/home/presentation/pages/enhanced_home_page_concept.dart';
+import '../../features/home/presentation/pages/home_page.dart';
 import '../../main.dart';
 import 'chat_service.dart';
 

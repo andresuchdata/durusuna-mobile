@@ -211,6 +211,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
             _buildEnhancedHomeTab(user),
             _buildConversationsTab(),
             _buildAllClassesTab(user),
+            const StudentAttendancePage(),
             _buildProfileTab(user),
           ],
         ),
@@ -332,13 +333,16 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
               padding: EdgeInsets.all(16),
               child: LinearProgressIndicator(minHeight: 2),
             ),
-            error: (e, st) => const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Failed to load assignments',
-                style: TextStyle(color: AppTheme.errorColor),
-              ),
-            ),
+            error: (e, st) {
+              debugPrint('⚠️ Recent assignments error: $e');
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'No recent assignments',
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
+              );
+            },
             data: (items) {
               if (items.isEmpty) {
                 return const Padding(
@@ -547,36 +551,55 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
       return _buildEmptyClassesCard();
     }
 
-    // Show maximum 3 classes in home tab as full-width cards
-    final displayClasses = classes.take(3).toList();
+    // Show maximum 4 classes in home tab as 2 cards per row
+    final displayClasses = classes.take(4).toList();
+
+    // Group classes into rows of 2
+    final rows = <List<ClassModel>>[];
+    for (int i = 0; i < displayClasses.length; i += 2) {
+      final endIndex =
+          (i + 2 < displayClasses.length) ? i + 2 : displayClasses.length;
+      rows.add(displayClasses.sublist(i, endIndex));
+    }
 
     return Column(
-      children: displayClasses
-          .map(
-            (classModel) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _buildEnhancedClassCard(classModel),
-            ),
-          )
-          .toList(),
+      children: rows.map((rowClasses) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildCompactClassCard(rowClasses[0]),
+              ),
+              if (rowClasses.length > 1) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildCompactClassCard(rowClasses[1]),
+                ),
+              ] else
+                const Expanded(child: SizedBox()),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
-  Widget _buildEnhancedClassCard(ClassModel classModel) {
+  Widget _buildCompactClassCard(ClassModel classModel) {
     return Card(
       key: ValueKey('class_card_${classModel.id}'),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () => _navigateToClassDetails(classModel, context),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          width: double.infinity,
+          height: 120,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
               colors: [
                 AppTheme.primaryColor,
                 AppTheme.primaryColor.withValues(alpha: 0.8),
@@ -584,72 +607,56 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // Class name
                 Text(
                   classModel.name,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 8),
 
                 // Class details
-                Text(
-                  '${classModel.academicYear} • ${classModel.studentsCount ?? 0} students',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      classModel.academicYear,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.people,
+                          color: Colors.white.withValues(alpha: 0.8),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${classModel.studentsCount ?? 0}',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-
-                // Teacher info
-                if (classModel.teachers != null &&
-                    classModel.teachers!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        child: Icon(
-                          Icons.person,
-                          color: Colors.white.withValues(alpha: 0.9),
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${classModel.teachers!.first.firstName} ${classModel.teachers!.first.lastName}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            Text(
-                              'Class Teacher',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),

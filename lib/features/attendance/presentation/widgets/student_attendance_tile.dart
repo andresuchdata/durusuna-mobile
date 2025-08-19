@@ -321,6 +321,12 @@ class StudentAttendanceTile extends StatelessWidget {
         text = 'Excused';
         icon = Icons.event_note;
         break;
+      case AttendanceStatus.sick:
+        backgroundColor = Colors.purple;
+        textColor = Colors.white;
+        text = 'Sick';
+        icon = Icons.sick;
+        break;
     }
 
     return Container(

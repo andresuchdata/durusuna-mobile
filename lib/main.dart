@@ -20,7 +20,7 @@ import 'shared/database/chat_database.dart';
 import 'shared/widgets/performance_optimized_list.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
-import 'features/home/presentation/pages/enhanced_home_page_concept.dart';
+import 'features/home/presentation/pages/home_page.dart';
 import 'features/class_management/presentation/pages/class_management_page.dart'
     show userClassesProvider;
 import 'shared/services/firebase/firebase_service.dart';

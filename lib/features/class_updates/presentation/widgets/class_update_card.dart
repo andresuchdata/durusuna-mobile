@@ -71,11 +71,15 @@ class ClassUpdateCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            update.author?.displayName ?? 'Teacher',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
+                          Expanded(
+                            child: Text(
+                              update.author?.displayName ?? 'Teacher',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -192,6 +196,8 @@ class ClassUpdateCard extends StatelessWidget {
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
 

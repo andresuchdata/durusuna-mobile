@@ -162,6 +162,8 @@ class _AttendanceSuccessAnimationState extends State<AttendanceSuccessAnimation>
         return AppTheme.warningColor;
       case AttendanceStatus.excused:
         return AppTheme.infoColor;
+      case AttendanceStatus.sick:
+        return Colors.purple;
     }
   }
 
@@ -175,6 +177,8 @@ class _AttendanceSuccessAnimationState extends State<AttendanceSuccessAnimation>
         return Icons.access_time;
       case AttendanceStatus.excused:
         return Icons.event_note;
+      case AttendanceStatus.sick:
+        return Icons.sick;
     }
   }
 }

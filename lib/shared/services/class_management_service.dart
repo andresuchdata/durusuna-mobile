@@ -230,6 +230,32 @@ class ClassManagementService {
     }
   }
 
+  /// Get offerings (subject-classes) for a specific class
+  Future<List<Map<String, dynamic>>> getClassOfferings(String classId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/classes/$classId/offerings'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> offeringsJson = data['offerings'] ?? [];
+        return offeringsJson.cast<Map<String, dynamic>>();
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied to this class');
+      } else {
+        throw Exception(
+            'Failed to fetch class offerings: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching class offerings: $e');
+    }
+  }
+
   /// Get assignments for a specific class
   Future<List<Map<String, dynamic>>> getClassAssignments(String classId,
       {int limit = 10}) async {

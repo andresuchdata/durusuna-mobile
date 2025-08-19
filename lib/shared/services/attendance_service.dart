@@ -103,11 +103,19 @@ class AttendanceService {
       final headers = await _getHeaders();
       final body = json.encode(settings.toJson());
 
+      // Debug logging
+      debugPrint('🔧 Updating attendance settings for school: $schoolId');
+      debugPrint('🔧 Request URL: $_baseUrl/attendance/settings/$schoolId');
+      debugPrint('🔧 Request body: $body');
+
       final response = await http.put(
         Uri.parse('$_baseUrl/attendance/settings/$schoolId'),
         headers: headers,
         body: body,
       );
+
+      debugPrint('🔧 Response status: ${response.statusCode}');
+      debugPrint('🔧 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
@@ -123,6 +131,50 @@ class AttendanceService {
       }
     } catch (e) {
       throw Exception('Error updating attendance settings: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> getStudentAttendanceStatus(
+      String classId) async {
+    try {
+      final headers = await _getHeaders();
+      final url = '$_baseUrl/attendance/student/status/$classId';
+
+      debugPrint('🔍 Checking attendance status for class: $classId');
+      debugPrint('🔍 Request URL: $url');
+
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      debugPrint('🔍 Response status: ${response.statusCode}');
+      debugPrint('🔍 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied');
+      } else if (response.statusCode == 429) {
+        // Rate limit - throw specific error that can be handled
+        throw Exception(
+            'Rate limit exceeded: Too many requests. Please wait before trying again.');
+      } else {
+        try {
+          final Map<String, dynamic> errorData = json.decode(response.body);
+          throw Exception(
+              errorData['error'] ?? 'Failed to check attendance status');
+        } catch (jsonError) {
+          // If response body is not JSON (like plain text rate limit message)
+          throw Exception('Server error: ${response.body}');
+        }
+      }
+    } catch (e) {
+      throw Exception('Error checking attendance status: $e');
     }
   }
 
@@ -498,6 +550,8 @@ class AttendanceService {
         return 'Late';
       case AttendanceStatus.excused:
         return 'Excused';
+      case AttendanceStatus.sick:
+        return 'Sick';
     }
   }
 
@@ -511,6 +565,8 @@ class AttendanceService {
         return '⏰';
       case AttendanceStatus.excused:
         return '📝';
+      case AttendanceStatus.sick:
+        return '🤒';
     }
   }
 

@@ -45,7 +45,7 @@ class _TeacherOfferingsPageState extends ConsumerState<TeacherOfferingsPage>
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: const Text(
-          'My Teaching Schedule',
+          'My Subjects',
           style: TextStyle(
             fontWeight: FontWeight.w600,
             color: Colors.white,
@@ -192,7 +192,7 @@ class _TeacherOfferingsPageState extends ConsumerState<TeacherOfferingsPage>
   }
 
   Widget _buildOfferingsList(String filterType, User user) {
-    // Mock data - replace with actual provider
+    // TODO: Replace with provider fetching class offerings assigned to this teacher
     final offerings = _getMockOfferings(filterType, user);
 
     if (offerings.isEmpty) {

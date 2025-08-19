@@ -20,47 +20,10 @@ import '../../../subjects/presentation/pages/subjects_main_page.dart';
 
 // Providers for class details data
 final classSubjectsProvider =
-    FutureProvider.family<List<MockSubject>, String>((ref, classId) async {
-  // Mock data similar to subjects main page but filtered for this class
-  await Future.delayed(const Duration(milliseconds: 300));
-  return [
-    MockSubject(
-      id: '1',
-      name: 'Mathematics',
-      code: 'MATH101',
-      grade: 'Grade 10',
-      studentCount: 32,
-      assignmentsCount: 8,
-      pendingGrades: 5,
-      teacher: 'Ahmad Rahman',
-      color: Colors.blue,
-      schedule: 'Mon, Wed, Fri - 08:00',
-    ),
-    MockSubject(
-      id: '2',
-      name: 'English Literature',
-      code: 'ENG201',
-      grade: 'Grade 11',
-      studentCount: 28,
-      assignmentsCount: 12,
-      pendingGrades: 3,
-      teacher: 'Sarah Johnson',
-      color: Colors.green,
-      schedule: 'Tue, Thu - 10:00',
-    ),
-    MockSubject(
-      id: '3',
-      name: 'Islamic Studies',
-      code: 'ISL101',
-      grade: 'Grade 10',
-      studentCount: 30,
-      assignmentsCount: 6,
-      pendingGrades: 2,
-      teacher: 'Ustadz Mahmoud',
-      color: Colors.teal,
-      schedule: 'Daily - 07:30',
-    ),
-  ];
+    FutureProvider.family<List<Map<String, dynamic>>, String>(
+        (ref, classId) async {
+  final service = ref.read(classManagementServiceProvider);
+  return await service.getClassOfferings(classId);
 });
 
 final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
@@ -178,10 +141,10 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                   child: _buildAssignmentsPreview(),
                 ),
                 SliverToBoxAdapter(
-                  child: _buildStudentListPreview(),
+                  child: _buildSubjectsPreview(subjects),
                 ),
                 SliverToBoxAdapter(
-                  child: _buildSubjectsPreview(subjects),
+                  child: _buildStudentListPreview(),
                 ),
               ],
             );
@@ -812,7 +775,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
-  Widget _buildSubjectsPreview(List<MockSubject> subjects) {
+  Widget _buildSubjectsPreview(List<Map<String, dynamic>> subjects) {
     final limitedSubjects = subjects.take(3).toList();
     final hasMore = subjects.length > 3;
 
@@ -1096,11 +1059,49 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
-  Widget _buildSubjectCard(MockSubject subject) {
+  Widget _buildSubjectCard(Map<String, dynamic> offering) {
+    final String subjectName =
+        offering['subject_name'] ?? offering['subject']?['name'] ?? 'Subject';
+    final String subjectCode =
+        offering['subject_code'] ?? offering['subject']?['code'] ?? '';
+    final String teacherName = (() {
+      final teacher = offering['teacher'];
+      if (teacher is Map) {
+        final fn = teacher['first_name'] ?? '';
+        final ln = teacher['last_name'] ?? '';
+        final display =
+            [fn, ln].where((s) => (s as String).isNotEmpty).join(' ');
+        if (display.isNotEmpty) return display;
+        return (teacher['email'] as String?) ?? '—';
+      }
+      final fn = offering['first_name'];
+      final ln = offering['last_name'];
+      final display =
+          [fn, ln].whereType<String>().where((s) => s.isNotEmpty).join(' ');
+      return display.isNotEmpty
+          ? display
+          : (offering['email'] as String? ?? '—');
+    })();
+    final dynamic rawSchedule = offering['schedule'];
+    final String schedule = rawSchedule is String ? rawSchedule : '';
+    final int assignmentsCount = offering['assignments_count'] is int
+        ? offering['assignments_count']
+        : 0;
     return Material(
       color: Colors.white,
       child: InkWell(
-        onTap: () => _navigateToSubjectDetails(subject),
+        onTap: () => _navigateToSubjectDetails(MockSubject(
+          id: offering['subject_id'] ?? offering['class_offering_id'] ?? '',
+          name: subjectName,
+          code: subjectCode,
+          grade: widget.classModel.name,
+          studentCount: widget.classModel.studentsCount ?? 0,
+          assignmentsCount: assignmentsCount,
+          pendingGrades: 0,
+          teacher: teacherName,
+          color: Colors.blue,
+          schedule: schedule,
+        )),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
@@ -1110,8 +1111,8 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 color: Color(0xFFE5E5E5),
                 width: 0.5,
               ),
-              left: BorderSide(
-                color: subject.color,
+              left: const BorderSide(
+                color: Colors.blue,
                 width: 4,
               ),
             ),
@@ -1123,12 +1124,12 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: subject.color.withValues(alpha: 0.1),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  _getSubjectIcon(subject.name),
-                  color: subject.color,
+                  _getSubjectIcon(subjectName),
+                  color: Colors.blue,
                   size: 26,
                 ),
               ),
@@ -1144,7 +1145,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                       children: [
                         Expanded(
                           child: Text(
-                            subject.name,
+                            subjectName,
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -1157,15 +1158,15 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: subject.color.withValues(alpha: 0.1),
+                            color: Colors.blue.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            subject.code,
+                            subjectCode,
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
-                              color: subject.color,
+                              color: Colors.blue,
                             ),
                           ),
                         ),
@@ -1175,7 +1176,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
 
                     // Stats row
                     Text(
-                      '${subject.studentCount} students • ${subject.assignmentsCount} assignments',
+                      '${widget.classModel.studentsCount ?? 0} students • $assignmentsCount assignments',
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppTheme.textSecondary,
@@ -1189,7 +1190,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                       children: [
                         Expanded(
                           child: Text(
-                            subject.teacher,
+                            teacherName,
                             style: TextStyle(
                               fontSize: 13,
                               color:
@@ -1198,7 +1199,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                             ),
                           ),
                         ),
-                        if (subject.pendingGrades > 0)
+                        if (0 > 0)
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
@@ -1208,7 +1209,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              '${subject.pendingGrades} pending',
+                              'pending',
                               style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w500,

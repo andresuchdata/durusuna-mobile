@@ -236,6 +236,8 @@ class _BulkActionsSheetState extends State<BulkActionsSheet> {
         return AppTheme.warningColor;
       case AttendanceStatus.excused:
         return AppTheme.infoColor;
+      case AttendanceStatus.sick:
+        return Colors.purple;
     }
   }
 
@@ -249,6 +251,8 @@ class _BulkActionsSheetState extends State<BulkActionsSheet> {
         return Icons.access_time;
       case AttendanceStatus.excused:
         return Icons.event_note;
+      case AttendanceStatus.sick:
+        return Icons.sick;
     }
   }
 
@@ -262,6 +266,8 @@ class _BulkActionsSheetState extends State<BulkActionsSheet> {
         return 'Late';
       case AttendanceStatus.excused:
         return 'Excused';
+      case AttendanceStatus.sick:
+        return 'Sick';
     }
   }
 }
