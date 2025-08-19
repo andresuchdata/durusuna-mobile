@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/auth_service.dart';
+import '../../../../shared/providers/app_providers.dart';
+import '../../../../shared/services/subjects_service.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../assignments/presentation/pages/assignments_main_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
 import '../widgets/subject_card.dart';
 import '../widgets/subject_stats_card.dart';
+import 'subject_offering_details_page.dart';
 
 class SubjectsMainPage extends ConsumerStatefulWidget {
   const SubjectsMainPage({super.key});
@@ -140,68 +143,218 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
   }
 
   Widget _buildStatsSection(User user) {
+    return Consumer(
+      builder: (context, ref, child) {
+        final statsAsync = ref.watch(userSubjectStatsProvider);
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: statsAsync.when(
+            loading: () => Row(
+              children: [
+                Expanded(child: _buildLoadingStatsCard()),
+                const SizedBox(width: 12),
+                Expanded(child: _buildLoadingStatsCard()),
+                const SizedBox(width: 12),
+                Expanded(child: _buildLoadingStatsCard()),
+              ],
+            ),
+            error: (error, stack) => const Row(
+              children: [
+                Expanded(
+                  child: SubjectStatsCard(
+                    title: 'Active Subjects',
+                    count: '--',
+                    subtitle: 'Error loading',
+                    icon: Icons.book,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SubjectStatsCard(
+                    title: 'Total Students',
+                    count: '--',
+                    subtitle: 'Error loading',
+                    icon: Icons.people,
+                    color: AppTheme.successColor,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SubjectStatsCard(
+                    title: 'Pending Tasks',
+                    count: '--',
+                    subtitle: 'Error loading',
+                    icon: Icons.assignment_late,
+                    color: AppTheme.warningColor,
+                  ),
+                ),
+              ],
+            ),
+            data: (stats) => Row(
+              children: [
+                Expanded(
+                  child: SubjectStatsCard(
+                    title: 'Active Subjects',
+                    count: '${stats.activeSubjects}',
+                    subtitle: 'Currently teaching',
+                    icon: Icons.book,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SubjectStatsCard(
+                    title: 'Total Students',
+                    count: '${stats.totalStudents}',
+                    subtitle: 'Across all subjects',
+                    icon: Icons.people,
+                    color: AppTheme.successColor,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SubjectStatsCard(
+                    title: 'Pending Tasks',
+                    count: '${stats.pendingTasks}',
+                    subtitle: 'Assignments to grade',
+                    icon: Icons.assignment_late,
+                    color: AppTheme.warningColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLoadingStatsCard() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: SubjectStatsCard(
-              title: 'Active Subjects',
-              count: user.role == UserRole.admin ? '24' : '6',
-              subtitle: 'Currently teaching',
-              icon: Icons.book,
-              color: AppTheme.primaryColor,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: SubjectStatsCard(
-              title: 'Total Students',
-              count: user.role == UserRole.admin ? '156' : '89',
-              subtitle: 'Across all subjects',
-              icon: Icons.people,
-              color: AppTheme.successColor,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: SubjectStatsCard(
-              title: 'Pending Tasks',
-              count: '12',
-              subtitle: 'Assignments to grade',
-              icon: Icons.assignment_late,
-              color: AppTheme.warningColor,
-            ),
-          ),
-        ],
+      height: 80,
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
       ),
     );
   }
 
   Widget _buildSubjectsList(SubjectFilterType filterType, User user) {
-    // Mock data - replace with actual provider
-    final subjects = _getMockSubjects(filterType, user);
+    return Consumer(
+      builder: (context, ref, child) {
+        final subjectsAsync = ref.watch(userSubjectsProvider);
 
-    if (subjects.isEmpty) {
-      return _buildEmptyState(filterType, user);
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: subjects.length,
-      itemBuilder: (context, index) {
-        final subject = subjects[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: SubjectCard(
-            subject: subject,
-            onTap: () => _navigateToSubjectDetails(subject),
-            onAssignmentsPressed: () => _navigateToSubjectAssignments(subject),
-            onGradingPressed: () => _navigateToSubjectGrading(subject),
+        return subjectsAsync.when(
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: CircularProgressIndicator(),
+            ),
           ),
+          error: (error, stack) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Failed to load subjects',
+                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.toString(),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => ref.refresh(userSubjectsProvider),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          data: (allSubjects) {
+            final filteredSubjects =
+                _filterSubjects(allSubjects, filterType, user);
+
+            if (filteredSubjects.isEmpty) {
+              return _buildEmptyState(filterType, user);
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: filteredSubjects.length,
+              itemBuilder: (context, index) {
+                final subjectOffering = filteredSubjects[index];
+                // Convert SubjectOffering to MockSubject for compatibility
+                final mockSubject = _convertToMockSubject(subjectOffering);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SubjectCard(
+                    subject: mockSubject,
+                    onTap: () => _navigateToOfferingDetails(subjectOffering),
+                    onAssignmentsPressed: () =>
+                        _navigateToSubjectAssignments(mockSubject),
+                    onGradingPressed: () =>
+                        _navigateToSubjectGrading(mockSubject),
+                  ),
+                );
+              },
+            );
+          },
         );
       },
     );
+  }
+
+  List<SubjectOffering> _filterSubjects(
+      List<SubjectOffering> subjects, SubjectFilterType filterType, User user) {
+    switch (filterType) {
+      case SubjectFilterType.active:
+        return subjects; // All subjects are considered active
+      case SubjectFilterType.grade:
+        // Group by grade level or show collaborative subjects
+        return subjects.where((s) => s.gradeLevel.isNotEmpty).toList();
+      case SubjectFilterType.archived:
+        return []; // No archived subjects for now
+    }
+  }
+
+  MockSubject _convertToMockSubject(SubjectOffering offering) {
+    return MockSubject(
+      id: offering.id,
+      name: offering.subjectName,
+      code: offering.subjectCode,
+      grade: offering.gradeLevel,
+      studentCount: offering.studentCount,
+      assignmentsCount: offering.assignmentsCount,
+      pendingGrades: offering.pendingGrades,
+      teacher: offering.teacherName,
+      color: Color(offering.color['primary'] ?? 0xFF757575),
+      schedule: _formatSchedule(offering.schedule),
+    );
+  }
+
+  String _formatSchedule(Map<String, dynamic> schedule) {
+    // Format schedule from backend JSON to display string
+    if (schedule.isEmpty) return 'TBD';
+
+    // You can expand this based on your schedule format
+    return 'See schedule'; // Placeholder
   }
 
   Widget _buildEmptyState(SubjectFilterType filterType, User user) {
@@ -251,69 +404,6 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
         ],
       ),
     );
-  }
-
-  List<MockSubject> _getMockSubjects(SubjectFilterType filterType, User user) {
-    // Mock data - replace with actual API calls
-    if (filterType == SubjectFilterType.archived) return [];
-
-    final baseSubjects = [
-      MockSubject(
-        id: '1',
-        name: 'Mathematics',
-        code: 'MATH101',
-        grade: 'Grade 10',
-        studentCount: 32,
-        assignmentsCount: 8,
-        pendingGrades: 5,
-        teacher: 'Ahmad Rahman',
-        color: Colors.blue,
-        schedule: 'Mon, Wed, Fri - 08:00',
-      ),
-      MockSubject(
-        id: '2',
-        name: 'English Literature',
-        code: 'ENG201',
-        grade: 'Grade 11',
-        studentCount: 28,
-        assignmentsCount: 12,
-        pendingGrades: 3,
-        teacher: 'Sarah Johnson',
-        color: Colors.green,
-        schedule: 'Tue, Thu - 10:00',
-      ),
-      MockSubject(
-        id: '3',
-        name: 'Islamic Studies',
-        code: 'ISL101',
-        grade: 'Grade 10',
-        studentCount: 30,
-        assignmentsCount: 6,
-        pendingGrades: 2,
-        teacher: 'Ustadz Mahmoud',
-        color: Colors.teal,
-        schedule: 'Daily - 07:30',
-      ),
-      MockSubject(
-        id: '4',
-        name: 'Science',
-        code: 'SCI101',
-        grade: 'Grade 9',
-        studentCount: 25,
-        assignmentsCount: 10,
-        pendingGrades: 7,
-        teacher: 'Dr. Fatima Ali',
-        color: Colors.purple,
-        schedule: 'Mon, Wed, Fri - 13:00',
-      ),
-    ];
-
-    if (user.role == UserRole.admin) {
-      return baseSubjects;
-    } else {
-      // Teachers see only their subjects
-      return baseSubjects.take(2).toList();
-    }
   }
 
   void _showSubjectSearch(BuildContext context) {
@@ -384,12 +474,12 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage>
     }
   }
 
-  void _navigateToSubjectDetails(MockSubject subject) {
-    // Navigate to subject details with assignments, students, etc.
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content:
-              Text('Subject Details: ${subject.name} - Under Development')),
+  void _navigateToOfferingDetails(SubjectOffering offering) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SubjectOfferingDetailsPage(offering: offering),
+      ),
     );
   }
 

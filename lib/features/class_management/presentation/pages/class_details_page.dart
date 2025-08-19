@@ -833,7 +833,8 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 if (hasMore)
                   TextButton(
                     onPressed: () {
-                      // Show all subjects
+                      // Navigate to subjects list page
+                      Navigator.pushNamed(context, '/subjects');
                     },
                     child: const Text('See more'),
                   ),
