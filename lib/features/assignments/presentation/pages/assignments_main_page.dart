@@ -16,24 +16,12 @@ class AssignmentsMainPage extends ConsumerStatefulWidget {
 }
 
 class _AssignmentsMainPageState extends ConsumerState<AssignmentsMainPage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  int _selectedIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    _tabController.addListener(() {
-      setState(() {
-        _selectedIndex = _tabController.index;
-      });
-    });
-  }
+    with TickerProviderStateMixin {
+  TabController? _tabController;
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -50,6 +38,12 @@ class _AssignmentsMainPageState extends ConsumerState<AssignmentsMainPage>
 
     final isTeacher = user.userType == UserType.teacher;
     final isAdmin = user.role == UserRole.admin;
+    final showTabs = isTeacher || isAdmin; // Only teachers and admins get tabs
+
+    // Initialize tab controller if needed for teachers/admins
+    if (showTabs && _tabController == null) {
+      _tabController = TabController(length: 4, vsync: this);
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -101,49 +95,58 @@ class _AssignmentsMainPageState extends ConsumerState<AssignmentsMainPage>
             ],
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: [
-            Tab(
-              text: isTeacher || isAdmin ? 'All Assignments' : 'My Assignments',
-            ),
-            const Tab(text: 'Due Soon'),
-            const Tab(text: 'Submitted'),
-            const Tab(text: 'Graded'),
-          ],
-        ),
+        bottom: showTabs
+            ? TabBar(
+                controller: _tabController!,
+                indicatorColor: Colors.white,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                tabs: [
+                  Tab(
+                    text: isTeacher || isAdmin
+                        ? 'All Assignments'
+                        : 'My Assignments',
+                  ),
+                  const Tab(text: 'Due Soon'),
+                  const Tab(text: 'Submitted'),
+                  const Tab(text: 'Graded'),
+                ],
+              )
+            : null,
       ),
       body: Column(
         children: [
           // Stats Cards Section
           if (isTeacher || isAdmin) _buildStatsSection(),
 
-          // Tab Content
+          // Tab Content or Simple Assignment List
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                AssignmentListView(
-                  filterType: AssignmentFilterType.all,
-                  userRole: _getUserRole(user),
-                ),
-                AssignmentListView(
-                  filterType: AssignmentFilterType.dueSoon,
-                  userRole: _getUserRole(user),
-                ),
-                AssignmentListView(
-                  filterType: AssignmentFilterType.submitted,
-                  userRole: _getUserRole(user),
-                ),
-                AssignmentListView(
-                  filterType: AssignmentFilterType.graded,
-                  userRole: _getUserRole(user),
-                ),
-              ],
-            ),
+            child: showTabs
+                ? TabBarView(
+                    controller: _tabController!,
+                    children: [
+                      AssignmentListView(
+                        filterType: AssignmentFilterType.all,
+                        userRole: _getUserRole(user),
+                      ),
+                      AssignmentListView(
+                        filterType: AssignmentFilterType.dueSoon,
+                        userRole: _getUserRole(user),
+                      ),
+                      AssignmentListView(
+                        filterType: AssignmentFilterType.submitted,
+                        userRole: _getUserRole(user),
+                      ),
+                      AssignmentListView(
+                        filterType: AssignmentFilterType.graded,
+                        userRole: _getUserRole(user),
+                      ),
+                    ],
+                  )
+                : AssignmentListView(
+                    filterType: AssignmentFilterType.all,
+                    userRole: _getUserRole(user),
+                  ),
           ),
         ],
       ),

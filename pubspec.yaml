@@ -51,7 +51,7 @@ dependencies:
   geolocator: ^11.0.0
   geocoding: ^3.0.0
   # Maps (OpenStreetMap)
-  flutter_map: ^7.0.2
+  flutter_map: ^8.2.1
   latlong2: ^0.9.1
   
   # Utils

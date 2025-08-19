@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/class_model.dart';
 import '../models/user.dart';
@@ -260,16 +261,25 @@ class ClassManagementService {
   Future<List<Map<String, dynamic>>> getClassAssignments(String classId,
       {int limit = 10}) async {
     try {
+      debugPrint(
+          '🔍 [SERVICE DEBUG] getClassAssignments called with classId: $classId, limit: $limit');
       final headers = await _getHeaders();
+      final url =
+          '$_baseUrl/assignments/classes/$classId/assignments?limit=$limit';
+      debugPrint('🔍 [SERVICE DEBUG] Making request to: $url');
       final response = await http.get(
-        Uri.parse(
-            '$_baseUrl/assignments/classes/$classId/assignments?limit=$limit'),
+        Uri.parse(url),
         headers: headers,
       );
+
+      debugPrint('🔍 [SERVICE DEBUG] Response status: ${response.statusCode}');
+      debugPrint('🔍 [SERVICE DEBUG] Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final List<dynamic> assignmentsJson = data['assignments'] ?? [];
+        debugPrint(
+            '🔍 [SERVICE DEBUG] Found ${assignmentsJson.length} assignments');
 
         return assignmentsJson.cast<Map<String, dynamic>>();
       } else if (response.statusCode == 401) {
@@ -281,6 +291,7 @@ class ClassManagementService {
             'Failed to fetch class assignments: ${response.statusCode}');
       }
     } catch (e) {
+      debugPrint('🔍 [SERVICE DEBUG] Error in getClassAssignments: $e');
       throw Exception('Error fetching class assignments: $e');
     }
   }

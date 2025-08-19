@@ -19,6 +19,7 @@ import '../../../attendance/presentation/pages/attendance_management_page.dart';
 import '../../../subjects/presentation/pages/subjects_main_page.dart';
 import '../../../subjects/presentation/pages/subject_offering_details_page.dart';
 import '../../../../shared/services/subjects_service.dart';
+import '../../../assignments/presentation/pages/assignments_main_page.dart';
 
 // Providers for class details data
 final classSubjectsProvider =
@@ -68,8 +69,18 @@ final classTeachersProvider =
 final classAssignmentsProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>(
         (ref, classId) async {
+  debugPrint(
+      '🔍 [FLUTTER DEBUG] Calling getClassAssignments for classId: $classId');
   final service = ref.read(classManagementServiceProvider);
-  return await service.getClassAssignments(classId, limit: 3);
+  try {
+    final result = await service.getClassAssignments(classId, limit: 3);
+    debugPrint(
+        '🔍 [FLUTTER DEBUG] getClassAssignments returned ${result.length} assignments');
+    return result;
+  } catch (e) {
+    debugPrint('🔍 [FLUTTER DEBUG] getClassAssignments error: $e');
+    rethrow;
+  }
 });
 
 class ClassDetailsPage extends ConsumerStatefulWidget {
@@ -123,10 +134,6 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
             ),
           ),
           data: (subjects) {
-            if (subjects.isEmpty) {
-              return _buildEmptySubjects();
-            }
-
             return CustomScrollView(
               slivers: [
                 _buildSliverAppBar(),
@@ -143,7 +150,9 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                   child: _buildAssignmentsPreview(),
                 ),
                 SliverToBoxAdapter(
-                  child: _buildSubjectsPreview(subjects),
+                  child: subjects.isEmpty
+                      ? _buildEmptySubjectsSection()
+                      : _buildSubjectsPreview(subjects),
                 ),
                 SliverToBoxAdapter(
                   child: _buildStudentListPreview(),
@@ -156,18 +165,34 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
-  Widget _buildEmptySubjects() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.book, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text(
-            'No subjects assigned to this class',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
+  Widget _buildEmptySubjectsSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.book, size: 48, color: Colors.grey),
+              SizedBox(height: 16),
+              Text(
+                'No subjects assigned to this class',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -889,7 +914,12 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 ),
                 TextButton(
                   onPressed: () {
-                    // Navigate to assignments page
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AssignmentsMainPage(),
+                      ),
+                    );
                   },
                   child: const Text('View all'),
                 ),
