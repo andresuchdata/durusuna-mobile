@@ -146,7 +146,7 @@ class NotificationDeepLinkRouter {
 
   static Future<void> _navigateToHome(BuildContext context) async {
     await Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HomePage()),
+      MaterialPageRoute(builder: (_) => const EnhancedHomePage()),
       (route) => false,
     );
   }

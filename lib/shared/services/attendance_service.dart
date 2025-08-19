@@ -103,11 +103,19 @@ class AttendanceService {
       final headers = await _getHeaders();
       final body = json.encode(settings.toJson());
 
+      // Debug logging
+      debugPrint('🔧 Updating attendance settings for school: $schoolId');
+      debugPrint('🔧 Request URL: $_baseUrl/attendance/settings/$schoolId');
+      debugPrint('🔧 Request body: $body');
+
       final response = await http.put(
         Uri.parse('$_baseUrl/attendance/settings/$schoolId'),
         headers: headers,
         body: body,
       );
+
+      debugPrint('🔧 Response status: ${response.statusCode}');
+      debugPrint('🔧 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
@@ -126,6 +134,50 @@ class AttendanceService {
     }
   }
 
+  Future<Map<String, dynamic>> getStudentAttendanceStatus(
+      String classId) async {
+    try {
+      final headers = await _getHeaders();
+      final url = '$_baseUrl/attendance/student/status/$classId';
+
+      debugPrint('🔍 Checking attendance status for class: $classId');
+      debugPrint('🔍 Request URL: $url');
+
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      debugPrint('🔍 Response status: ${response.statusCode}');
+      debugPrint('🔍 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied');
+      } else if (response.statusCode == 429) {
+        // Rate limit - throw specific error that can be handled
+        throw Exception(
+            'Rate limit exceeded: Too many requests. Please wait before trying again.');
+      } else {
+        try {
+          final Map<String, dynamic> errorData = json.decode(response.body);
+          throw Exception(
+              errorData['error'] ?? 'Failed to check attendance status');
+        } catch (jsonError) {
+          // If response body is not JSON (like plain text rate limit message)
+          throw Exception('Server error: ${response.body}');
+        }
+      }
+    } catch (e) {
+      throw Exception('Error checking attendance status: $e');
+    }
+  }
+
   // Teacher attendance management
   Future<AttendanceSessionResponse> openAttendanceSession(
     String classId,
@@ -139,6 +191,7 @@ class AttendanceService {
 
       if (kDebugMode) {
         debugPrint('[ATTENDANCE] POST /attendance/sessions/$classId/open');
+        debugPrint('[ATTENDANCE] date: $date');
         debugPrint('[ATTENDANCE] body: $body');
       }
 
@@ -156,6 +209,18 @@ class AttendanceService {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         try {
+          if (kDebugMode) {
+            debugPrint(
+                '[ATTENDANCE] Received students data: ${data['students']}');
+            // Print first student data for debugging
+            if (data['students'] is List &&
+                (data['students'] as List).isNotEmpty) {
+              final firstStudent = (data['students'] as List)[0];
+              debugPrint('[ATTENDANCE] First student: $firstStudent');
+              debugPrint(
+                  '[ATTENDANCE] First student attendance: ${firstStudent['attendance']}');
+            }
+          }
           return AttendanceSessionResponse.fromJson(data);
         } catch (e) {
           if (kDebugMode) {
@@ -229,6 +294,49 @@ class AttendanceService {
       }
     } catch (e) {
       throw Exception('Error marking attendance: $e');
+    }
+  }
+
+  Future<void> deleteStudentAttendance(
+    String classId,
+    String studentId,
+    DateTime date,
+  ) async {
+    try {
+      final headers = await _getHeaders();
+      final formattedDate = _formatDateToString(date);
+
+      if (kDebugMode) {
+        debugPrint(
+            '[ATTENDANCE] DELETE /attendance/$classId/$studentId?date=$formattedDate');
+      }
+
+      final response = await http.delete(
+        Uri.parse(
+            '$_baseUrl/attendance/$classId/$studentId?date=$formattedDate'),
+        headers: headers,
+      );
+
+      if (kDebugMode) {
+        debugPrint('[ATTENDANCE] status: ${response.statusCode}');
+        debugPrint('[ATTENDANCE] resp: ${response.body}');
+      }
+
+      if (response.statusCode == 200) {
+        // Successfully deleted
+        return;
+      } else if (response.statusCode == 404) {
+        throw Exception('Attendance record not found');
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied');
+      } else {
+        final Map<String, dynamic> errorData = json.decode(response.body);
+        throw Exception(errorData['error'] ?? 'Failed to delete attendance');
+      }
+    } catch (e) {
+      throw Exception('Error deleting attendance: $e');
     }
   }
 
@@ -498,6 +606,8 @@ class AttendanceService {
         return 'Late';
       case AttendanceStatus.excused:
         return 'Excused';
+      case AttendanceStatus.sick:
+        return 'Sick';
     }
   }
 
@@ -511,6 +621,8 @@ class AttendanceService {
         return '⏰';
       case AttendanceStatus.excused:
         return '📝';
+      case AttendanceStatus.sick:
+        return '🤒';
     }
   }
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' as latlng;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
@@ -35,6 +37,13 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
   AttendanceRecord? _markedAttendance;
   late AnimationController _locationAnimationController;
   late AnimationController _successAnimationController;
+  Position? _currentPosition;
+  SchoolAttendanceSettings? _schoolSettings;
+  MapController? _mapController;
+  Map<String, bool> _attendanceStatus =
+      {}; // Track which classes have attendance submitted
+  bool _isCheckingAttendanceStatus =
+      false; // Prevent multiple concurrent checks
 
   @override
   void initState() {
@@ -48,6 +57,27 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
+
+    _mapController = MapController();
+
+    // Preload current position and school settings for map/header display
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final auth = ref.read(authStateProvider);
+      final user = auth.user;
+      if (user?.schoolId != null) {
+        try {
+          final settings = await ref
+              .read(attendanceServiceProvider)
+              .getSchoolAttendanceSettings(user!.schoolId!);
+          setState(() => _schoolSettings = settings);
+        } catch (_) {}
+      }
+      try {
+        final pos =
+            await ref.read(attendanceServiceProvider).getCurrentLocation();
+        setState(() => _currentPosition = pos);
+      } catch (_) {}
+    });
   }
 
   @override
@@ -55,6 +85,95 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
     _locationAnimationController.dispose();
     _successAnimationController.dispose();
     super.dispose();
+  }
+
+  Widget _buildInlineMapPreview() {
+    final schoolLat = _schoolSettings!.schoolLatitude ?? -0.900831;
+    final schoolLng = _schoolSettings!.schoolLongitude ?? 100.375814;
+    final userLat = _currentPosition!.latitude;
+    final userLng = _currentPosition!.longitude;
+
+    final distanceMeters =
+        Geolocator.distanceBetween(userLat, userLng, schoolLat, schoolLng);
+
+    final markers = [
+      Marker(
+        width: 40,
+        height: 40,
+        point: latlng.LatLng(schoolLat, schoolLng),
+        alignment: Alignment.center,
+        child: const Icon(Icons.school, color: Colors.blueAccent, size: 26),
+      ),
+      Marker(
+        width: 40,
+        height: 40,
+        point: latlng.LatLng(userLat, userLng),
+        alignment: Alignment.center,
+        child: const Icon(Icons.my_location, color: Colors.red, size: 26),
+      ),
+    ];
+    final geofence = [
+      CircleMarker(
+        point: latlng.LatLng(schoolLat, schoolLng),
+        radius: (_schoolSettings!.locationRadiusMeters).toDouble(),
+        color: AppTheme.primaryColor.withValues(alpha: 0.15),
+        borderStrokeWidth: 2,
+        borderColor: AppTheme.primaryColor.withValues(alpha: 0.6),
+      )
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 200,
+          width: double.infinity,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: latlng.LatLng(userLat, userLng),
+                initialZoom: 16,
+                onMapReady: () {
+                  final bounds = LatLngBounds.fromPoints([
+                    latlng.LatLng(userLat, userLng),
+                    latlng.LatLng(schoolLat, schoolLng),
+                  ]);
+                  Future.delayed(const Duration(milliseconds: 200), () {
+                    _mapController?.fitCamera(
+                      CameraFit.bounds(
+                          bounds: bounds, padding: const EdgeInsets.all(60)),
+                    );
+                  });
+                },
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate:
+                      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  subdomains: const ['a', 'b', 'c'],
+                  userAgentPackageName: 'durusuna_mobile',
+                ),
+                CircleLayer(circles: geofence),
+                MarkerLayer(markers: markers),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Distance to school: ${distanceMeters.toStringAsFixed(0)} m',
+          style: TextStyle(
+            fontSize: 12,
+            color: distanceMeters <= (_schoolSettings!.locationRadiusMeters)
+                ? AppTheme.successColor
+                : AppTheme.warningColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -142,9 +261,11 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
                   ],
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Select your class to mark attendance using your current location.',
-                  style: TextStyle(
+                Text(
+                  _currentPosition != null
+                      ? 'Your location: ${_currentPosition!.latitude.toStringAsFixed(6)}, ${_currentPosition!.longitude.toStringAsFixed(6)}'
+                      : 'Select your class to mark attendance using your current location.',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
                     height: 1.4,
@@ -161,7 +282,9 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'You must be within the school premises to mark attendance',
+                        _schoolSettings?.attendanceHours != null
+                            ? 'You must be within the school premises to mark attendance'
+                            : 'Fetching school location settings...',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 12,
@@ -170,6 +293,10 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
                     ),
                   ],
                 ),
+                if (_schoolSettings != null && _currentPosition != null) ...[
+                  const SizedBox(height: 12),
+                  _buildInlineMapPreview(),
+                ],
               ],
             ),
           ),
@@ -193,6 +320,11 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
   }
 
   Widget _buildClassesList(List<ClassModel> classes) {
+    // Only check attendance status once when classes are first loaded
+    if (_attendanceStatus.isEmpty && classes.isNotEmpty) {
+      _checkAttendanceStatusOnce(classes);
+    }
+
     if (classes.isEmpty) {
       return Center(
         child: Padding(
@@ -240,18 +372,104 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
           ),
         ),
         const SizedBox(height: 16),
-        ...classes
-            .map((classModel) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: ClassSelectionCard(
-                    classModel: classModel,
-                    onTap: () => _markAttendanceForClass(classModel),
-                    isLoading: _isMarkingAttendance,
-                  ),
-                ))
-            .toList(),
+        ...classes.map((classModel) {
+          final geofenceDisabled = _computeGeofenceDisabled();
+          final hasSubmittedAttendance =
+              _attendanceStatus[classModel.id] ?? false;
+
+          // Combine geofence and attendance status
+          final isDisabled =
+              geofenceDisabled.isDisabled || hasSubmittedAttendance;
+          final disabledReason = hasSubmittedAttendance
+              ? 'Attendance already submitted for today'
+              : geofenceDisabled.reason;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: ClassSelectionCard(
+              classModel: classModel,
+              onTap: () => _markAttendanceForClass(classModel),
+              isLoading: _isMarkingAttendance,
+              isDisabled: isDisabled,
+              disabledReason: disabledReason,
+            ),
+          );
+        }).toList(),
       ],
     );
+  }
+
+  void _checkAttendanceStatusOnce(List<ClassModel> classes) {
+    // Avoid calling if we're already checking or have results
+    if (_isCheckingAttendanceStatus || _attendanceStatus.isNotEmpty) {
+      return;
+    }
+
+    _isCheckingAttendanceStatus = true;
+    _checkAttendanceStatus(classes).whenComplete(() {
+      _isCheckingAttendanceStatus = false;
+    });
+  }
+
+  Future<void> _checkAttendanceStatus(List<ClassModel> classes) async {
+    final service = ref.read(attendanceServiceProvider);
+
+    // Rate limiting: Add delay between requests to avoid hitting rate limits
+    for (int i = 0; i < classes.length; i++) {
+      final classModel = classes[i];
+      try {
+        final status = await service.getStudentAttendanceStatus(classModel.id);
+        if (mounted) {
+          setState(() {
+            _attendanceStatus[classModel.id] = status['hasAttendance'] ?? false;
+          });
+        }
+
+        // Add delay between requests to prevent rate limiting (except for last request)
+        if (i < classes.length - 1) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      } catch (e) {
+        debugPrint('Error checking attendance status for ${classModel.id}: $e');
+        // Default to false if we can't check - allows user to proceed
+        if (mounted) {
+          setState(() {
+            _attendanceStatus[classModel.id] = false;
+          });
+        }
+
+        // If we get a rate limit error, increase delay for subsequent requests
+        if (e.toString().contains('429') ||
+            e.toString().contains('Too many requests')) {
+          debugPrint(
+              'Rate limit detected, increasing delay for subsequent requests');
+          await Future.delayed(const Duration(seconds: 2));
+        }
+      }
+    }
+  }
+
+  DisabledState _computeGeofenceDisabled() {
+    // If school requires location verification, disable when user is outside radius
+    if (_schoolSettings == null || _currentPosition == null) {
+      return const DisabledState(false, null);
+    }
+    final requireLocation = _schoolSettings!.requireLocation;
+    if (!requireLocation) {
+      return const DisabledState(false, null);
+    }
+    final schoolLat = _schoolSettings!.schoolLatitude ?? -0.900831;
+    final schoolLng = _schoolSettings!.schoolLongitude ?? 100.375814;
+    final userLat = _currentPosition!.latitude;
+    final userLng = _currentPosition!.longitude;
+    final distanceMeters =
+        Geolocator.distanceBetween(userLat, userLng, schoolLat, schoolLng);
+    final maxMeters = _schoolSettings!.locationRadiusMeters.toDouble();
+    final outside = distanceMeters > maxMeters;
+    return outside
+        ? DisabledState(true,
+            'You are outside the allowed radius (${maxMeters.toStringAsFixed(0)} m). Move closer to the school to mark attendance.')
+        : const DisabledState(false, null);
   }
 
   Widget _buildErrorState(String error) {
@@ -450,7 +668,7 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
               builder: (context, child) {
                 return Transform.scale(
                   scale: 1.0 + (_locationAnimationController.value * 0.1),
-                  child: Icon(
+                  child: const Icon(
                     Icons.location_searching,
                     size: 48,
                     color: AppTheme.primaryColor,
@@ -529,6 +747,8 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
         return AppTheme.warningColor;
       case AttendanceStatus.excused:
         return AppTheme.infoColor;
+      case AttendanceStatus.sick:
+        return Colors.purple;
     }
   }
 
@@ -542,10 +762,19 @@ class _StudentAttendancePageState extends ConsumerState<StudentAttendancePage>
         return 'Late';
       case AttendanceStatus.excused:
         return 'Excused';
+      case AttendanceStatus.sick:
+        return 'Sick';
     }
   }
 
   String _formatTime(DateTime time) {
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
+}
+
+// Lightweight immutable holder for disabled state
+class DisabledState {
+  final bool isDisabled;
+  final String? reason;
+  const DisabledState(this.isDisabled, this.reason);
 }

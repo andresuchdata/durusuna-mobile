@@ -51,6 +51,7 @@ const _$AttendanceStatusEnumMap = {
   AttendanceStatus.absent: 'absent',
   AttendanceStatus.late: 'late',
   AttendanceStatus.excused: 'excused',
+  AttendanceStatus.sick: 'sick',
 };
 
 const _$AttendanceMarkedViaEnumMap = {

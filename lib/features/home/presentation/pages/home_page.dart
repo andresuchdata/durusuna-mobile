@@ -2,86 +2,63 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../core/utils/global_auth_handler.dart';
+import '../../../../shared/models/class_model.dart';
+import '../../../../shared/models/user.dart';
+import '../../../../shared/models/notification.dart';
+import '../../../../shared/models/conversation.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/notification_service.dart';
-import '../../../../shared/services/chat_service.dart';
-import '../../../../shared/services/class_updates_service.dart';
-import '../../../../shared/services/class_management_service.dart';
-import '../../../../shared/models/user.dart';
-import '../../../../shared/models/class_model.dart';
-import '../../../../shared/models/class_update.dart';
-import '../../../../core/utils/date_utils.dart' as app_date_utils;
+import '../../../../shared/widgets/global_app_drawer.dart';
+import '../../../../shared/widgets/global_bottom_navigation.dart';
 
-import '../../../class_updates/presentation/pages/class_updates_page.dart';
-import '../../../chat/presentation/pages/conversations_page.dart';
 import '../../../notifications/presentation/pages/notifications_page.dart';
+import '../../../chat/presentation/pages/conversations_page.dart';
+import '../../../chat/presentation/pages/local_chat_page.dart';
 import '../../../class_management/presentation/pages/class_management_page.dart';
+import '../../../class_management/presentation/pages/class_details_page.dart';
+import '../../../class_management/presentation/widgets/class_card.dart';
+import '../../../class_management/presentation/widgets/create_class_dialog.dart';
+import '../../../../shared/services/assignments_service.dart';
+import '../../../class_updates/presentation/pages/class_updates_page.dart';
+import '../../../attendance/presentation/pages/student_attendance_page.dart';
 
-// Class to hold update with class context
-class ClassUpdateWithClass {
-  final ClassUpdate update;
-  final String className;
-  final String classId;
+import '../../../subjects/presentation/pages/subjects_main_page.dart';
+import '../../../assignments/presentation/pages/assignments_main_page.dart';
+import '../../../../shared/services/chat_service.dart';
 
-  ClassUpdateWithClass({
-    required this.update,
-    required this.className,
-    required this.classId,
-  });
-}
+// Import the existing provider to avoid conflicts
+import '../../../class_management/presentation/pages/class_management_page.dart'
+    show userClassesProvider;
 
-// Enhanced providers for multi-class support
-final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
-  return ClassManagementService();
-});
+final classActivityProvider = FutureProvider.family
+    .autoDispose<ClassActivitySummary, String>((ref, classId) async {
+  // Keep the provider alive for 5 minutes to prevent constant refetching
+  ref.keepAlive();
 
-final userClassesProvider = FutureProvider<List<ClassModel>>((ref) async {
-  final service = ref.read(classManagementServiceProvider);
-  return await service.getUserClasses();
-});
+  // Add timeout to prevent hanging
+  try {
+    // This would fetch unread counts, recent updates, etc.
+    // Simulate async operation with timeout
+    await Future.delayed(const Duration(milliseconds: 500));
 
-// Provider for recent class updates across all user's classes
-final recentUpdatesProvider =
-    FutureProvider<List<ClassUpdateWithClass>>((ref) async {
-  final classes = await ref.read(userClassesProvider.future);
-  final updateService = ref.read(classUpdatesServiceProvider);
-
-  List<ClassUpdateWithClass> allUpdates = [];
-
-  for (final classModel in classes) {
-    try {
-      final updates =
-          await updateService.getClassUpdates(classModel.id, limit: 3);
-      allUpdates.addAll(updates.map((update) => ClassUpdateWithClass(
-            update: update,
-            className: classModel.name,
-            classId: classModel.id,
-          )));
-    } catch (e) {
-      // Skip if error fetching updates for this class
-      continue;
-    }
+    // Mock data - in real implementation, this would fetch from your backend
+    return ClassActivitySummary(
+      classId: classId,
+      unreadMessages: (classId.hashCode % 10),
+      unreadUpdates: (classId.hashCode % 5),
+      upcomingEvents: (classId.hashCode % 3),
+      recentActivity: _getMockRecentActivity(classId),
+    );
+  } catch (e) {
+    // Return empty state on error
+    return ClassActivitySummary(
+      classId: classId,
+      unreadMessages: 0,
+      unreadUpdates: 0,
+      recentActivity: null,
+      upcomingEvents: 0,
+    );
   }
-
-  // Sort by creation time and take most recent 5
-  allUpdates.sort((a, b) => b.update.createdAt.compareTo(a.update.createdAt));
-  return allUpdates.take(5).toList();
-});
-
-// Provider for class activity summary (mock data for now)
-final classActivityProvider =
-    FutureProvider.family<ClassActivitySummary, String>((ref, classId) async {
-  // Simulate API call delay
-  await Future.delayed(const Duration(milliseconds: 500));
-
-  // Mock data - in real implementation, this would fetch from your backend
-  return ClassActivitySummary(
-    classId: classId,
-    unreadMessages: (classId.hashCode % 10),
-    unreadUpdates: (classId.hashCode % 5),
-    upcomingEvents: (classId.hashCode % 3),
-    recentActivity: _getMockRecentActivity(classId),
-  );
 });
 
 String _getMockRecentActivity(String classId) {
@@ -95,6 +72,29 @@ String _getMockRecentActivity(String classId) {
   ];
   return activities[classId.hashCode % activities.length];
 }
+
+// Cache the organized stats to prevent unnecessary rebuilds
+final quickStatsProvider = Provider<Map<String, String>>((ref) {
+  final userClassesAsync = ref.watch(userClassesProvider);
+
+  return userClassesAsync.when(
+    data: (classes) => {
+      'Classes': classes.length.toString(),
+      'Unread': '8', // This should come from actual data
+      'Today': '3', // This should come from actual data
+    },
+    loading: () => {
+      'Classes': '-',
+      'Unread': '-',
+      'Today': '-',
+    },
+    error: (_, __) => {
+      'Classes': '-',
+      'Unread': '-',
+      'Today': '-',
+    },
+  );
+});
 
 class ClassActivitySummary {
   final String classId;
@@ -114,33 +114,47 @@ class ClassActivitySummary {
   int get totalUnread => unreadMessages + unreadUpdates;
 }
 
-class HomePage extends ConsumerStatefulWidget {
-  const HomePage({super.key});
+class EnhancedHomePage extends ConsumerStatefulWidget {
+  const EnhancedHomePage({super.key});
 
   @override
-  ConsumerState<HomePage> createState() => _HomePageState();
+  ConsumerState<EnhancedHomePage> createState() => _EnhancedHomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage> {
-  int _currentIndex = 0;
-
+class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
   @override
   void initState() {
     super.initState();
-    // Initialize data when home page loads
+    // Add debug logging to understand authentication state
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      debugPrint('🏠 Home page loaded - initializing data...');
+      debugPrint('🏠 EnhancedHomePage: PostFrame callback triggered');
+      final authState = ref.read(authStateProvider);
+      debugPrint(
+          '🔐 Auth State - isAuthenticated: ${authState.isAuthenticated}');
+      debugPrint('👤 Auth State - user: ${authState.user?.email ?? 'null'}');
+      debugPrint('🔄 Auth State - isLoading: ${authState.isLoading}');
+      debugPrint('❌ Auth State - error: ${authState.error ?? 'null'}');
 
-      // Initialize notifications
-      ref.read(notificationsProvider.notifier).initialize();
+      // If user is null but we might have stored data, try to reinitialize
+      if (authState.user == null && !authState.isLoading) {
+        debugPrint('🔄 Attempting to reinitialize auth state...');
+        // Force a check of the auth status
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            final currentState = ref.read(authStateProvider);
+            if (currentState.user == null) {
+              debugPrint('🔄 Re-checking auth status...');
+              ref.read(authStateProvider.notifier).checkAuthStatus();
+            }
+          }
+        });
+      }
 
-      // Preload conversations data
-      ref.read(conversationsProvider.notifier).loadConversations();
-
-      // Load user classes
-      ref.read(userClassesProvider);
-
-      debugPrint('✅ Data preloading initiated');
+      // Initialize notifications unread count and load recent notifications
+      if (authState.isAuthenticated && authState.user != null) {
+        debugPrint('🔔 Initializing notifications...');
+        ref.read(notificationsProvider.notifier).initializeWithData();
+      }
     });
   }
 
@@ -148,48 +162,69 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
+    final currentIndex = ref.watch(globalBottomNavigationProvider);
+
+    debugPrint(
+        '🏠 EnhancedHomePage: Building with user: ${user?.email ?? 'null'}');
+    debugPrint(
+        '🔐 EnhancedHomePage: isAuthenticated: ${authState.isAuthenticated}');
 
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      debugPrint('⚠️ EnhancedHomePage: User is null, showing loading');
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              const Text(
+                'Loading user data...',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () {
+                  debugPrint('🔄 Manual refresh authentication state');
+                  ref.read(authStateProvider.notifier).checkAuthStatus();
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
+    debugPrint(
+        '✅ EnhancedHomePage: Rendering main content for user: ${user.email}');
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildEnhancedHomeTab(user),
-          const ConversationsPage(),
-          _buildAllClassesTab(user),
-          _buildProfileTab(user),
-        ],
+      drawer: const GlobalAppDrawer(),
+      body: SafeArea(
+        child: IndexedStack(
+          index: currentIndex,
+          children: [
+            _buildEnhancedHomeTab(user),
+            _buildConversationsTab(),
+            _buildAllClassesTab(user),
+            const StudentAttendancePage(),
+            _buildProfileTab(user),
+          ],
+        ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        selectedItemColor: AppTheme.primaryColor,
-        unselectedItemColor: AppTheme.textSecondary,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
-            label: 'Messages',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.class_),
-            label: 'Classes',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
+      bottomNavigationBar: GlobalBottomNavigation(
+        currentIndex: currentIndex,
+        onTap: (index) {
+          ref
+              .read(globalBottomNavigationProvider.notifier)
+              .setCurrentIndex(index);
+        },
       ),
     );
   }
@@ -197,110 +232,220 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget _buildEnhancedHomeTab(User user) {
     final userClassesAsync = ref.watch(userClassesProvider);
 
-    return CustomScrollView(
-      slivers: [
-        SliverAppBar(
-          expandedHeight: 160,
-          floating: false,
-          pinned: true,
-          elevation: 0,
-          backgroundColor: AppTheme.primaryColor,
-          leading: Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(
-                Icons.menu,
-                color: Colors.white,
-                size: 24,
+    return RefreshIndicator(
+      onRefresh: () async {
+        // Refresh classes data
+        ref.invalidate(userClassesProvider);
+        // Refresh notifications
+        ref
+            .read(notificationsProvider.notifier)
+            .loadNotifications(refresh: true);
+        // Wait for the refresh to complete
+        await ref.read(userClassesProvider.future);
+      },
+      child: CustomScrollView(
+        slivers: [
+          // Enhanced Header with User Info
+          SliverAppBar(
+            expandedHeight: 160,
+            floating: false,
+            pinned: true,
+            elevation: 0,
+            backgroundColor: AppTheme.primaryColor,
+            leading: Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(
+                  Icons.menu,
+                  color: Colors.white,
+                  size: 24,
+                ),
+                onPressed: () => Scaffold.of(context).openDrawer(),
               ),
-              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+            actions: [
+              _buildNotificationButton(),
+              const SizedBox(width: 8),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              title: const Text(
+                'Dashboard',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              background: _buildHeaderBackground(user),
             ),
           ),
-          actions: [
-            Consumer(
-              builder: (context, ref, child) {
-                final unreadCount = ref.watch(unreadNotificationsCountProvider);
-                return Stack(
+
+          // Quick Stats Bar (Pinned)
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _QuickStatsDelegate(ref.watch(quickStatsProvider)),
+          ),
+
+          // My Classes Section
+          SliverToBoxAdapter(
+            child: _buildMyClassesSection(userClassesAsync),
+          ),
+
+          // Recent Activity Feed
+          SliverToBoxAdapter(
+            child: _buildRecentActivitySection(),
+          ),
+
+          // Recent Assignments (Teacher)
+          SliverToBoxAdapter(
+            child: _buildRecentAssignmentsSection(),
+          ),
+
+          // Quick Actions Section
+          SliverToBoxAdapter(
+            child: _buildQuickActionsSection(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentAssignmentsSection() {
+    final authState = ref.watch(authStateProvider);
+    final user = authState.user;
+    if (user == null || user.userType != UserType.teacher) {
+      return const SizedBox.shrink();
+    }
+
+    final assignmentsFuture = ref.watch(_recentAssignmentsProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Recent Assignments',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          assignmentsFuture.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(16),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+            error: (e, st) {
+              debugPrint('⚠️ Recent assignments error: $e');
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'No recent assignments',
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
+              );
+            },
+            data: (items) {
+              if (items.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'No recent assignments',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
+                );
+              }
+
+              return Column(
+                children:
+                    items.take(5).map((a) => _buildAssignmentRow(a)).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssignmentRow(Map<String, dynamic> assignment) {
+    final title = assignment['title'] as String? ?? 'Assignment';
+    final type = assignment['type'] as String? ?? 'assignment';
+    final subjectName = assignment['subject'] != null
+        ? (assignment['subject']['name'] as String? ?? '')
+        : '';
+    final dueDateStr = assignment['due_date'] as String?;
+
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Color(0xFFE5E5E5), width: 0.5),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Icon(
+            type == 'test'
+                ? Icons.quiz
+                : type == 'final_exam'
+                    ? Icons.fact_check
+                    : Icons.assignment,
+            color: AppTheme.primaryColor,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.notifications_outlined,
-                        color: Colors.white,
-                        size: 24,
+                    if (subjectName.isNotEmpty)
+                      Text(
+                        subjectName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => const NotificationsPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    if (unreadCount > 0)
-                      Positioned(
-                        right: 8,
-                        top: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 16,
-                            minHeight: 16,
-                          ),
-                          child: Text(
-                            unreadCount > 99 ? '99+' : unreadCount.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+                    if (subjectName.isNotEmpty && dueDateStr != null)
+                      const Text(' • '),
+                    if (dueDateStr != null)
+                      Text(
+                        dueDateStr,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
                         ),
                       ),
                   ],
-                );
-              },
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-          ],
-          flexibleSpace: FlexibleSpaceBar(
-            title: const Text(
-              'Dashboard',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            background: _buildHeaderBackground(user),
           ),
-        ),
-
-        // Quick Stats Bar
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _QuickStatsDelegate(userClassesAsync),
-        ),
-
-        // My Classes Section
-        SliverToBoxAdapter(
-          child: _buildMyClassesSection(userClassesAsync),
-        ),
-
-        // Recent Activity Section
-        SliverToBoxAdapter(
-          child: _buildRecentActivitySection(),
-        ),
-
-        // Quick Actions Section
-        SliverToBoxAdapter(
-          child: _buildQuickActionsSection(),
-        ),
-      ],
+          const Icon(Icons.chevron_right,
+              size: 18, color: AppTheme.textSecondary),
+        ],
+      ),
     );
   }
+
+  static final _recentAssignmentsProvider =
+      FutureProvider<List<Map<String, dynamic>>>((ref) async {
+    final service = ref.read(assignmentsServiceProvider);
+    return await service.getRecentAssignments(limit: 5);
+  });
 
   Widget _buildHeaderBackground(User user) {
     return Container(
@@ -315,11 +460,12 @@ class _HomePageState extends ConsumerState<HomePage> {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.only(left: 16, bottom: 50),
+        padding: const EdgeInsets.only(
+            left: 72, right: 16, bottom: 50), // Added space for hamburger menu
         child: Row(
           children: [
             CircleAvatar(
-              radius: 28,
+              radius: 25,
               backgroundColor: Colors.white.withValues(alpha: 0.2),
               backgroundImage:
                   user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
@@ -328,7 +474,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       '${user.firstName[0]}${user.lastName[0]}',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
                     )
@@ -351,26 +497,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                     user.firstName,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 22,
+                      fontSize: 20,
                       fontWeight: FontWeight.w600,
                     ),
-                  ),
-                  Container(
-                    margin: const EdgeInsets.only(top: 4),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _getUserTypeLabel(user.userType),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -399,14 +530,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
               ),
               TextButton(
-                onPressed: () => setState(() => _currentIndex = 2),
+                onPressed: () => ref
+                    .read(globalBottomNavigationProvider.notifier)
+                    .setCurrentIndex(2),
                 child: const Text('View All'),
               ),
             ],
           ),
           const SizedBox(height: 12),
           userClassesAsync.when(
-            loading: () => _buildClassesLoadingSkeleton(),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, stack) => _buildErrorCard(error.toString()),
             data: (classes) => _buildClassesGrid(classes),
           ),
@@ -420,139 +553,114 @@ class _HomePageState extends ConsumerState<HomePage> {
       return _buildEmptyClassesCard();
     }
 
-    // Show maximum 4 classes in home tab
+    // Show maximum 4 classes in home tab as 2 cards per row
     final displayClasses = classes.take(4).toList();
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.1,
-      ),
-      itemCount: displayClasses.length,
-      itemBuilder: (context, index) {
-        return _buildEnhancedClassCard(displayClasses[index]);
-      },
+    // Group classes into rows of 2
+    final rows = <List<ClassModel>>[];
+    for (int i = 0; i < displayClasses.length; i += 2) {
+      final endIndex =
+          (i + 2 < displayClasses.length) ? i + 2 : displayClasses.length;
+      rows.add(displayClasses.sublist(i, endIndex));
+    }
+
+    return Column(
+      children: rows.map((rowClasses) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildCompactClassCard(rowClasses[0]),
+              ),
+              if (rowClasses.length > 1) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildCompactClassCard(rowClasses[1]),
+                ),
+              ] else
+                const Expanded(child: SizedBox()),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
-  Widget _buildEnhancedClassCard(ClassModel classModel) {
-    final activityAsync = ref.watch(classActivityProvider(classModel.id));
-
+  Widget _buildCompactClassCard(ClassModel classModel) {
     return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      key: ValueKey('class_card_${classModel.id}'),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () => _navigateToClassDetails(classModel),
-        borderRadius: BorderRadius.circular(16),
+        onTap: () => _navigateToClassDetails(classModel, context),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          height: 120,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                AppTheme.primaryColor.withValues(alpha: 0.08),
-                AppTheme.primaryColor.withValues(alpha: 0.02),
+                AppTheme.primaryColor,
+                AppTheme.primaryColor.withValues(alpha: 0.8),
               ],
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.class_,
-                      color: AppTheme.primaryColor,
-                      size: 20,
-                    ),
-                  ),
-                  const Spacer(),
-                  activityAsync.when(
-                    data: (activity) => activity.totalUnread > 0
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              activity.totalUnread > 99
-                                  ? '99+'
-                                  : activity.totalUnread.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                    loading: () => const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    error: (_, __) => const SizedBox.shrink(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                classModel.name,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (classModel.displayName != classModel.name) ...[
-                const SizedBox(height: 2),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Class name
                 Text(
-                  classModel.displayName,
+                  classModel.name,
                   style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.textSecondary,
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+
+                // Class details
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      classModel.academicYear,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.people,
+                          color: Colors.white.withValues(alpha: 0.8),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${classModel.studentsCount ?? 0}',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ],
-              const Spacer(),
-              activityAsync.when(
-                data: (activity) => activity.recentActivity != null
-                    ? Text(
-                        activity.recentActivity!,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: AppTheme.textSecondary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                    : Text(
-                        '${classModel.studentsCount ?? 0} students',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -560,157 +668,137 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildRecentActivitySection() {
+    final notificationsState = ref.watch(notificationsProvider);
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Recent Activity',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Recent Notifications',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationsPage(),
+                    ),
+                  );
+                },
+                child: const Text('View All'),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
-          _buildRecentActivityList(),
+          _buildRecentNotificationsList(notificationsState),
         ],
       ),
     );
   }
 
-  Widget _buildRecentActivityList() {
-    final recentUpdatesAsync = ref.watch(recentUpdatesProvider);
+  Widget _buildRecentNotificationsList(NotificationsState notificationsState) {
+    if (notificationsState.isLoading &&
+        notificationsState.notifications.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-    return recentUpdatesAsync.when(
-      loading: () => const Center(
+    if (notificationsState.notifications.isEmpty) {
+      return Card(
         child: Padding(
-          padding: EdgeInsets.all(32),
-          child: CircularProgressIndicator(),
-        ),
-      ),
-      error: (error, stack) => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Text(
-            'Unable to load recent activities',
-            style: TextStyle(color: AppTheme.textSecondary),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Icon(Icons.notifications_outlined,
+                  size: 48, color: Colors.grey[400]),
+              const SizedBox(height: 8),
+              const Text(
+                'No recent notifications',
+                style: TextStyle(color: AppTheme.textSecondary),
+              ),
+            ],
           ),
         ),
-      ),
-      data: (updates) {
-        if (updates.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(32),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.announcement_outlined,
-                    size: 48,
-                    color: Colors.grey,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'No recent activities',
-                    style: TextStyle(color: AppTheme.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
+      );
+    }
 
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: updates.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            return _buildUpdateActivityTile(updates[index]);
-          },
-        );
+    // Show only the 3 most recent notifications
+    final recentNotifications =
+        notificationsState.notifications.take(3).toList();
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: recentNotifications.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        return _buildNotificationTile(recentNotifications[index]);
       },
     );
   }
 
-  Widget _buildUpdateActivityTile(ClassUpdateWithClass updateWithClass) {
-    final update = updateWithClass.update;
-
-    IconData icon;
-    Color color;
-
-    switch (update.updateType) {
-      case UpdateType.homework:
-        icon = Icons.book;
-        color = AppTheme.errorColor;
-        break;
-      case UpdateType.announcement:
-        icon = Icons.announcement;
-        color = AppTheme.infoColor;
-        break;
-      case UpdateType.event:
-        icon = Icons.event;
-        color = AppTheme.successColor;
-        break;
-      case UpdateType.reminder:
-        icon = Icons.schedule;
-        color = AppTheme.warningColor;
-        break;
-    }
-
+  Widget _buildNotificationTile(NotificationModel notification) {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _navigateToSpecificUpdate(updateWithClass),
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.1),
-            child: Icon(
-              icon,
-              color: color,
-              size: 20,
-            ),
-          ),
-          title: Text(
-            update.title ?? 'Class Update',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimary,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                updateWithClass.className,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                app_date_utils.DateUtils.formatRelativeTime(update.createdAt),
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          trailing: const Icon(
-            Icons.arrow_forward_ios,
-            size: 16,
-            color: AppTheme.textSecondary,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: _getNotificationTypeColor(notification.type)
+              .withValues(alpha: 0.1),
+          child: Icon(
+            _getNotificationTypeIcon(notification.type),
+            color: _getNotificationTypeColor(notification.type),
+            size: 20,
           ),
         ),
+        title: Text(
+          notification.title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: notification.isRead ? FontWeight.w400 : FontWeight.w600,
+            color: AppTheme.textPrimary,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          '${notification.content} • ${_formatNotificationTime(notification.createdAt)}',
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppTheme.textSecondary,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!notification.isRead)
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppTheme.primaryColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: AppTheme.textSecondary,
+            ),
+          ],
+        ),
+        onTap: () => _handleNotificationTap(notification),
       ),
     );
   }
@@ -730,34 +818,119 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ),
           const SizedBox(height: 12),
+          _buildQuickActionsGrid(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsGrid() {
+    final authState = ref.watch(authStateProvider);
+    final currentUser = authState.user;
+
+    List<Widget> quickActions = [];
+
+    // Common actions for all users
+    quickActions.add(
+      _buildQuickActionCard(
+        title: 'New Message',
+        icon: Icons.add_comment,
+        color: AppTheme.successColor,
+        onTap: () => ref
+            .read(globalBottomNavigationProvider.notifier)
+            .setCurrentIndex(1),
+      ),
+    );
+
+    // Student-specific actions
+    if (currentUser?.userType == UserType.student) {
+      quickActions.add(
+        _buildQuickActionCard(
+          title: 'Mark Attendance',
+          icon: Icons.location_on,
+          color: AppTheme.primaryColor,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const StudentAttendancePage(),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // General actions for all users
+    quickActions.add(
+      _buildQuickActionCard(
+        title: 'View Schedule',
+        icon: Icons.schedule,
+        color: AppTheme.infoColor,
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Schedule feature coming soon')),
+          );
+        },
+      ),
+    );
+
+    // If teacher, add class management shortcuts
+    if (currentUser?.userType == UserType.teacher) {
+      quickActions.add(
+        _buildQuickActionCard(
+          title: 'My Subjects',
+          icon: Icons.book,
+          color: AppTheme.accentColor,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const SubjectsMainPage(),
+              ),
+            );
+          },
+        ),
+      );
+
+      quickActions.add(
+        _buildQuickActionCard(
+          title: 'Manage Classes',
+          icon: Icons.class_,
+          color: AppTheme.primaryColor,
+          onTap: () => ref
+              .read(globalBottomNavigationProvider.notifier)
+              .setCurrentIndex(2), // Assuming class management is at index 2
+        ),
+      );
+    }
+
+    // Build grid layout
+    return Column(
+      children: [
+        Row(
+          children: [
+            if (quickActions.isNotEmpty) Expanded(child: quickActions[0]),
+            if (quickActions.length > 1) ...[
+              const SizedBox(width: 12),
+              Expanded(child: quickActions[1]),
+            ],
+          ],
+        ),
+        if (quickActions.length > 2) ...[
+          const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _buildQuickActionCard(
-                  title: 'New Message',
-                  icon: Icons.add_comment,
-                  color: AppTheme.successColor,
-                  onTap: () => setState(() => _currentIndex = 1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuickActionCard(
-                  title: 'View Schedule',
-                  icon: Icons.schedule,
-                  color: AppTheme.infoColor,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Schedule feature coming soon')),
-                    );
-                  },
-                ),
-              ),
+              Expanded(child: quickActions[2]),
+              if (quickActions.length > 3) ...[
+                const SizedBox(width: 12),
+                Expanded(child: quickActions[3]),
+              ] else
+                const Expanded(child: SizedBox()),
             ],
           ),
         ],
-      ),
+      ],
     );
   }
 
@@ -803,111 +976,230 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  // Helper widgets
-  Widget _buildClassesLoadingSkeleton() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.1,
-      ),
-      itemCount: 4,
-      itemBuilder: (context, index) {
-        return Card(
-          elevation: 3,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+  // Helper methods and remaining widgets...
+  Widget _buildConversationsTab() {
+    return const ConversationsPage();
+  }
+
+  Widget _buildAllClassesTab(User user) {
+    return _ClassManagementTabView();
+  }
+
+  Widget _buildProfileTab(User user) {
+    return Container(
+      color: AppTheme.backgroundColor,
+      child: CustomScrollView(
+        slivers: [
+          // Profile header with action buttons
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Profile',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
                     ),
-                    const Spacer(),
-                    Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(10),
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'settings':
+                          // TODO: Navigate to settings
+                          break;
+                        case 'test_401':
+                          // Test 401 handling and navigation
+                          GlobalAuthHandler.test401Handler();
+                          break;
+                        case 'force_logout':
+                          // Test force immediate logout
+                          GlobalAuthHandler.forceImmediateLogout();
+                          break;
+                        case 'logout':
+                          _showLogoutDialog();
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'settings',
+                        child: Row(
+                          children: [
+                            Icon(Icons.settings, size: 20),
+                            SizedBox(width: 8),
+                            Text('Settings'),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(4),
+                      const PopupMenuItem(
+                        value: 'logout',
+                        child: Row(
+                          children: [
+                            Icon(Icons.logout,
+                                size: 20, color: AppTheme.errorColor),
+                            SizedBox(width: 8),
+                            Text('Logout',
+                                style: TextStyle(color: AppTheme.errorColor)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  width: 80,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  width: 60,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        );
-      },
+
+          // Profile content
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // Profile Header
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: AppTheme.primaryColor,
+                          backgroundImage: user.avatarUrl != null
+                              ? NetworkImage(user.avatarUrl!)
+                              : null,
+                          child: user.avatarUrl == null
+                              ? Text(
+                                  '${user.firstName[0]}${user.lastName[0]}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          user.displayName,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          user.email,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _getUserTypeColor(user.userType)
+                                .withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _getUserTypeLabel(user.userType),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _getUserTypeColor(user.userType),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Profile Info
+                  _buildInfoSection('Personal Information', [
+                    _buildInfoTile('Phone', user.phone ?? 'Not provided'),
+                    _buildInfoTile('Role',
+                        user.role?.name.toUpperCase() ?? 'Not assigned'),
+                    _buildInfoTile(
+                        'School', user.school?.name ?? 'Not assigned'),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationButton() {
+    final unreadCount = ref.watch(unreadNotificationsCountProvider);
+
+    return Stack(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const NotificationsPage(),
+              ),
+            );
+          },
+        ),
+        if (unreadCount > 0)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Text(
+                unreadCount > 99 ? '99+' : unreadCount.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
     );
   }
 
   Widget _buildEmptyClassesCard() {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(24),
         child: Column(
           children: [
             Icon(Icons.class_, size: 48, color: Colors.grey[400]),
-            const SizedBox(height: 12),
-            const Text(
-              'No classes assigned yet',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.textSecondary,
-              ),
-            ),
             const SizedBox(height: 8),
-            const Text(
-              'Contact your administrator to get enrolled in classes',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            const Text('No classes assigned yet'),
           ],
         ),
       ),
@@ -916,224 +1208,255 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildErrorCard(String error) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 48),
-            const SizedBox(height: 12),
-            const Text(
-              'Error loading classes',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                ref.invalidate(userClassesProvider);
-              },
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Navigation methods
-  void _navigateToClassDetails(ClassModel classModel) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ClassUpdatesPage(
-          classId: classModel.id,
-          className: classModel.name,
-        ),
-      ),
-    );
-  }
-
-  // Other tabs (keeping existing implementation)
-  Widget _buildAllClassesTab(User user) {
-    return const ClassManagementPage();
-  }
-
-  Widget _buildProfileTab(User user) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: const Text('Profile'),
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'settings':
-                  // TODO: Navigate to settings
-                  break;
-                case 'test_401':
-                  // Test 401 handling and navigation
-                  GlobalAuthHandler.test401Handler();
-                  break;
-                case 'force_logout':
-                  // Test force immediate logout
-                  GlobalAuthHandler.forceImmediateLogout();
-                  break;
-                case 'logout':
-                  _showLogoutDialog();
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'settings',
-                child: Row(
-                  children: [
-                    Icon(Icons.settings, size: 20),
-                    SizedBox(width: 8),
-                    Text('Settings'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'test_401',
-                child: Row(
-                  children: [
-                    Icon(Icons.bug_report, size: 20, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Text('Test 401 Handler',
-                        style: TextStyle(color: Colors.orange)),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'force_logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.exit_to_app, size: 20, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('Force Logout (Test)',
-                        style: TextStyle(color: Colors.red)),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout, size: 20, color: AppTheme.errorColor),
-                    SizedBox(width: 8),
-                    Text('Logout',
-                        style: TextStyle(color: AppTheme.errorColor)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Profile Header
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: AppTheme.primaryColor,
-                    backgroundImage: user.avatarUrl != null
-                        ? NetworkImage(user.avatarUrl!)
-                        : null,
-                    child: user.avatarUrl == null
-                        ? Text(
-                            '${user.firstName[0]}${user.lastName[0]}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          )
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    user.displayName,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    user.email,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _getUserTypeColor(user.userType)
-                          .withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _getUserTypeLabel(user.userType),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _getUserTypeColor(user.userType),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Profile Info
-            _buildInfoSection('Personal Information', [
-              _buildInfoTile('Phone', user.phone ?? 'Not provided'),
-              _buildInfoTile(
-                  'Role', user.role?.name.toUpperCase() ?? 'Not assigned'),
-              _buildInfoTile('School', user.school?.name ?? 'Not assigned'),
-            ]),
+            const Icon(Icons.error, color: Colors.red),
+            const SizedBox(height: 8),
+            Text('Error loading classes: $error'),
           ],
         ),
       ),
     );
+  }
+
+  // Navigation and utility methods
+  void _navigateToClassDetails(ClassModel classModel, BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ClassDetailsPage(
+          classModel: classModel,
+          bottomNavigationBar: const GlobalBottomNavigation(
+            currentIndex: 2, // Classes tab
+            isDetailPage: true,
+          ),
+          showBackButton: true,
+        ),
+      ),
+    );
+  }
+
+  void _handleNotificationTap(NotificationModel notification) async {
+    // Mark notification as read when tapped
+    if (!notification.isRead) {
+      ref.read(notificationsProvider.notifier).markAsRead(notification.id);
+    }
+
+    // Navigate based on notification type and action data
+    try {
+      switch (notification.type) {
+        case NotificationType.message:
+          await _navigateToConversation(notification);
+          break;
+        case NotificationType.assignment:
+          await _navigateToClassUpdates(notification);
+          break;
+        case NotificationType.announcement:
+          await _navigateToClassUpdates(notification);
+          break;
+        case NotificationType.event:
+        case NotificationType.system:
+          // For other types, just navigate to notifications page
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const NotificationsPage(),
+            ),
+          );
+          break;
+      }
+    } catch (e) {
+      debugPrint('Error handling notification tap: $e');
+      // Fallback: navigate to notifications page
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const NotificationsPage(),
+        ),
+      );
+    }
+  }
+
+  Future<void> _navigateToConversation(NotificationModel notification) async {
+    final actionData = notification.actionData;
+    if (actionData == null) {
+      // Fallback: navigate to conversations tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(1);
+      return;
+    }
+
+    final conversationId = actionData['conversation_id'] as String?;
+    final messageId = actionData['message_id'] as String?;
+
+    if (conversationId == null) {
+      // Fallback: navigate to conversations tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(1);
+      return;
+    }
+
+    try {
+      // Load the specific conversation
+      final conversation = await _loadConversation(conversationId);
+      if (conversation == null) {
+        // Fallback: navigate to conversations tab
+        ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(1);
+        return;
+      }
+
+      // Navigate to chat page with message highlighting support
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => LocalChatPage(
+            conversation: conversation,
+            highlightMessageId: messageId,
+            scrollToMessage: messageId != null,
+          ),
+        ),
+      );
+
+      debugPrint(
+          'Navigating to conversation: $conversationId, message: $messageId');
+    } catch (e) {
+      debugPrint('Error navigating to conversation: $e');
+      // Fallback: navigate to conversations tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(1);
+    }
+  }
+
+  Future<void> _navigateToClassUpdates(NotificationModel notification) async {
+    final actionData = notification.actionData;
+    if (actionData == null) {
+      // Fallback: navigate to classes tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(2);
+      return;
+    }
+
+    final classId = actionData['class_id'] as String?;
+    final updateId = actionData['update_id'] as String?;
+    final className = actionData['class_name'] as String?;
+
+    if (classId == null) {
+      // Fallback: navigate to classes tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(2);
+      return;
+    }
+
+    try {
+      // Navigate to class updates page with update highlighting
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ClassUpdatesPage(
+            classId: classId,
+            className: className ?? 'Class Updates',
+            highlightUpdateId: updateId,
+            scrollToUpdate: updateId != null,
+          ),
+        ),
+      );
+
+      debugPrint('Navigating to class updates: $classId, update: $updateId');
+    } catch (e) {
+      debugPrint('Error navigating to class updates: $e');
+      // Fallback: navigate to classes tab
+      ref.read(globalBottomNavigationProvider.notifier).setCurrentIndex(2);
+    }
+  }
+
+  Future<Conversation?> _loadConversation(String conversationId) async {
+    try {
+      // First check if conversation is already in cache
+      final conversationsState = ref.read(conversationsProvider);
+      final cachedConversation =
+          conversationsState.conversations.cast<Conversation?>().firstWhere(
+                (conv) => conv?.id == conversationId,
+                orElse: () => null,
+              );
+
+      if (cachedConversation != null) {
+        return cachedConversation;
+      }
+
+      // If not in cache, load from service
+      await ref.read(conversationsProvider.notifier).loadConversations();
+
+      // Try to find it again after refresh
+      final updatedState = ref.read(conversationsProvider);
+      return updatedState.conversations.cast<Conversation?>().firstWhere(
+            (conv) => conv?.id == conversationId,
+            orElse: () => null,
+          );
+    } catch (e) {
+      debugPrint('Error loading conversation: $e');
+      return null;
+    }
+  }
+
+  Color _getNotificationTypeColor(NotificationType type) {
+    switch (type) {
+      case NotificationType.message:
+        return AppTheme.successColor;
+      case NotificationType.assignment:
+        return AppTheme.warningColor;
+      case NotificationType.announcement:
+        return AppTheme.primaryColor;
+      case NotificationType.event:
+        return AppTheme.infoColor;
+      case NotificationType.system:
+        return AppTheme.textSecondary;
+    }
+  }
+
+  IconData _getNotificationTypeIcon(NotificationType type) {
+    switch (type) {
+      case NotificationType.message:
+        return Icons.message;
+      case NotificationType.assignment:
+        return Icons.assignment;
+      case NotificationType.announcement:
+        return Icons.campaign;
+      case NotificationType.event:
+        return Icons.event;
+      case NotificationType.system:
+        return Icons.settings;
+    }
+  }
+
+  String _formatNotificationTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inDays < 1) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
+
+  Color _getUserTypeColor(UserType userType) {
+    switch (userType) {
+      case UserType.teacher:
+        return AppTheme.primaryColor;
+      case UserType.student:
+        return AppTheme.successColor;
+      case UserType.parent:
+        return AppTheme.infoColor;
+    }
+  }
+
+  String _getUserTypeLabel(UserType userType) {
+    switch (userType) {
+      case UserType.teacher:
+        return 'Teacher';
+      case UserType.student:
+        return 'Student';
+      case UserType.parent:
+        return 'Parent';
+    }
   }
 
   Widget _buildInfoSection(String title, List<Widget> children) {
@@ -1197,28 +1520,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Color _getUserTypeColor(UserType userType) {
-    switch (userType) {
-      case UserType.teacher:
-        return AppTheme.primaryColor;
-      case UserType.student:
-        return AppTheme.successColor;
-      case UserType.parent:
-        return AppTheme.infoColor;
-    }
-  }
-
-  String _getUserTypeLabel(UserType userType) {
-    switch (userType) {
-      case UserType.teacher:
-        return 'Teacher';
-      case UserType.student:
-        return 'Student';
-      case UserType.parent:
-        return 'Parent';
-    }
-  }
-
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -1268,31 +1569,236 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
     );
   }
+}
 
-  void _navigateToSpecificUpdate(ClassUpdateWithClass updateWithClass) {
+// Custom tab view for class management without scaffold
+
+class _ClassManagementTabView extends ConsumerWidget {
+  const _ClassManagementTabView();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userClassesAsync = ref.watch(userClassesProvider);
+    final authState = ref.watch(authStateProvider);
+    final currentUser = authState.user;
+
+    return Container(
+      color: AppTheme.backgroundColor,
+      child: Column(
+        children: [
+          // Custom app bar for tab view
+          Container(
+            color: AppTheme.primaryColor,
+            child: SafeArea(
+              bottom: false,
+              child: Container(
+                height: 56,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Class Management',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (currentUser?.userType == UserType.teacher)
+                      IconButton(
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        onPressed: () => _showCreateClassDialog(context, ref),
+                        tooltip: 'Create Class',
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Content
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(userClassesProvider);
+              },
+              child: userClassesAsync.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+                error: (error, stack) =>
+                    _buildErrorState(error.toString(), ref),
+                data: (classes) =>
+                    _buildClassList(classes, currentUser, context, ref),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassList(List<ClassModel> classes, User? currentUser,
+      BuildContext context, WidgetRef ref) {
+    if (classes.isEmpty) {
+      return _buildEmptyState(currentUser, context, ref);
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: classes.length,
+      itemBuilder: (context, index) {
+        final classModel = classes[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: ClassCard(
+            classModel: classModel,
+            onTap: () => _navigateToClassDetails(classModel, context),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(
+      User? currentUser, BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.school_outlined,
+            size: 80,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            currentUser?.userType == UserType.teacher
+                ? 'No classes assigned yet'
+                : 'You are not enrolled in any classes',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            currentUser?.userType == UserType.teacher
+                ? 'Create a new class or contact your administrator'
+                : 'Contact your teacher for class enrollment',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          if (currentUser?.userType == UserType.teacher) ...[
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => _showCreateClassDialog(context, ref),
+              icon: const Icon(Icons.add),
+              label: const Text('Create Class'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 80,
+            color: Colors.red[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Something went wrong',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              ref.invalidate(userClassesProvider);
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Try Again'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToClassDetails(ClassModel classModel, BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => ClassUpdatesPage(
-          classId: updateWithClass.classId,
-          className: updateWithClass.className,
-          highlightUpdateId: updateWithClass.update.id,
-          scrollToUpdate: true,
+        builder: (context) => ClassDetailsPage(
+          classModel: classModel,
+          bottomNavigationBar: const GlobalBottomNavigation(
+            currentIndex: 2, // Classes tab
+            isDetailPage: true,
+          ),
+          showBackButton: false,
         ),
       ),
     );
   }
+
+  // Removed _buildBottomNavigationForDetails method - now using GlobalBottomNavigation
+
+  void _showCreateClassDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => CreateClassDialog(
+        onClassCreated: () {
+          ref.invalidate(userClassesProvider);
+        },
+      ),
+    );
+  }
+
+  // (Duplicate Quick Actions section removed; use the grid-based one earlier in file)
 }
 
 // Quick Stats Delegate for pinned header
 class _QuickStatsDelegate extends SliverPersistentHeaderDelegate {
-  final AsyncValue<List<ClassModel>> userClassesAsync;
+  final Map<String, String> stats;
 
-  _QuickStatsDelegate(this.userClassesAsync);
+  _QuickStatsDelegate(this.stats);
 
   @override
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
+      height: 80, // Explicit height to match extent
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -1304,18 +1810,14 @@ class _QuickStatsDelegate extends SliverPersistentHeaderDelegate {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Row(
           children: [
-            _buildQuickStat(
-                'Classes',
-                userClassesAsync.hasValue
-                    ? userClassesAsync.value!.length.toString()
-                    : '-'),
+            _buildQuickStat('Total Classes', stats['Classes'] ?? '-'),
             const SizedBox(width: 24),
-            _buildQuickStat('Unread', '8'),
+            _buildQuickStat('Unread', stats['Unread'] ?? '-'),
             const SizedBox(width: 24),
-            _buildQuickStat('Today', '3'),
+            _buildQuickStat('Today', stats['Today'] ?? '-'),
           ],
         ),
       ),
@@ -1323,37 +1825,68 @@ class _QuickStatsDelegate extends SliverPersistentHeaderDelegate {
   }
 
   Widget _buildQuickStat(String label, String value) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.primaryColor,
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.primaryColor,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: AppTheme.textSecondary,
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppTheme.textSecondary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   @override
-  double get maxExtent => 70;
+  double get maxExtent => 80;
 
   @override
-  double get minExtent => 70;
+  double get minExtent => 80;
 
   @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
-      true;
+  bool shouldRebuild(covariant _QuickStatsDelegate oldDelegate) {
+    // Only rebuild if the stats have actually changed
+    return stats != oldDelegate.stats;
+  }
 }
 
 // Supporting data classes
+class RecentActivity {
+  final String title;
+  final String subtitle;
+  final String time;
+  final ActivityType type;
+  final String classId;
+
+  RecentActivity({
+    required this.title,
+    required this.subtitle,
+    required this.time,
+    required this.type,
+    required this.classId,
+  });
+}
+
+enum ActivityType {
+  message,
+  assignment,
+  update,
+}

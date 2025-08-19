@@ -4,10 +4,13 @@ import '../../core/constants/app_theme.dart';
 import '../../core/utils/global_auth_handler.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
-import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/class_management/presentation/pages/class_management_page.dart';
-import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/chat/presentation/pages/conversations_page.dart';
+
+import '../../features/attendance/presentation/pages/school_attendance_settings_page.dart';
+import '../../features/settings/presentation/pages/admin_settings_page.dart';
+import '../../features/subjects/presentation/pages/subjects_main_page.dart';
+import '../../features/assignments/presentation/pages/assignments_main_page.dart';
 
 class GlobalAppDrawer extends ConsumerWidget {
   const GlobalAppDrawer({super.key});
@@ -48,10 +51,25 @@ class GlobalAppDrawer extends ConsumerWidget {
                   ),
                   _buildDrawerItem(
                     context,
+                    icon: Icons.book,
+                    title: 'My Subjects',
+                    onTap: () => _navigateToSubjects(context, user),
+                  ),
+                  _buildDrawerItem(
+                    context,
                     icon: Icons.assignment,
                     title: 'Assignments',
                     onTap: () => _navigateToAssignments(context),
                   ),
+                  if (user.role == UserRole.admin) ...[
+                    const Divider(height: 32),
+                    _buildDrawerItem(
+                      context,
+                      icon: Icons.settings,
+                      title: 'Settings',
+                      onTap: () => _navigateToAdminSettings(context),
+                    ),
+                  ],
                   const Divider(height: 32),
                   _buildDrawerItem(
                     context,
@@ -207,7 +225,7 @@ class GlobalAppDrawer extends ConsumerWidget {
           ),
         ),
       ),
-      child: Row(
+      child: const Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
@@ -244,21 +262,44 @@ class GlobalAppDrawer extends ConsumerWidget {
     );
   }
 
-  void _navigateToClassUpdates(BuildContext context) {
+  // Removed outdated navigation entries for subjects and class updates
+
+  void _navigateToSubjects(BuildContext context, User user) {
     Navigator.of(context).pop(); // Close drawer
-    // Navigate to class updates - for now show snackbar
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content:
-            Text('Please select a class from Classes page to view updates'),
+
+    // All users (teachers, students, parents, admins) use the same subjects page
+    // The API will return appropriate data based on the current user's role
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const SubjectsMainPage(),
       ),
     );
   }
 
   void _navigateToAssignments(BuildContext context) {
     Navigator.of(context).pop(); // Close drawer
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Assignments feature coming soon')),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const AssignmentsMainPage(),
+      ),
+    );
+  }
+
+  void _navigateToSchoolSettings(BuildContext context) {
+    Navigator.of(context).pop(); // Close drawer
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const SchoolAttendanceSettingsPage(),
+      ),
+    );
+  }
+
+  void _navigateToAdminSettings(BuildContext context) {
+    Navigator.of(context).pop(); // Close drawer
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const AdminSettingsPage(),
+      ),
     );
   }
 

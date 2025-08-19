@@ -13,17 +13,19 @@ import '../../../../shared/widgets/global_app_drawer.dart';
 import '../../../../shared/widgets/global_bottom_navigation.dart';
 import '../../../../core/utils/date_utils.dart' as app_date_utils;
 
-import 'subject_details_page.dart';
 import 'student_list_page.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../attendance/presentation/pages/attendance_management_page.dart';
+import '../../../subjects/presentation/pages/subjects_main_page.dart';
+import '../../../subjects/presentation/pages/subject_offering_details_page.dart';
+import '../../../../shared/services/subjects_service.dart';
 
 // Providers for class details data
 final classSubjectsProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>(
         (ref, classId) async {
   final service = ref.read(classManagementServiceProvider);
-  return await service.getClassSubjects(classId);
+  return await service.getClassOfferings(classId);
 });
 
 final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
@@ -66,31 +68,8 @@ final classTeachersProvider =
 final classAssignmentsProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>(
         (ref, classId) async {
-  // Mock assignments data - replace with actual API call
-  await Future.delayed(const Duration(milliseconds: 300));
-  return [
-    {
-      'id': '1',
-      'title': 'Math Homework Chapter 5',
-      'subject': 'Mathematics',
-      'dueDate': DateTime.now().add(const Duration(days: 2)),
-      'isSubmitted': false,
-    },
-    {
-      'id': '2',
-      'title': 'Science Lab Report',
-      'subject': 'Science',
-      'dueDate': DateTime.now().add(const Duration(days: 5)),
-      'isSubmitted': true,
-    },
-    {
-      'id': '3',
-      'title': 'English Essay',
-      'subject': 'English',
-      'dueDate': DateTime.now().add(const Duration(days: 7)),
-      'isSubmitted': false,
-    },
-  ];
+  final service = ref.read(classManagementServiceProvider);
+  return await service.getClassAssignments(classId, limit: 3);
 });
 
 class ClassDetailsPage extends ConsumerStatefulWidget {
@@ -150,7 +129,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
 
             return CustomScrollView(
               slivers: [
-                _buildSliverAppBar(subjects),
+                _buildSliverAppBar(),
                 SliverToBoxAdapter(
                   child: _buildClassStatistics(),
                 ),
@@ -164,10 +143,10 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                   child: _buildAssignmentsPreview(),
                 ),
                 SliverToBoxAdapter(
-                  child: _buildStudentListPreview(),
+                  child: _buildSubjectsPreview(subjects),
                 ),
                 SliverToBoxAdapter(
-                  child: _buildSubjectsPreview(subjects),
+                  child: _buildStudentListPreview(),
                 ),
               ],
             );
@@ -193,7 +172,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
-  Widget _buildSliverAppBar(List<Map<String, dynamic>> subjects) {
+  Widget _buildSliverAppBar() {
     final teacher = widget.classModel.teachers?.isNotEmpty == true
         ? widget.classModel.teachers!.first
         : null;
@@ -217,8 +196,8 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
         ),
       ),
       actions: [
-        // Attendance management button for teachers
-        if (currentUser?.userType == UserType.teacher)
+        // Attendance management button for homeroom teachers only
+        if (_isCurrentUserHomeroomTeacher(currentUser))
           IconButton(
             icon: const Icon(Icons.fact_check, color: Colors.white),
             tooltip: 'Manage Attendance',
@@ -856,7 +835,13 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 if (hasMore)
                   TextButton(
                     onPressed: () {
-                      // Show all subjects
+                      // Navigate to subjects list page
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SubjectsMainPage(),
+                        ),
+                      );
                     },
                     child: const Text('See more'),
                   ),
@@ -965,9 +950,18 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
   }
 
   Widget _buildAssignmentTile(Map<String, dynamic> assignment) {
-    final dueDate = assignment['dueDate'] as DateTime;
-    final isSubmitted = assignment['isSubmitted'] as bool;
-    final isOverdue = dueDate.isBefore(DateTime.now()) && !isSubmitted;
+    // Parse due date from API response
+    DateTime? dueDate;
+    try {
+      if (assignment['due_date'] != null) {
+        dueDate = DateTime.parse(assignment['due_date']);
+      }
+    } catch (e) {
+      // Handle parsing error gracefully
+    }
+
+    final isPublished = assignment['is_published'] as bool? ?? false;
+    final isOverdue = dueDate != null && dueDate.isBefore(DateTime.now());
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -987,8 +981,8 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
             height: 8,
             margin: const EdgeInsets.only(top: 6),
             decoration: BoxDecoration(
-              color: isSubmitted
-                  ? AppTheme.successColor
+              color: !isPublished
+                  ? AppTheme.textSecondary
                   : isOverdue
                       ? AppTheme.errorColor
                       : AppTheme.warningColor,
@@ -1014,24 +1008,26 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 Row(
                   children: [
                     Text(
-                      assignment['subject'] ?? '',
+                      assignment['type'] ?? 'assignment',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textSecondary,
                       ),
                     ),
-                    const Text(' • '),
-                    Text(
-                      app_date_utils.DateUtils.formatDueDate(dueDate),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isOverdue
-                            ? AppTheme.errorColor
-                            : AppTheme.textSecondary,
-                        fontWeight:
-                            isOverdue ? FontWeight.w500 : FontWeight.normal,
+                    if (dueDate != null) ...[
+                      const Text(' • '),
+                      Text(
+                        app_date_utils.DateUtils.formatDueDate(dueDate),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isOverdue
+                              ? AppTheme.errorColor
+                              : AppTheme.textSecondary,
+                          fontWeight:
+                              isOverdue ? FontWeight.w500 : FontWeight.normal,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -1039,27 +1035,27 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isSubmitted
-                        ? AppTheme.successColor.withValues(alpha: 0.1)
+                    color: !isPublished
+                        ? AppTheme.textSecondary.withValues(alpha: 0.1)
                         : isOverdue
                             ? AppTheme.errorColor.withValues(alpha: 0.1)
-                            : AppTheme.warningColor.withValues(alpha: 0.1),
+                            : AppTheme.successColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    isSubmitted
-                        ? 'Submitted'
+                    !isPublished
+                        ? 'Draft'
                         : isOverdue
                             ? 'Overdue'
-                            : 'Pending',
+                            : 'Active',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
-                      color: isSubmitted
-                          ? AppTheme.successColor
+                      color: !isPublished
+                          ? AppTheme.textSecondary
                           : isOverdue
                               ? AppTheme.errorColor
-                              : AppTheme.warningColor,
+                              : AppTheme.successColor,
                     ),
                   ),
                 ),
@@ -1071,63 +1067,111 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
-  Widget _buildSubjectCard(Map<String, dynamic> subject) {
-    final lessons = subject['lessons'] as List<dynamic>? ?? [];
-    final teacher = subject['teacher'] as Map<String, dynamic>? ?? {};
-
+  Widget _buildSubjectCard(Map<String, dynamic> offering) {
+    final String subjectName =
+        offering['subject_name'] ?? offering['subject']?['name'] ?? 'Subject';
+    final String subjectCode =
+        offering['subject_code'] ?? offering['subject']?['code'] ?? '';
+    final String teacherName = (() {
+      final teacher = offering['teacher'];
+      if (teacher is Map) {
+        final fn = teacher['first_name'] ?? '';
+        final ln = teacher['last_name'] ?? '';
+        final display =
+            [fn, ln].where((s) => (s as String).isNotEmpty).join(' ');
+        if (display.isNotEmpty) return display;
+        return (teacher['email'] as String?) ?? '—';
+      }
+      final fn = offering['first_name'];
+      final ln = offering['last_name'];
+      final display =
+          [fn, ln].whereType<String>().where((s) => s.isNotEmpty).join(' ');
+      return display.isNotEmpty
+          ? display
+          : (offering['email'] as String? ?? '—');
+    })();
+    final int assignmentsCount = offering['assignments_count'] is int
+        ? offering['assignments_count']
+        : 0;
     return Material(
       color: Colors.white,
       child: InkWell(
-        onTap: () => _navigateToSubjectDetails(subject),
+        onTap: () => _navigateToOfferingDetails(offering),
         child: Container(
-          width: double.infinity, // Full width
+          width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(
+              bottom: const BorderSide(
                 color: Color(0xFFE5E5E5),
                 width: 0.5,
+              ),
+              left: const BorderSide(
+                color: Colors.blue,
+                width: 4,
               ),
             ),
           ),
           child: Row(
             children: [
-              // Subject icon - clean and minimal
+              // Subject icon with color
               Container(
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  _getSubjectIcon(subject['subject_name']),
-                  color: AppTheme.primaryColor,
+                  _getSubjectIcon(subjectName),
+                  color: Colors.blue,
                   size: 26,
                 ),
               ),
               const SizedBox(width: 16),
 
-              // Subject content - expanded to take available space
+              // Subject content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Subject name - clean typography
-                    Text(
-                      subject['subject_name'] ?? 'Subject',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                        letterSpacing: -0.2,
-                      ),
+                    // Subject name and code
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            subjectName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            subjectCode,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
 
-                    // Stats row - hours and lessons
+                    // Stats row
                     Text(
-                      '${subject['hours_per_week'] ?? 0} hours/week • ${lessons.length} lessons',
+                      '${widget.classModel.studentsCount ?? 0} students • $assignmentsCount assignments',
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppTheme.textSecondary,
@@ -1136,15 +1180,39 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                     ),
                     const SizedBox(height: 4),
 
-                    // Teacher name - minimal design
-                    Text(
-                      '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'
-                          .trim(),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textSecondary.withValues(alpha: 0.8),
-                        fontWeight: FontWeight.w400,
-                      ),
+                    // Teacher and schedule
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            teacherName,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color:
+                                  AppTheme.textSecondary.withValues(alpha: 0.8),
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                        if (0 > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppTheme.warningColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              'pending',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: AppTheme.warningColor,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
@@ -1167,8 +1235,8 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     final authState = ref.watch(authStateProvider);
     final currentUser = authState.user;
 
-    // Only show quick actions for teachers
-    if (currentUser?.userType != UserType.teacher) {
+    // Only show quick actions for homeroom teachers
+    if (!_isCurrentUserHomeroomTeacher(currentUser)) {
       return const SizedBox.shrink();
     }
 
@@ -1488,18 +1556,115 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     }
   }
 
-  void _navigateToSubjectDetails(Map<String, dynamic> subject) {
+  SubjectOffering _convertOfferingToSubjectOffering(
+      Map<String, dynamic> offering) {
+    final String subjectName =
+        offering['subject_name'] ?? offering['subject']?['name'] ?? 'Subject';
+    final String subjectCode =
+        offering['subject_code'] ?? offering['subject']?['code'] ?? '';
+    final String teacherName = (() {
+      final teacher = offering['teacher'];
+      if (teacher is Map) {
+        final fn = teacher['first_name'] ?? '';
+        final ln = teacher['last_name'] ?? '';
+        final display =
+            [fn, ln].where((s) => (s as String).isNotEmpty).join(' ');
+        if (display.isNotEmpty) return display;
+        return (teacher['email'] as String?) ?? 'Unassigned';
+      }
+      final fn = offering['first_name'];
+      final ln = offering['last_name'];
+      final display =
+          [fn, ln].whereType<String>().where((s) => s.isNotEmpty).join(' ');
+      return display.isNotEmpty
+          ? display
+          : (offering['email'] as String? ?? 'Unassigned');
+    })();
+
+    return SubjectOffering(
+      id: offering['class_offering_id'] ?? offering['id'] ?? '',
+      subjectId: offering['subject_id'] ?? '',
+      subjectName: subjectName,
+      subjectCode: subjectCode,
+      subjectDescription: offering['subject_description'] ?? '',
+      classId: widget.classModel.id,
+      className: widget.classModel.name,
+      gradeLevel: widget.classModel.gradeLevel ?? '',
+      hoursPerWeek: offering['hours_per_week'] ?? 0,
+      room: offering['room'] ?? '',
+      schedule: offering['schedule'] is Map<String, dynamic>
+          ? offering['schedule']
+          : <String, dynamic>{},
+      teacherId: offering['teacher_id'],
+      teacherName: teacherName,
+      teacherEmail: offering['email'],
+      teacherAvatarUrl: offering['avatar_url'],
+      assignments: [], // Will be loaded in details page
+      studentCount: widget.classModel.studentsCount ?? 0,
+      assignmentsCount: offering['assignments_count'] ?? 0,
+      pendingGrades: 0, // Will be calculated in service
+      color: _getSubjectColor(subjectName),
+    );
+  }
+
+  Map<String, dynamic> _getSubjectColor(String subjectName) {
+    final colors = {
+      'Mathematics': {'primary': 0xFF2196F3, 'secondary': 0xFFE3F2FD},
+      'Math': {'primary': 0xFF2196F3, 'secondary': 0xFFE3F2FD},
+      'English': {'primary': 0xFF4CAF50, 'secondary': 0xFFE8F5E8},
+      'Literature': {'primary': 0xFF4CAF50, 'secondary': 0xFFE8F5E8},
+      'Science': {'primary': 0xFF9C27B0, 'secondary': 0xFFF3E5F5},
+      'Physics': {'primary': 0xFF9C27B0, 'secondary': 0xFFF3E5F5},
+      'Chemistry': {'primary': 0xFF9C27B0, 'secondary': 0xFFF3E5F5},
+      'Biology': {'primary': 0xFF4CAF50, 'secondary': 0xFFE8F5E8},
+      'Islamic': {'primary': 0xFF009688, 'secondary': 0xFFE0F2F1},
+      'Islam': {'primary': 0xFF009688, 'secondary': 0xFFE0F2F1},
+      'Arabic': {'primary': 0xFFFF9800, 'secondary': 0xFFFFF3E0},
+      'History': {'primary': 0xFF795548, 'secondary': 0xFFEFEBE9},
+      'Geography': {'primary': 0xFF607D8B, 'secondary': 0xFFECEFF1},
+    };
+
+    for (final key in colors.keys) {
+      if (subjectName.toLowerCase().contains(key.toLowerCase())) {
+        return colors[key]!;
+      }
+    }
+
+    // Default color
+    return {'primary': 0xFF757575, 'secondary': 0xFFF5F5F5};
+  }
+
+  void _navigateToOfferingDetails(Map<String, dynamic> offering) {
+    final subjectOffering = _convertOfferingToSubjectOffering(offering);
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SubjectDetailsPage(
-          subject: subject,
-          classModel: widget.classModel,
-          bottomNavigationBar: widget.bottomNavigationBar,
-          showBackButton: widget.showBackButton,
-        ),
+        builder: (context) =>
+            SubjectOfferingDetailsPage(offering: subjectOffering),
       ),
     );
+  }
+
+  /// Check if current user is the homeroom teacher of this class
+  bool _isCurrentUserHomeroomTeacher(User? currentUser) {
+    if (currentUser?.userType != UserType.teacher) return false;
+
+    // Check class settings for homeroom teacher info
+    final settings = widget.classModel.settings;
+    if (settings != null) {
+      final homeroomTeacherId = settings['homeroom_teacher_id'] as String?;
+      if (homeroomTeacherId != null && homeroomTeacherId == currentUser?.id) {
+        return true;
+      }
+    }
+
+    // Fallback: check if user is in teachers list (for backward compatibility)
+    final classTeachers = widget.classModel.teachers;
+    if (classTeachers != null && currentUser != null) {
+      return classTeachers.any((teacher) => teacher.id == currentUser.id);
+    }
+
+    return false;
   }
 
   // Removed _buildDefaultBottomNavigation method - now using GlobalBottomNavigation

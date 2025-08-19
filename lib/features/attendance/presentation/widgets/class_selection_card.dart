@@ -6,12 +6,16 @@ class ClassSelectionCard extends StatelessWidget {
   final ClassModel classModel;
   final VoidCallback onTap;
   final bool isLoading;
+  final bool isDisabled;
+  final String? disabledReason;
 
   const ClassSelectionCard({
     super.key,
     required this.classModel,
     required this.onTap,
     this.isLoading = false,
+    this.isDisabled = false,
+    this.disabledReason,
   });
 
   @override
@@ -32,7 +36,7 @@ class ClassSelectionCard extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
-          onTap: isLoading ? null : onTap,
+          onTap: (isLoading || isDisabled) ? null : onTap,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -67,25 +71,31 @@ class ClassSelectionCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        classModel.displayName,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimary,
+                      Opacity(
+                        opacity: isDisabled ? 0.6 : 1.0,
+                        child: Text(
+                          classModel.displayName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
                         ),
                       ),
 
                       if (classModel.description?.isNotEmpty == true) ...[
                         const SizedBox(height: 4),
-                        Text(
-                          classModel.description!,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: AppTheme.textSecondary,
+                        Opacity(
+                          opacity: isDisabled ? 0.6 : 1.0,
+                          child: Text(
+                            classModel.description!,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppTheme.textSecondary,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
 
@@ -109,6 +119,29 @@ class ClassSelectionCard extends StatelessWidget {
                           ],
                         ],
                       ),
+
+                      if (isDisabled && disabledReason != null) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              size: 14,
+                              color: AppTheme.warningColor,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                disabledReason!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -123,16 +156,19 @@ class ClassSelectionCard extends StatelessWidget {
                     ),
                   )
                 else
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.chevron_right,
-                      color: AppTheme.primaryColor,
-                      size: 24,
+                  Opacity(
+                    opacity: isDisabled ? 0.4 : 1.0,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        isDisabled ? Icons.lock : Icons.chevron_right,
+                        color: AppTheme.primaryColor,
+                        size: 24,
+                      ),
                     ),
                   ),
               ],

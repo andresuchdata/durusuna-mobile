@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../core/storage/storage_service.dart';
-import '../../../home/presentation/pages/enhanced_home_page_concept.dart';
+import '../../../home/presentation/pages/home_page.dart';
 import 'login_page.dart';
 
 class SplashPage extends ConsumerStatefulWidget {

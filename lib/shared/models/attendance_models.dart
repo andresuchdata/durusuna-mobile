@@ -12,6 +12,8 @@ enum AttendanceStatus {
   late,
   @JsonValue('excused')
   excused,
+  @JsonValue('sick')
+  sick,
 }
 
 enum AttendanceMarkedVia {

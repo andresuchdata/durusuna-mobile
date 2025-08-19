@@ -205,13 +205,12 @@ class NotificationNavigationService {
   Future<void> _navigateToConversations(BuildContext context) async {
     await Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (context) => const HomePage(),
+        builder: (context) => const EnhancedHomePage(),
       ),
       (route) => false,
     );
 
     // TODO: Switch to conversations tab programmatically
-    // This would require updating HomePage to accept initial tab parameter
   }
 
   /// Navigate to home with optional initial tab
@@ -219,9 +218,7 @@ class NotificationNavigationService {
       {int initialTab = 0}) async {
     await Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (context) => const HomePage(
-            // TODO: Add initialTab parameter to HomePage
-            ),
+        builder: (context) => const EnhancedHomePage(),
       ),
       (route) => false,
     );
