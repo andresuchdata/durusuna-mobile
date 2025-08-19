@@ -11,6 +11,7 @@ class StudentAttendanceTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final Function(AttendanceStatus) onAttendanceChanged;
+  final VoidCallback? onAttendanceReset;
 
   const StudentAttendanceTile({
     super.key,
@@ -21,6 +22,7 @@ class StudentAttendanceTile extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     required this.onAttendanceChanged,
+    this.onAttendanceReset,
   });
 
   @override
@@ -88,11 +90,12 @@ class StudentAttendanceTile extends StatelessWidget {
                 _buildAvatar(),
                 const SizedBox(width: 16),
 
-                // Student info
+                // Student info with stacked layout
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Student name with status indicator
                       Row(
                         children: [
                           Expanded(
@@ -107,87 +110,38 @@ class StudentAttendanceTile extends StatelessWidget {
                           ),
                           if (hasAttendance) ...[
                             const SizedBox(width: 8),
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: _getAttendanceColor(),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _getAttendanceColor()
-                                        .withValues(alpha: 0.4),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                _getAttendanceIcon(),
-                                size: 14,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                          // Debug indicator for development
-                          if (_showDebugIndicator()) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              width: 20,
-                              height: 20,
-                              decoration: const BoxDecoration(
-                                color: Colors.orange,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.info,
-                                size: 12,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              studentWithAttendance.email,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
-                          ),
-                          if (hasAttendance) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: _getAttendanceColor()
-                                    .withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: _getAttendanceColor()
-                                      .withValues(alpha: 0.4),
-                                  width: 1,
+                            InkWell(
+                              onTap: isDisabled
+                                  ? null
+                                  : () => onAttendanceReset?.call(),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: isDisabled
+                                      ? Colors.grey[400]
+                                      : Colors.red[400],
+                                  shape: BoxShape.circle,
                                 ),
-                              ),
-                              child: Text(
-                                'MARKED',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: _getAttendanceColor(),
-                                  letterSpacing: 0.5,
+                                child: const Icon(
+                                  Icons.close,
+                                  size: 14,
+                                  color: Colors.white,
                                 ),
                               ),
                             ),
                           ],
                         ],
                       ),
+
+                      // Attendance actions below name
+                      if (!isSelectionMode) ...[
+                        const SizedBox(height: 8),
+                        _buildAttendanceActions(),
+                      ],
+
+                      // Additional info for marked attendance
                       if (attendance?.checkInTime != null) ...[
                         const SizedBox(height: 4),
                         Text(
@@ -214,9 +168,6 @@ class StudentAttendanceTile extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                // Attendance status and quick actions
-                if (!isSelectionMode) _buildAttendanceActions(),
               ],
             ),
           ),
@@ -348,6 +299,22 @@ class StudentAttendanceTile extends StatelessWidget {
             color: AppTheme.warningColor,
             status: AttendanceStatus.late,
             tooltip: 'Late',
+            enabled: !isDisabled,
+          ),
+          const SizedBox(width: 8),
+          _buildQuickActionButton(
+            icon: Icons.event_note,
+            color: AppTheme.infoColor,
+            status: AttendanceStatus.excused,
+            tooltip: 'Excused',
+            enabled: !isDisabled,
+          ),
+          const SizedBox(width: 8),
+          _buildQuickActionButton(
+            icon: Icons.sick,
+            color: Colors.purple,
+            status: AttendanceStatus.sick,
+            tooltip: 'Sick',
             enabled: !isDisabled,
           ),
         ],
@@ -493,27 +460,27 @@ class StudentAttendanceTile extends StatelessWidget {
   }
 
   Color _getBackgroundColor(bool hasAttendance) {
+    // Only highlight when selected for bulk actions
     if (isSelected) {
-      return AppTheme.primaryColor.withValues(alpha: 0.15);
+      return AppTheme.primaryColor.withValues(alpha: 0.1);
     }
 
-    if (hasAttendance) {
-      return _getAttendanceColor().withValues(alpha: 0.20);
-    }
-
+    // Keep white background - highlighting now only on attendance status indicators
     return Colors.white;
   }
 
   Border _getBorderStyle(bool hasAttendance) {
+    // When disabled (finalized), show muted borders
+    if (isDisabled) {
+      return Border.all(color: Colors.grey[300]!, width: 1);
+    }
+
+    // Only show border when selected for bulk actions
     if (isSelected) {
       return Border.all(color: AppTheme.primaryColor, width: 2);
     }
 
-    if (hasAttendance) {
-      return Border.all(
-          color: _getAttendanceColor().withValues(alpha: 0.8), width: 1.5);
-    }
-
+    // Minimal border for all tiles - highlighting now only on status indicators
     return Border.all(color: Colors.grey[200]!, width: 1);
   }
 
@@ -551,12 +518,5 @@ class StudentAttendanceTile extends StatelessWidget {
       case AttendanceStatus.sick:
         return Icons.sick;
     }
-  }
-
-  /// Show debug indicator for development purposes
-  /// Can be customized based on specific student ID, name, or other criteria
-  bool _showDebugIndicator() {
-    // Debug indicators disabled - highlighting should be based on attendance status
-    return false;
   }
 }

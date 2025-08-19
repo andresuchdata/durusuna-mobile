@@ -297,6 +297,49 @@ class AttendanceService {
     }
   }
 
+  Future<void> deleteStudentAttendance(
+    String classId,
+    String studentId,
+    DateTime date,
+  ) async {
+    try {
+      final headers = await _getHeaders();
+      final formattedDate = _formatDateToString(date);
+
+      if (kDebugMode) {
+        debugPrint(
+            '[ATTENDANCE] DELETE /attendance/$classId/$studentId?date=$formattedDate');
+      }
+
+      final response = await http.delete(
+        Uri.parse(
+            '$_baseUrl/attendance/$classId/$studentId?date=$formattedDate'),
+        headers: headers,
+      );
+
+      if (kDebugMode) {
+        debugPrint('[ATTENDANCE] status: ${response.statusCode}');
+        debugPrint('[ATTENDANCE] resp: ${response.body}');
+      }
+
+      if (response.statusCode == 200) {
+        // Successfully deleted
+        return;
+      } else if (response.statusCode == 404) {
+        throw Exception('Attendance record not found');
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied');
+      } else {
+        final Map<String, dynamic> errorData = json.decode(response.body);
+        throw Exception(errorData['error'] ?? 'Failed to delete attendance');
+      }
+    } catch (e) {
+      throw Exception('Error deleting attendance: $e');
+    }
+  }
+
   Future<List<AttendanceRecord>> bulkUpdateAttendance(
     String classId,
     DateTime date,

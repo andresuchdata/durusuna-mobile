@@ -290,6 +290,7 @@ class _AttendanceManagementPageState
             studentWithAttendance,
             status,
           ),
+          onAttendanceReset: () => _onAttendanceReset(studentWithAttendance),
         );
       },
     );
@@ -419,6 +420,44 @@ class _AttendanceManagementPageState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating attendance: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+  void _onAttendanceReset(StudentWithAttendance student) async {
+    try {
+      debugPrint('Resetting attendance for ${student.displayName}');
+
+      final service = ref.read(attendanceServiceProvider);
+
+      await service.deleteStudentAttendance(
+        widget.classModel.id,
+        student.userId,
+        _selectedDate,
+      );
+
+      debugPrint('Attendance reset successfully, refreshing data...');
+
+      // Refresh the attendance session
+      ref.invalidate(attendanceSessionProvider);
+      ref.invalidate(attendanceStatsProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Attendance reset for ${student.displayName}'),
+            backgroundColor: AppTheme.warningColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error resetting attendance: $e'),
             backgroundColor: AppTheme.errorColor,
           ),
         );
