@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/subjects_service.dart';
+import '../../../../shared/services/class_updates_service.dart';
+import '../../../../shared/models/class_update.dart';
 import '../../../assignments/presentation/pages/assignments_main_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
+import '../../../class_updates/presentation/pages/class_updates_page.dart';
 
 class SubjectOfferingDetailsPage extends ConsumerStatefulWidget {
   final SubjectOffering offering;
@@ -42,7 +45,6 @@ class _SubjectOfferingDetailsPageState
       body: CustomScrollView(
         slivers: [
           _buildAppBar(),
-          _buildHeaderInfo(),
           _buildTabBar(),
           _buildTabContent(),
         ],
@@ -154,61 +156,72 @@ class _SubjectOfferingDetailsPageState
     );
   }
 
-  Widget _buildHeaderInfo() {
-    return SliverToBoxAdapter(
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
+  Widget _buildStatisticsCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Subject Statistics',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                'Students',
-                '${widget.offering.studentCount}',
-                Icons.people,
-                AppTheme.primaryColor,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  'Students',
+                  '${widget.offering.studentCount}',
+                  Icons.people,
+                  AppTheme.primaryColor,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                'Assignments',
-                '${widget.offering.assignmentsCount}',
-                Icons.assignment,
-                AppTheme.successColor,
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  'Assignments',
+                  '${widget.offering.assignmentsCount}',
+                  Icons.assignment,
+                  AppTheme.successColor,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                'Pending',
-                '${widget.offering.pendingGrades}',
-                Icons.assignment_late,
-                AppTheme.warningColor,
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  'Pending',
+                  '${widget.offering.pendingGrades}',
+                  Icons.assignment_late,
+                  AppTheme.warningColor,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                'Hours/Week',
-                '${widget.offering.hoursPerWeek}',
-                Icons.schedule,
-                AppTheme.infoColor,
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  'Hours/Week',
+                  '${widget.offering.hoursPerWeek}',
+                  Icons.schedule,
+                  AppTheme.infoColor,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -286,7 +299,11 @@ class _SubjectOfferingDetailsPageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildStatisticsCard(),
+          const SizedBox(height: 16),
           _buildTeacherInfoCard(),
+          const SizedBox(height: 16),
+          _buildRecentUpdatesCard(),
           const SizedBox(height: 16),
           _buildScheduleCard(),
           const SizedBox(height: 16),
@@ -782,6 +799,258 @@ class _SubjectOfferingDetailsPageState
     }
   }
 
+  Widget _buildRecentUpdatesCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Recent Updates',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              TextButton(
+                onPressed: () => _navigateToSubjectUpdates(),
+                child: const Text('View All'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Consumer(
+            builder: (context, ref, child) {
+              final subjectParams = SubjectUpdatesParams(
+                classId: widget.offering.classId,
+                subjectOfferingId: widget.offering.id,
+              );
+              final updatesState =
+                  ref.watch(subjectUpdatesProvider(subjectParams));
+
+              if (updatesState.isLoading) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+
+              if (updatesState.error != null) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Icon(Icons.error_outline,
+                            color: Colors.grey[400], size: 32),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Failed to load updates',
+                          style:
+                              TextStyle(color: Colors.grey[600], fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              final recentUpdates = updatesState.updates.take(3).toList();
+
+              if (recentUpdates.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Icon(Icons.update, color: Colors.grey[400], size: 32),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No recent updates',
+                          style:
+                              TextStyle(color: Colors.grey[600], fontSize: 14),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Updates for this subject will appear here',
+                          style:
+                              TextStyle(color: Colors.grey[500], fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                children: recentUpdates
+                    .map((update) => _buildCompactUpdateCard(update))
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactUpdateCard(ClassUpdate update) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _getUpdateTypeIcon(update.updateType),
+                size: 16,
+                color: _getUpdateTypeColor(update.updateType),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  update.title ?? _getUpdateTypeLabel(update.updateType),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                _getTimeAgo(update.createdAt),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            update.content,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppTheme.textSecondary,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (update.author != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 10,
+                  backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                  child: Text(
+                    _getInitials(
+                        '${update.author!.firstName} ${update.author!.lastName}'),
+                    style: const TextStyle(
+                      fontSize: 8,
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${update.author!.firstName} ${update.author!.lastName}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  IconData _getUpdateTypeIcon(UpdateType type) {
+    switch (type) {
+      case UpdateType.announcement:
+        return Icons.campaign;
+      case UpdateType.homework:
+        return Icons.assignment;
+      case UpdateType.reminder:
+        return Icons.alarm;
+      case UpdateType.event:
+        return Icons.event;
+    }
+  }
+
+  Color _getUpdateTypeColor(UpdateType type) {
+    switch (type) {
+      case UpdateType.announcement:
+        return AppTheme.primaryColor;
+      case UpdateType.homework:
+        return AppTheme.warningColor;
+      case UpdateType.reminder:
+        return AppTheme.infoColor;
+      case UpdateType.event:
+        return AppTheme.successColor;
+    }
+  }
+
+  String _getUpdateTypeLabel(UpdateType type) {
+    switch (type) {
+      case UpdateType.announcement:
+        return 'Announcement';
+      case UpdateType.homework:
+        return 'Homework';
+      case UpdateType.reminder:
+        return 'Reminder';
+      case UpdateType.event:
+        return 'Event';
+    }
+  }
+
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
   // Action methods
   void _shareOffering() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -858,6 +1127,19 @@ class _SubjectOfferingDetailsPageState
   void _openClassChat() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Class chat - Under Development')),
+    );
+  }
+
+  void _navigateToSubjectUpdates() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ClassUpdatesPage(
+          classId: widget.offering.classId,
+          className:
+              '${widget.offering.className} - ${widget.offering.subjectName}',
+        ),
+      ),
     );
   }
 }

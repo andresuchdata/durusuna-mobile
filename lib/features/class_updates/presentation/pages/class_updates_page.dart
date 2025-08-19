@@ -7,6 +7,7 @@ import '../../../../shared/models/class_update_comment.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/services/auth_service.dart';
+import '../../../../shared/services/class_management_service.dart';
 import '../../../../shared/widgets/reactions_widget.dart';
 import '../widgets/class_update_card.dart';
 import '../widgets/class_update_comment_card.dart';
@@ -45,10 +46,16 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
   final ScrollController _scrollController = ScrollController();
   final Map<String, GlobalKey> _updateKeys = {};
 
+  // Filter state
+  String? _selectedSubjectId;
+  String? _selectedSubjectName;
+  List<Map<String, dynamic>> _availableSubjects = [];
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadSubjects();
 
     // Handle update highlighting and scrolling if requested
     if (widget.highlightUpdateId != null && widget.scrollToUpdate) {
@@ -89,6 +96,143 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
           .read(classUpdatesProvider(widget.classId).notifier)
           .loadUpdates(refresh: true);
     }
+  }
+
+  void _loadSubjects() async {
+    try {
+      final classService = ClassManagementService();
+      final subjects = await classService.getClassOfferings(widget.classId);
+      if (mounted) {
+        setState(() {
+          _availableSubjects = subjects;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading subjects for filter: $e');
+    }
+  }
+
+  void _selectSubjectFilter(String? subjectId, String? subjectName) {
+    setState(() {
+      _selectedSubjectId = subjectId;
+      _selectedSubjectName = subjectName;
+    });
+    // TODO: Implement actual filtering when backend supports it
+    // For now, this just updates the UI state
+  }
+
+  Widget _buildSubjectFilterChips() {
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          // All Subjects chip
+          _buildFilterChip(
+            label: 'All Subjects',
+            isSelected: _selectedSubjectId == null,
+            onTap: () => _selectSubjectFilter(null, null),
+            icon: Icons.all_inclusive,
+          ),
+          const SizedBox(width: 8),
+
+          // Individual subject chips
+          ..._availableSubjects.map((subject) {
+            final subjectId = subject['subject_id'] ?? subject['id'];
+            final subjectName = subject['subject_name'] ?? 'Unknown Subject';
+            final subjectCode = subject['subject_code'] ?? '';
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildFilterChip(
+                label: subjectCode.isNotEmpty ? subjectCode : subjectName,
+                isSelected: _selectedSubjectId == subjectId,
+                onTap: () => _selectSubjectFilter(subjectId, subjectName),
+                icon: _getSubjectIcon(subjectName),
+              ),
+            );
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required IconData icon,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryColor : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300,
+            width: 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppTheme.primaryColor.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? Colors.white : AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: isSelected ? Colors.white : AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getSubjectIcon(String subjectName) {
+    final name = subjectName.toLowerCase();
+    if (name.contains('math')) return Icons.calculate;
+    if (name.contains('science') ||
+        name.contains('physics') ||
+        name.contains('chemistry')) return Icons.science;
+    if (name.contains('english') || name.contains('literature'))
+      return Icons.menu_book;
+    if (name.contains('islamic') || name.contains('islam')) return Icons.mosque;
+    if (name.contains('arabic')) return Icons.language;
+    if (name.contains('history')) return Icons.history_edu;
+    if (name.contains('geography')) return Icons.public;
+    if (name.contains('art')) return Icons.palette;
+    if (name.contains('music')) return Icons.music_note;
+    if (name.contains('sport') || name.contains('physical'))
+      return Icons.sports;
+    return Icons.book;
   }
 
   @override
@@ -148,6 +292,9 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
         },
         child: Column(
           children: [
+            // Subject filter chips
+            if (_availableSubjects.isNotEmpty) _buildSubjectFilterChips(),
+
             // Create post section for teachers
             if (canPost) ...[
               Container(

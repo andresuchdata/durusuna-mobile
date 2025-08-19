@@ -5,6 +5,7 @@ import '../../features/home/presentation/pages/home_page.dart';
 import '../services/auth_service.dart';
 import '../models/user.dart';
 import '../providers/local_chat_providers.dart';
+import '../../features/attendance/presentation/pages/student_attendance_page.dart';
 
 /// Provider to manage global bottom navigation state
 final globalBottomNavigationProvider =
@@ -143,15 +144,33 @@ class GlobalBottomNavigation extends ConsumerWidget {
   }
 
   void _handleNavigation(BuildContext context, WidgetRef ref, int index) {
+    final user = ref.read(authStateProvider).user;
+    final hasAttendanceTab =
+        user?.userType == UserType.student || user?.userType == UserType.parent;
+
+    // Special case: for teachers/admins, tapping Profile should open Mark Attendance
+    // Check this BEFORE custom onTap handlers to ensure it always works
+    final isTeacherOrAdmin =
+        user?.userType == UserType.teacher || user?.role == UserRole.admin;
+
+    // For teachers/admins: Home(0), Messages(1), Classes(2), Profile(3)
+    // For students/parents: Home(0), Messages(1), Classes(2), Attendance(3), Profile(4)
+    final profileNavIndex = hasAttendanceTab ? 4 : 3;
+
+    if (isTeacherOrAdmin && index == profileNavIndex) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const StudentAttendancePage(),
+        ),
+      );
+      return;
+    }
+
     // If a custom onTap handler is provided, use it
     if (onTap != null) {
       onTap!(index);
       return;
     }
-
-    final user = ref.read(authStateProvider).user;
-    final hasAttendanceTab =
-        user?.userType == UserType.student || user?.userType == UserType.parent;
 
     // Map the navigation index to the correct tab index for IndexedStack
     int stackIndex;

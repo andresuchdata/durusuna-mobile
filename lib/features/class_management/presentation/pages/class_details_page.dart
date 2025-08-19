@@ -17,6 +17,8 @@ import 'student_list_page.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../attendance/presentation/pages/attendance_management_page.dart';
 import '../../../subjects/presentation/pages/subjects_main_page.dart';
+import '../../../subjects/presentation/pages/subject_offering_details_page.dart';
+import '../../../../shared/services/subjects_service.dart';
 
 // Providers for class details data
 final classSubjectsProvider =
@@ -834,7 +836,12 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                   TextButton(
                     onPressed: () {
                       // Navigate to subjects list page
-                      Navigator.pushNamed(context, '/subjects');
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SubjectsMainPage(),
+                        ),
+                      );
                     },
                     child: const Text('See more'),
                   ),
@@ -1083,26 +1090,13 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
           ? display
           : (offering['email'] as String? ?? '—');
     })();
-    final dynamic rawSchedule = offering['schedule'];
-    final String schedule = rawSchedule is String ? rawSchedule : '';
     final int assignmentsCount = offering['assignments_count'] is int
         ? offering['assignments_count']
         : 0;
     return Material(
       color: Colors.white,
       child: InkWell(
-        onTap: () => _navigateToSubjectDetails(MockSubject(
-          id: offering['subject_id'] ?? offering['class_offering_id'] ?? '',
-          name: subjectName,
-          code: subjectCode,
-          grade: widget.classModel.name,
-          studentCount: widget.classModel.studentsCount ?? 0,
-          assignmentsCount: assignmentsCount,
-          pendingGrades: 0,
-          teacher: teacherName,
-          color: Colors.blue,
-          schedule: schedule,
-        )),
+        onTap: () => _navigateToOfferingDetails(offering),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
@@ -1562,12 +1556,91 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     }
   }
 
-  void _navigateToSubjectDetails(MockSubject subject) {
-    // For now, show a snackbar since SubjectDetailsPage may need updating
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Subject Details: ${subject.name} - Under Development'),
-        backgroundColor: AppTheme.infoColor,
+  SubjectOffering _convertOfferingToSubjectOffering(
+      Map<String, dynamic> offering) {
+    final String subjectName =
+        offering['subject_name'] ?? offering['subject']?['name'] ?? 'Subject';
+    final String subjectCode =
+        offering['subject_code'] ?? offering['subject']?['code'] ?? '';
+    final String teacherName = (() {
+      final teacher = offering['teacher'];
+      if (teacher is Map) {
+        final fn = teacher['first_name'] ?? '';
+        final ln = teacher['last_name'] ?? '';
+        final display =
+            [fn, ln].where((s) => (s as String).isNotEmpty).join(' ');
+        if (display.isNotEmpty) return display;
+        return (teacher['email'] as String?) ?? 'Unassigned';
+      }
+      final fn = offering['first_name'];
+      final ln = offering['last_name'];
+      final display =
+          [fn, ln].whereType<String>().where((s) => s.isNotEmpty).join(' ');
+      return display.isNotEmpty
+          ? display
+          : (offering['email'] as String? ?? 'Unassigned');
+    })();
+
+    return SubjectOffering(
+      id: offering['class_offering_id'] ?? offering['id'] ?? '',
+      subjectId: offering['subject_id'] ?? '',
+      subjectName: subjectName,
+      subjectCode: subjectCode,
+      subjectDescription: offering['subject_description'] ?? '',
+      classId: widget.classModel.id,
+      className: widget.classModel.name,
+      gradeLevel: widget.classModel.gradeLevel ?? '',
+      hoursPerWeek: offering['hours_per_week'] ?? 0,
+      room: offering['room'] ?? '',
+      schedule: offering['schedule'] is Map<String, dynamic>
+          ? offering['schedule']
+          : <String, dynamic>{},
+      teacherId: offering['teacher_id'],
+      teacherName: teacherName,
+      teacherEmail: offering['email'],
+      teacherAvatarUrl: offering['avatar_url'],
+      assignments: [], // Will be loaded in details page
+      studentCount: widget.classModel.studentsCount ?? 0,
+      assignmentsCount: offering['assignments_count'] ?? 0,
+      pendingGrades: 0, // Will be calculated in service
+      color: _getSubjectColor(subjectName),
+    );
+  }
+
+  Map<String, dynamic> _getSubjectColor(String subjectName) {
+    final colors = {
+      'Mathematics': {'primary': 0xFF2196F3, 'secondary': 0xFFE3F2FD},
+      'Math': {'primary': 0xFF2196F3, 'secondary': 0xFFE3F2FD},
+      'English': {'primary': 0xFF4CAF50, 'secondary': 0xFFE8F5E8},
+      'Literature': {'primary': 0xFF4CAF50, 'secondary': 0xFFE8F5E8},
+      'Science': {'primary': 0xFF9C27B0, 'secondary': 0xFFF3E5F5},
+      'Physics': {'primary': 0xFF9C27B0, 'secondary': 0xFFF3E5F5},
+      'Chemistry': {'primary': 0xFF9C27B0, 'secondary': 0xFFF3E5F5},
+      'Biology': {'primary': 0xFF4CAF50, 'secondary': 0xFFE8F5E8},
+      'Islamic': {'primary': 0xFF009688, 'secondary': 0xFFE0F2F1},
+      'Islam': {'primary': 0xFF009688, 'secondary': 0xFFE0F2F1},
+      'Arabic': {'primary': 0xFFFF9800, 'secondary': 0xFFFFF3E0},
+      'History': {'primary': 0xFF795548, 'secondary': 0xFFEFEBE9},
+      'Geography': {'primary': 0xFF607D8B, 'secondary': 0xFFECEFF1},
+    };
+
+    for (final key in colors.keys) {
+      if (subjectName.toLowerCase().contains(key.toLowerCase())) {
+        return colors[key]!;
+      }
+    }
+
+    // Default color
+    return {'primary': 0xFF757575, 'secondary': 0xFFF5F5F5};
+  }
+
+  void _navigateToOfferingDetails(Map<String, dynamic> offering) {
+    final subjectOffering = _convertOfferingToSubjectOffering(offering);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            SubjectOfferingDetailsPage(offering: subjectOffering),
       ),
     );
   }

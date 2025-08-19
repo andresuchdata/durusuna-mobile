@@ -21,7 +21,9 @@ import '../../../class_management/presentation/widgets/create_class_dialog.dart'
 import '../../../../shared/services/assignments_service.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../attendance/presentation/pages/student_attendance_page.dart';
-import '../../../offerings/presentation/pages/teacher_offerings_page.dart';
+
+import '../../../subjects/presentation/pages/subjects_main_page.dart';
+import '../../../assignments/presentation/pages/assignments_main_page.dart';
 import '../../../../shared/services/chat_service.dart';
 
 // Import the existing provider to avoid conflicts
@@ -877,14 +879,14 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     if (currentUser?.userType == UserType.teacher) {
       quickActions.add(
         _buildQuickActionCard(
-          title: 'My Offerings',
-          icon: Icons.schedule,
+          title: 'My Subjects',
+          icon: Icons.book,
           color: AppTheme.accentColor,
           onTap: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const TeacherOfferingsPage(),
+                builder: (context) => const SubjectsMainPage(),
               ),
             );
           },
@@ -1782,6 +1784,8 @@ class _ClassManagementTabView extends ConsumerWidget {
       ),
     );
   }
+
+  // (Duplicate Quick Actions section removed; use the grid-based one earlier in file)
 }
 
 // Quick Stats Delegate for pinned header

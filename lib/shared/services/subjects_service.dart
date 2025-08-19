@@ -36,7 +36,7 @@ class SubjectsService {
             try {
               // Get assignments for this offering
               final assignments = await _getOfferingAssignments(
-                  offering['class_offering_id'] ?? offering['id']);
+                  classModel.id, offering['subject_id'] ?? '');
 
               final subjectOffering = SubjectOffering(
                 id: offering['class_offering_id'] ?? offering['id'] ?? '',
@@ -105,11 +105,12 @@ class SubjectsService {
 
   /// Get assignments for a specific class offering
   Future<List<Map<String, dynamic>>> _getOfferingAssignments(
-      String offeringId) async {
+      String classId, String subjectId) async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/assignments/offering/$offeringId'),
+        Uri.parse(
+            '$_baseUrl/assignments/classes/$classId/subjects/$subjectId/assignments'),
         headers: headers,
       );
 
@@ -122,11 +123,12 @@ class SubjectsService {
         return [];
       } else {
         debugPrint(
-            'Failed to fetch assignments for offering $offeringId: ${response.statusCode}');
+            'Failed to fetch assignments for class $classId subject $subjectId: ${response.statusCode}');
         return [];
       }
     } catch (e) {
-      debugPrint('Error fetching assignments for offering $offeringId: $e');
+      debugPrint(
+          'Error fetching assignments for class $classId subject $subjectId: $e');
       return [];
     }
   }

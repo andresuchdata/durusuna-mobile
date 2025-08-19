@@ -6,9 +6,11 @@ import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../../features/class_management/presentation/pages/class_management_page.dart';
 import '../../features/chat/presentation/pages/conversations_page.dart';
-import '../../features/offerings/presentation/pages/teacher_offerings_page.dart';
+
 import '../../features/attendance/presentation/pages/school_attendance_settings_page.dart';
 import '../../features/settings/presentation/pages/admin_settings_page.dart';
+import '../../features/subjects/presentation/pages/subjects_main_page.dart';
+import '../../features/assignments/presentation/pages/assignments_main_page.dart';
 
 class GlobalAppDrawer extends ConsumerWidget {
   const GlobalAppDrawer({super.key});
@@ -47,14 +49,12 @@ class GlobalAppDrawer extends ConsumerWidget {
                     title: 'Classes',
                     onTap: () => _navigateToClasses(context),
                   ),
-                  if (user.userType == UserType.teacher ||
-                      user.role == UserRole.admin)
-                    _buildDrawerItem(
-                      context,
-                      icon: Icons.book,
-                      title: 'My Subjects',
-                      onTap: () => _navigateToOfferings(context),
-                    ),
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.book,
+                    title: 'My Subjects',
+                    onTap: () => _navigateToSubjects(context, user),
+                  ),
                   _buildDrawerItem(
                     context,
                     icon: Icons.assignment,
@@ -264,19 +264,24 @@ class GlobalAppDrawer extends ConsumerWidget {
 
   // Removed outdated navigation entries for subjects and class updates
 
-  void _navigateToOfferings(BuildContext context) {
+  void _navigateToSubjects(BuildContext context, User user) {
     Navigator.of(context).pop(); // Close drawer
+
+    // All users (teachers, students, parents, admins) use the same subjects page
+    // The API will return appropriate data based on the current user's role
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => const TeacherOfferingsPage(),
+        builder: (context) => const SubjectsMainPage(),
       ),
     );
   }
 
   void _navigateToAssignments(BuildContext context) {
     Navigator.of(context).pop(); // Close drawer
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Assignments feature coming soon')),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const AssignmentsMainPage(),
+      ),
     );
   }
 

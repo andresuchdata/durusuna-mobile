@@ -421,6 +421,38 @@ final classUpdatesProvider = StateNotifierProvider.family<ClassUpdatesNotifier,
   },
 );
 
+// Subject-specific updates provider
+// TODO: Backend enhancement needed - add subject_offering_id field to class_updates table
+final subjectUpdatesProvider = StateNotifierProvider.family<
+    SubjectUpdatesNotifier, ClassUpdatesState, SubjectUpdatesParams>(
+  (ref, params) {
+    final service = ref.read(classUpdatesServiceProvider);
+    return SubjectUpdatesNotifier(
+        service, params.classId, params.subjectOfferingId);
+  },
+);
+
+class SubjectUpdatesParams {
+  final String classId;
+  final String subjectOfferingId;
+
+  SubjectUpdatesParams({
+    required this.classId,
+    required this.subjectOfferingId,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SubjectUpdatesParams &&
+          runtimeType == other.runtimeType &&
+          classId == other.classId &&
+          subjectOfferingId == other.subjectOfferingId;
+
+  @override
+  int get hashCode => classId.hashCode ^ subjectOfferingId.hashCode;
+}
+
 class ClassUpdatesState {
   final List<ClassUpdate> updates;
   final bool isLoading;
@@ -709,5 +741,53 @@ class ClassUpdatesNotifier extends StateNotifier<ClassUpdatesState> {
 
   void clearError() {
     state = state.copyWith(error: null);
+  }
+}
+
+// Subject-specific updates notifier
+// This extends ClassUpdatesNotifier but filters updates by subject offering
+class SubjectUpdatesNotifier extends ClassUpdatesNotifier {
+  final String subjectOfferingId;
+
+  SubjectUpdatesNotifier(
+    ClassUpdatesService service,
+    String classId,
+    this.subjectOfferingId,
+  ) : super(service, classId);
+
+  @override
+  Future<void> loadUpdates({bool refresh = false}) async {
+    // Load updates from parent class first
+    await super.loadUpdates(refresh: refresh);
+
+    // Apply subject-specific filtering to the loaded updates
+    if (!state.isLoading && state.error == null) {
+      final filteredUpdates = _filterBySubjectOffering(state.updates);
+      state = state.copyWith(updates: filteredUpdates);
+    }
+  }
+
+  List<ClassUpdate> _filterBySubjectOffering(List<ClassUpdate> updates) {
+    // TODO: Backend enhancement needed - add subject_offering_id field to class_updates table
+    // For proper filtering: return updates.where((update) => update.subjectOfferingId == subjectOfferingId).toList();
+
+    // Temporary frontend filtering approach:
+    // For now, show all updates since we don't have reliable subject association
+    // This maintains the functionality while we wait for backend improvements
+
+    return updates;
+
+    // Alternative approach for future implementation with basic content filtering:
+    // return updates.where((update) {
+    //   // Filter by update type (homework/assignments are likely subject-specific)
+    //   if (update.updateType == UpdateType.homework) return true;
+    //
+    //   // TODO: Add more sophisticated filtering logic once we have:
+    //   // 1. subject_offering_id field in class_updates table
+    //   // 2. teacher assignment to specific subject offerings
+    //   // 3. subject mentions in update content
+    //
+    //   return false;
+    // }).toList();
   }
 }
