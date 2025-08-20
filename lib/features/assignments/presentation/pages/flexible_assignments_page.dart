@@ -349,8 +349,12 @@ class _FlexibleAssignmentsPageState
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
 
-    // Use teacher-specific API for teachers, general API for others
-    final userClassesAsync = user?.userType == UserType.teacher
+    // Use teacher-specific API for teachers only on global assignment list (from home)
+    // For other contexts, use the general class provider
+    final shouldUseTeacherClasses = user?.userType == UserType.teacher &&
+        widget.params.context == AssignmentNavigationContext.fromHome;
+
+    final userClassesAsync = shouldUseTeacherClasses
         ? ref.watch(teacherAccessibleClassesProvider)
         : ref.watch(userClassesProvider);
 
@@ -387,7 +391,7 @@ class _FlexibleAssignmentsPageState
               List<DropdownMenuItem<String>> classItems = [];
               List<String> availableValues = ['all'];
 
-              if (user?.userType == UserType.teacher) {
+              if (shouldUseTeacherClasses) {
                 // Handle TeacherAccessibleClass list
                 final teacherClasses = classes as List<TeacherAccessibleClass>;
                 for (final classItem in teacherClasses) {
@@ -404,7 +408,7 @@ class _FlexibleAssignmentsPageState
                   );
                 }
               } else {
-                // Handle ClassModel list (students, parents, admins)
+                // Handle ClassModel list (students, parents, admins, or teachers in other contexts)
                 final regularClasses = classes as List<dynamic>;
                 for (final classModel in regularClasses) {
                   final classId = classModel.id;
@@ -469,7 +473,8 @@ class _FlexibleAssignmentsPageState
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
 
-    // Use teacher-specific API for teachers, general API for others
+    // For independent subject filtering, always use the provider that gives all accessible subjects
+    // regardless of class selection
     final userSubjectsAsync = user?.userType == UserType.teacher
         ? ref.watch(teacherAccessibleSubjectsProvider)
         : ref.watch(roleBasedSubjectOfferingsProvider);

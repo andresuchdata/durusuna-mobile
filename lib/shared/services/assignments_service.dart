@@ -149,6 +149,7 @@ class AssignmentsService {
     String? type,
     String status = 'all',
     String? searchQuery,
+    String? subjectId,
   }) async {
     try {
       final headers = await _getHeaders();
@@ -162,6 +163,9 @@ class AssignmentsService {
       }
       if (searchQuery != null && searchQuery.isNotEmpty) {
         queryParams['search'] = searchQuery;
+      }
+      if (subjectId != null && subjectId.isNotEmpty) {
+        queryParams['subject_id'] = subjectId;
       }
 
       final uri = Uri.parse('$_baseUrl/assignments/user/assignments')

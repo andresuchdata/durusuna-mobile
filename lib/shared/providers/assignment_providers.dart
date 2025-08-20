@@ -18,7 +18,7 @@ final userAssignmentsProvider =
 
     List<Assignment> assignments;
 
-    // Get assignments based on context
+    // Get assignments based on context - support independent filtering
     if (params.classId != null && params.subjectId != null) {
       // Get assignments for a specific subject within a class
       assignments = await assignmentsService.getSubjectAssignments(
@@ -28,7 +28,7 @@ final userAssignmentsProvider =
         limit: params.limit,
       );
     } else if (params.classId != null) {
-      // Get assignments for a specific class
+      // Get assignments for a specific class (across all subjects)
       assignments = await assignmentsService.getClassAssignments(
         params.classId!,
         page: params.page,
@@ -37,13 +37,15 @@ final userAssignmentsProvider =
         status: params.status,
       );
     } else {
-      // Get all user assignments
+      // Get all user assignments (supports subjectId-only filtering via backend)
+      // This handles: no filters, subjectId-only, or search-only scenarios
       assignments = await assignmentsService.getUserAssignments(
         page: params.page,
         limit: params.limit,
         type: params.type,
         status: params.status,
         searchQuery: params.searchQuery,
+        subjectId: params.subjectId,
       );
     }
 
