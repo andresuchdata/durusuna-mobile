@@ -43,6 +43,7 @@ final userAssignmentsProvider =
         limit: params.limit,
         type: params.type,
         status: params.status,
+        searchQuery: params.searchQuery,
       );
     }
 
@@ -122,6 +123,7 @@ class AssignmentQueryParams {
   final String? type;
   final String status;
   final String? filterType;
+  final String? searchQuery;
 
   const AssignmentQueryParams({
     this.classId,
@@ -131,6 +133,7 @@ class AssignmentQueryParams {
     this.type,
     this.status = 'all',
     this.filterType,
+    this.searchQuery,
   });
 
   @override
@@ -144,7 +147,8 @@ class AssignmentQueryParams {
           limit == other.limit &&
           type == other.type &&
           status == other.status &&
-          filterType == other.filterType;
+          filterType == other.filterType &&
+          searchQuery == other.searchQuery;
 
   @override
   int get hashCode =>
@@ -154,7 +158,8 @@ class AssignmentQueryParams {
       limit.hashCode ^
       type.hashCode ^
       status.hashCode ^
-      filterType.hashCode;
+      filterType.hashCode ^
+      searchQuery.hashCode;
 
   AssignmentQueryParams copyWith({
     String? classId,
@@ -164,6 +169,7 @@ class AssignmentQueryParams {
     String? type,
     String? status,
     String? filterType,
+    String? searchQuery,
   }) {
     return AssignmentQueryParams(
       classId: classId ?? this.classId,
@@ -173,6 +179,7 @@ class AssignmentQueryParams {
       type: type ?? this.type,
       status: status ?? this.status,
       filterType: filterType ?? this.filterType,
+      searchQuery: searchQuery ?? this.searchQuery,
     );
   }
 }
@@ -197,3 +204,31 @@ class SubjectAssignmentParams {
   @override
   int get hashCode => classId.hashCode ^ subjectId.hashCode;
 }
+
+// Provider for teacher accessible subjects
+final teacherAccessibleSubjectsProvider =
+    FutureProvider<List<TeacherAccessibleSubject>>((ref) async {
+  final assignmentsService = ref.read(assignmentsServiceProvider);
+  final authState = ref.read(authStateProvider);
+  final user = authState.user;
+
+  if (user == null || user.userType != UserType.teacher) {
+    throw Exception('Access denied. Teachers only.');
+  }
+
+  return await assignmentsService.getTeacherAccessibleSubjects();
+});
+
+// Provider for teacher accessible classes
+final teacherAccessibleClassesProvider =
+    FutureProvider<List<TeacherAccessibleClass>>((ref) async {
+  final assignmentsService = ref.read(assignmentsServiceProvider);
+  final authState = ref.read(authStateProvider);
+  final user = authState.user;
+
+  if (user == null || user.userType != UserType.teacher) {
+    throw Exception('Access denied. Teachers only.');
+  }
+
+  return await assignmentsService.getTeacherAccessibleClasses();
+});

@@ -4,7 +4,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/subjects_service.dart';
 import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/models/class_update.dart';
-import '../../../assignments/presentation/pages/assignments_main_page.dart';
+import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 
@@ -1104,7 +1104,17 @@ class _SubjectOfferingDetailsPageState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const AssignmentsMainPage(),
+        builder: (context) => FlexibleAssignmentsPage(
+          params: AssignmentListParams(
+            context: AssignmentNavigationContext.fromSubject,
+            preSelectedClassId: widget.offering.classId,
+            preSelectedSubjectId: widget.offering.subjectId,
+            title: '${widget.offering.subjectName} Assignments',
+            showClassFilter: false,
+            showSubjectFilter: false,
+            showStats: false,
+          ),
+        ),
       ),
     );
   }

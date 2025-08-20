@@ -12,6 +12,7 @@ class AssignmentListView extends ConsumerWidget {
   final UserRoleType userRole;
   final String? classId;
   final String? subjectId;
+  final String? searchQuery;
 
   const AssignmentListView({
     super.key,
@@ -19,6 +20,7 @@ class AssignmentListView extends ConsumerWidget {
     required this.userRole,
     this.classId,
     this.subjectId,
+    this.searchQuery,
   });
 
   @override
@@ -37,6 +39,7 @@ class AssignmentListView extends ConsumerWidget {
       limit: 100,
       status: 'published', // Students/parents only see published assignments
       filterType: _getFilterTypeString(filterType),
+      searchQuery: searchQuery,
     );
 
     final assignmentsAsync = ref.watch(userAssignmentsProvider(params));

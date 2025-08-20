@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../core/constants/app_theme.dart';
-import '../../../assignments/presentation/pages/assignments_main_page.dart';
+import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
 import '../../../grading/pages/formula_builder_page.dart';
 import '../widgets/subject_stats_card.dart';
@@ -80,7 +80,8 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
                   onPressed: () => _editSubject(context),
                 ),
                 PopupMenuButton<String>(
-                  onSelected: (value) => _handleMenuAction(context, value, user),
+                  onSelected: (value) =>
+                      _handleMenuAction(context, value, user),
                   itemBuilder: (context) => [
                     const PopupMenuItem(
                       value: 'settings',
@@ -206,11 +207,14 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
               const SizedBox(height: 20),
               Row(
                 children: [
-                  _buildHeaderStat('Students', widget.subject.studentCount.toString()),
+                  _buildHeaderStat(
+                      'Students', widget.subject.studentCount.toString()),
                   const SizedBox(width: 24),
-                  _buildHeaderStat('Assignments', widget.subject.assignmentsCount.toString()),
+                  _buildHeaderStat('Assignments',
+                      widget.subject.assignmentsCount.toString()),
                   const SizedBox(width: 24),
-                  _buildHeaderStat('Pending', widget.subject.pendingGrades.toString()),
+                  _buildHeaderStat(
+                      'Pending', widget.subject.pendingGrades.toString()),
                 ],
               ),
             ],
@@ -446,16 +450,19 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
           Row(
             children: [
               Expanded(
-                child: _buildGradingStat('Pending', '${widget.subject.pendingGrades}', AppTheme.warningColor),
+                child: _buildGradingStat('Pending',
+                    '${widget.subject.pendingGrades}', AppTheme.warningColor),
               ),
               Expanded(
                 child: _buildGradingStat('Graded', '15', AppTheme.successColor),
               ),
               Expanded(
-                child: _buildGradingStat('Formula', 'Active', AppTheme.primaryColor),
+                child: _buildGradingStat(
+                    'Formula', 'Active', AppTheme.primaryColor),
               ),
               Expanded(
-                child: _buildGradingStat('Avg Time', '2.5m', AppTheme.textSecondary),
+                child: _buildGradingStat(
+                    'Avg Time', '2.5m', AppTheme.textSecondary),
               ),
             ],
           ),
@@ -522,14 +529,15 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
             ],
           ),
           const SizedBox(height: 16),
-          
+
           // Current Formula
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: AppTheme.primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
+              border: Border.all(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -564,9 +572,9 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
               ],
             ),
           ),
-          
+
           const SizedBox(height: 12),
-          
+
           // Formula Actions
           Row(
             children: [
@@ -625,7 +633,7 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Grade Scale
           _buildConfigItem(
             'Grade Scale',
@@ -633,9 +641,9 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
             Icons.grade,
             () => _configureGradeScale(),
           ),
-          
+
           const SizedBox(height: 12),
-          
+
           // Rounding Rules
           _buildConfigItem(
             'Rounding Rules',
@@ -643,9 +651,9 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
             Icons.functions,
             () => _configureRounding(),
           ),
-          
+
           const SizedBox(height: 12),
-          
+
           // Extra Credit
           _buildConfigItem(
             'Extra Credit',
@@ -658,7 +666,8 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
     );
   }
 
-  Widget _buildConfigItem(String title, String description, IconData icon, VoidCallback onTap) {
+  Widget _buildConfigItem(
+      String title, String description, IconData icon, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -725,7 +734,7 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Upcoming Deadlines
           _buildScheduleItem(
             'UTS Grading Deadline',
@@ -734,9 +743,9 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
             AppTheme.warningColor,
             '3 days left',
           ),
-          
+
           const SizedBox(height: 8),
-          
+
           _buildScheduleItem(
             'Assignment #3 Due',
             'March 20, 2024',
@@ -744,9 +753,9 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
             AppTheme.primaryColor,
             '8 days left',
           ),
-          
+
           const SizedBox(height: 8),
-          
+
           _buildScheduleItem(
             'Progress Report',
             'March 25, 2024',
@@ -759,7 +768,8 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
     );
   }
 
-  Widget _buildScheduleItem(String title, String date, IconData icon, Color color, String timeLeft) {
+  Widget _buildScheduleItem(
+      String title, String date, IconData icon, Color color, String timeLeft) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -837,7 +847,6 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
             ),
           ),
           const SizedBox(height: 16),
-          
           Row(
             children: [
               Expanded(
@@ -861,9 +870,7 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
               ),
             ],
           ),
-          
           const SizedBox(height: 8),
-          
           Row(
             children: [
               Expanded(
@@ -914,9 +921,12 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
           ),
           const SizedBox(height: 16),
           // Mock recent activities
-          _buildActivityItem('Assignment #2 submitted by 5 students', '2 hours ago', Icons.assignment_turned_in),
-          _buildActivityItem('Graded Quiz #3 for all students', '1 day ago', Icons.grade),
-          _buildActivityItem('Updated formula for final calculation', '3 days ago', Icons.calculate),
+          _buildActivityItem('Assignment #2 submitted by 5 students',
+              '2 hours ago', Icons.assignment_turned_in),
+          _buildActivityItem(
+              'Graded Quiz #3 for all students', '1 day ago', Icons.grade),
+          _buildActivityItem('Updated formula for final calculation',
+              '3 days ago', Icons.calculate),
         ],
       ),
     );
@@ -1147,7 +1157,16 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const AssignmentsMainPage(),
+        builder: (context) => FlexibleAssignmentsPage(
+          params: AssignmentListParams(
+            context: AssignmentNavigationContext.fromSubject,
+            preSelectedSubjectId: widget.subject.id,
+            title: '${widget.subject.name} Assignments',
+            showClassFilter: true, // May have assignments from multiple classes
+            showSubjectFilter: false,
+            showStats: false,
+          ),
+        ),
       ),
     );
   }
@@ -1156,7 +1175,16 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const AssignmentsMainPage(),
+        builder: (context) => FlexibleAssignmentsPage(
+          params: AssignmentListParams(
+            context: AssignmentNavigationContext.fromSubject,
+            preSelectedSubjectId: widget.subject.id,
+            title: '${widget.subject.name} Assignments',
+            showClassFilter: true, // May have assignments from multiple classes
+            showSubjectFilter: false,
+            showStats: false,
+          ),
+        ),
       ),
     );
   }
@@ -1202,19 +1230,22 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
 
   void _configureGradeScale() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Grade Scale Configuration - Under Development')),
+      const SnackBar(
+          content: Text('Grade Scale Configuration - Under Development')),
     );
   }
 
   void _configureRounding() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Rounding Rules Configuration - Under Development')),
+      const SnackBar(
+          content: Text('Rounding Rules Configuration - Under Development')),
     );
   }
 
   void _configureExtraCredit() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Extra Credit Configuration - Under Development')),
+      const SnackBar(
+          content: Text('Extra Credit Configuration - Under Development')),
     );
   }
 
@@ -1250,13 +1281,15 @@ class _SubjectDetailPageState extends ConsumerState<SubjectDetailPage>
 
   void _viewAssignmentDetails(int index) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Assignment ${index + 1} Details - Under Development')),
+      SnackBar(
+          content: Text('Assignment ${index + 1} Details - Under Development')),
     );
   }
 
   void _viewStudentProfile(int index) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Student ${index + 1} Profile - Under Development')),
+      SnackBar(
+          content: Text('Student ${index + 1} Profile - Under Development')),
     );
   }
 

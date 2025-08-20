@@ -24,7 +24,7 @@ import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../attendance/presentation/pages/student_attendance_page.dart';
 
 import '../../../subjects/presentation/pages/subjects_main_page.dart';
-import '../../../assignments/presentation/pages/assignments_main_page.dart';
+import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
 import '../../../../shared/services/chat_service.dart';
 
 // Import the existing provider to avoid conflicts
@@ -337,7 +337,15 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) => const AssignmentsMainPage(),
+                      builder: (context) => const FlexibleAssignmentsPage(
+                        params: AssignmentListParams(
+                          context: AssignmentNavigationContext.fromHome,
+                          title: 'My Assignments',
+                          showClassFilter: true,
+                          showSubjectFilter: true,
+                          showStats: false,
+                        ),
+                      ),
                     ),
                   );
                 },

@@ -20,15 +20,15 @@ class AssignmentCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
           border: Border(
@@ -41,105 +41,103 @@ class AssignmentCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header with status and type
+            // Header with title, status and type
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: assignment.statusColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    assignment.statusText,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: assignment.statusColor,
-                    ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        assignment.title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      // Subject and Class in one line
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppTheme.primaryColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              assignment.subjectName ?? 'Unknown',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: AppTheme.primaryColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            assignment.className ?? 'Unknown Class',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.textSecondary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    assignment.typeDisplayName,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppTheme.textSecondary,
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: assignment.statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        assignment.statusText,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: assignment.statusColor,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 2),
+                    Text(
+                      assignment.typeDisplayName,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-
-            // Title
-            Text(
-              assignment.title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 8),
 
-            // Subject and Class
-            Row(
-              children: [
-                Icon(
-                  Icons.subject,
-                  size: 16,
-                  color: AppTheme.textSecondary,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  assignment.subjectName ?? 'Unknown Subject',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Icon(
-                  Icons.class_,
-                  size: 16,
-                  color: AppTheme.textSecondary,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  assignment.className ?? 'Unknown Class',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Due date and points
+            // Due date and points in compact row
             Row(
               children: [
                 Icon(
                   Icons.schedule,
-                  size: 16,
+                  size: 14,
                   color: assignment.isOverdue
                       ? AppTheme.errorColor
                       : AppTheme.textSecondary,
@@ -150,7 +148,7 @@ class AssignmentCard extends StatelessWidget {
                       ? _formatDueDate(assignment.dueDate!)
                       : 'No due date',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: assignment.isOverdue
                         ? AppTheme.errorColor
@@ -160,14 +158,14 @@ class AssignmentCard extends StatelessWidget {
                 const Spacer(),
                 Icon(
                   Icons.grade,
-                  size: 16,
+                  size: 14,
                   color: AppTheme.textSecondary,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '${assignment.maxScore} pts',
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: AppTheme.textPrimary,
                   ),
@@ -175,16 +173,16 @@ class AssignmentCard extends StatelessWidget {
               ],
             ),
 
-            // Progress bar for teachers/admins
+            // Progress bar for teachers/admins (more compact)
             if (userRole != UserRoleType.student) ...[
-              const SizedBox(height: 12),
-              _buildProgressSection(),
+              const SizedBox(height: 6),
+              _buildCompactProgressSection(),
             ],
 
-            // Grade for students (if graded)
+            // Grade for students (if graded) (more compact)
             if (userRole == UserRoleType.student && assignment.isGraded) ...[
-              const SizedBox(height: 12),
-              _buildGradeSection(),
+              const SizedBox(height: 6),
+              _buildCompactGradeSection(),
             ],
           ],
         ),
@@ -192,74 +190,63 @@ class AssignmentCard extends StatelessWidget {
     );
   }
 
-  Widget _buildProgressSection() {
+  Widget _buildCompactProgressSection() {
     final submittedCount = assignment.submittedCount ?? 0;
     final totalStudents = assignment.totalStudents ?? 1;
     final progress = submittedCount / totalStudents;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Submissions',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            Text(
-              '$submittedCount/$totalStudents',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        LinearProgressIndicator(
-          value: progress,
-          backgroundColor: AppTheme.textSecondary.withValues(alpha: 0.2),
-          valueColor: AlwaysStoppedAnimation<Color>(
-            progress < 0.5
-                ? AppTheme.errorColor
-                : progress < 0.8
-                    ? AppTheme.warningColor
-                    : AppTheme.successColor,
+        Text(
+          'Submissions: $submittedCount/$totalStudents',
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: AppTheme.textSecondary,
           ),
-          minHeight: 6,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: LinearProgressIndicator(
+            value: progress,
+            backgroundColor: AppTheme.textSecondary.withValues(alpha: 0.2),
+            valueColor: AlwaysStoppedAnimation<Color>(
+              progress < 0.5
+                  ? AppTheme.errorColor
+                  : progress < 0.8
+                      ? AppTheme.warningColor
+                      : AppTheme.successColor,
+            ),
+            minHeight: 4,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildGradeSection() {
+  Widget _buildCompactGradeSection() {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: AppTheme.successColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            'Your Grade',
+            'Grade:',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: AppTheme.textPrimary,
+              color: AppTheme.textSecondary,
             ),
           ),
+          const SizedBox(width: 4),
           Text(
             '${assignment.studentScore?.toStringAsFixed(0) ?? 'N/A'}/${assignment.maxScore}',
             style: const TextStyle(
-              fontSize: 16,
+              fontSize: 11,
               fontWeight: FontWeight.bold,
               color: AppTheme.successColor,
             ),

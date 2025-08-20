@@ -19,7 +19,7 @@ import '../../../attendance/presentation/pages/attendance_management_page.dart';
 import '../../../subjects/presentation/pages/subjects_main_page.dart';
 import '../../../subjects/presentation/pages/subject_offering_details_page.dart';
 import '../../../../shared/services/subjects_service.dart';
-import '../../../assignments/presentation/pages/assignments_main_page.dart';
+import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
 
 // Providers for class details data
 final classSubjectsProvider =
@@ -917,7 +917,16 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const AssignmentsMainPage(),
+                        builder: (context) => FlexibleAssignmentsPage(
+                          params: AssignmentListParams(
+                            context: AssignmentNavigationContext.fromClass,
+                            preSelectedClassId: widget.classModel.id,
+                            title: '${widget.classModel.name} Assignments',
+                            showClassFilter: false,
+                            showSubjectFilter: true,
+                            showStats: false,
+                          ),
+                        ),
                       ),
                     );
                   },

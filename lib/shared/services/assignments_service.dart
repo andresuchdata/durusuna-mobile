@@ -148,6 +148,7 @@ class AssignmentsService {
     int limit = 50,
     String? type,
     String status = 'all',
+    String? searchQuery,
   }) async {
     try {
       final headers = await _getHeaders();
@@ -158,6 +159,9 @@ class AssignmentsService {
       };
       if (type != null && type != 'all') {
         queryParams['type'] = type;
+      }
+      if (searchQuery != null && searchQuery.isNotEmpty) {
+        queryParams['search'] = searchQuery;
       }
 
       final uri = Uri.parse('$_baseUrl/assignments/user/assignments')
@@ -214,6 +218,117 @@ class AssignmentsService {
         // Teachers see all assignments they have access to
         return assignments;
     }
+  }
+
+  /// Get accessible subjects for teachers
+  Future<List<TeacherAccessibleSubject>> getTeacherAccessibleSubjects() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/assignments/teacher/accessible-subjects'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> subjectsJson = data['subjects'] ?? [];
+        return subjectsJson
+            .map((json) => TeacherAccessibleSubject.fromJson(json))
+            .toList();
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied. Teachers only.');
+      } else {
+        throw Exception(
+            'Failed to fetch accessible subjects: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error fetching teacher accessible subjects: $e');
+      throw Exception('Error fetching accessible subjects: $e');
+    }
+  }
+
+  /// Get accessible classes for teachers
+  Future<List<TeacherAccessibleClass>> getTeacherAccessibleClasses() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/assignments/teacher/accessible-classes'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> classesJson = data['classes'] ?? [];
+        return classesJson
+            .map((json) => TeacherAccessibleClass.fromJson(json))
+            .toList();
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied. Teachers only.');
+      } else {
+        throw Exception(
+            'Failed to fetch accessible classes: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error fetching teacher accessible classes: $e');
+      throw Exception('Error fetching accessible classes: $e');
+    }
+  }
+}
+
+/// Model for teacher accessible subjects
+class TeacherAccessibleSubject {
+  final String subjectId;
+  final String subjectName;
+  final String? subjectCode;
+  final String? subjectDescription;
+  final List<TeacherAccessibleClass> classes;
+
+  const TeacherAccessibleSubject({
+    required this.subjectId,
+    required this.subjectName,
+    this.subjectCode,
+    this.subjectDescription,
+    required this.classes,
+  });
+
+  factory TeacherAccessibleSubject.fromJson(Map<String, dynamic> json) {
+    return TeacherAccessibleSubject(
+      subjectId: json['subject_id'] ?? '',
+      subjectName: json['subject_name'] ?? '',
+      subjectCode: json['subject_code'],
+      subjectDescription: json['subject_description'],
+      classes: (json['classes'] as List<dynamic>? ?? [])
+          .map((classJson) => TeacherAccessibleClass.fromJson(classJson))
+          .toList(),
+    );
+  }
+}
+
+/// Model for teacher accessible classes
+class TeacherAccessibleClass {
+  final String classId;
+  final String className;
+  final String? gradeLevel;
+  final String? classOfferingId;
+
+  const TeacherAccessibleClass({
+    required this.classId,
+    required this.className,
+    this.gradeLevel,
+    this.classOfferingId,
+  });
+
+  factory TeacherAccessibleClass.fromJson(Map<String, dynamic> json) {
+    return TeacherAccessibleClass(
+      classId: json['class_id'] ?? '',
+      className: json['class_name'] ?? '',
+      gradeLevel: json['grade_level'],
+      classOfferingId: json['class_offering_id'],
+    );
   }
 }
 

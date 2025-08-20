@@ -5,7 +5,7 @@ import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/services/subjects_service.dart';
 import '../../../../core/constants/app_theme.dart';
-import '../../../assignments/presentation/pages/assignments_main_page.dart';
+import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
 import '../widgets/subject_card.dart';
 import '../widgets/subject_stats_card.dart';
@@ -439,7 +439,16 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const AssignmentsMainPage(),
+        builder: (context) => FlexibleAssignmentsPage(
+          params: AssignmentListParams(
+            context: AssignmentNavigationContext.fromSubject,
+            preSelectedSubjectId: subject.id,
+            title: '${subject.name} Assignments',
+            showClassFilter: true, // May have assignments from multiple classes
+            showSubjectFilter: false,
+            showStats: false,
+          ),
+        ),
       ),
     );
   }
