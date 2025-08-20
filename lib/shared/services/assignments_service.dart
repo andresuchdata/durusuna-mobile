@@ -1,19 +1,16 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import '../../core/constants/api_constants.dart';
 import '../../core/storage/storage_service.dart';
 import '../models/assignment.dart';
 import '../models/user.dart';
-import 'api_service.dart';
 
 class AssignmentsService {
-  final ApiService _apiService;
   static final String _baseUrl = ApiConstants.baseUrl;
-  
-  AssignmentsService(this._apiService);
+
+  AssignmentsService();
 
   Future<Map<String, String>> _getHeaders() async {
     final token = StorageService.getToken();
@@ -26,17 +23,31 @@ class AssignmentsService {
   /// Get recent assignments across all user's classes (teachers only)
   Future<List<Assignment>> getRecentAssignments({int limit = 5}) async {
     try {
-      final Response response = await _apiService.get(
-        ApiConstants.recentAssignments,
-        queryParameters: {'limit': limit},
-      );
-      final data = response.data as Map<String, dynamic>;
-      final list = (data['assignments'] as List?) ?? [];
-      return list.map((json) => Assignment.fromJson(json)).toList();
-    } on ApiException catch (_) {
-      return <Assignment>[];
-    } catch (_) {
-      return <Assignment>[];
+      final headers = await _getHeaders();
+      final queryParams = {
+        'limit': limit.toString(),
+      };
+
+      final uri = Uri.parse('$_baseUrl/assignments/recent')
+          .replace(queryParameters: queryParams);
+
+      final response = await http.get(uri, headers: headers);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> assignmentsJson = data['assignments'] ?? [];
+        return assignmentsJson
+            .map((json) => Assignment.fromJson(json))
+            .toList();
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else {
+        throw Exception(
+            'Failed to fetch recent assignments: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error fetching recent assignments: $e');
+      throw Exception('Error fetching recent assignments: $e');
     }
   }
 
@@ -59,21 +70,25 @@ class AssignmentsService {
         queryParams['type'] = type;
       }
 
-      final uri = Uri.parse('$_baseUrl/assignments/classes/$classId/assignments')
-          .replace(queryParameters: queryParams);
-      
+      final uri =
+          Uri.parse('$_baseUrl/assignments/classes/$classId/assignments')
+              .replace(queryParameters: queryParams);
+
       final response = await http.get(uri, headers: headers);
-      
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final List<dynamic> assignmentsJson = data['assignments'] ?? [];
-        return assignmentsJson.map((json) => Assignment.fromJson(json)).toList();
+        return assignmentsJson
+            .map((json) => Assignment.fromJson(json))
+            .toList();
       } else if (response.statusCode == 401) {
         throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
-        throw Exception('Failed to fetch class assignments: ${response.statusCode}');
+        throw Exception(
+            'Failed to fetch class assignments: ${response.statusCode}');
       }
     } catch (e) {
       debugPrint('Error fetching class assignments: $e');
@@ -95,15 +110,18 @@ class AssignmentsService {
         'limit': limit.toString(),
       };
 
-      final uri = Uri.parse('$_baseUrl/assignments/classes/$classId/subjects/$subjectId/assignments')
+      final uri = Uri.parse(
+              '$_baseUrl/assignments/classes/$classId/subjects/$subjectId/assignments')
           .replace(queryParameters: queryParams);
-      
+
       final response = await http.get(uri, headers: headers);
-      
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final List<dynamic> assignmentsJson = data['assignments'] ?? [];
-        return assignmentsJson.map((json) => Assignment.fromJson(json)).toList();
+        return assignmentsJson
+            .map((json) => Assignment.fromJson(json))
+            .toList();
       } else if (response.statusCode == 401) {
         throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
@@ -112,7 +130,8 @@ class AssignmentsService {
         // No assignments found for this subject
         return [];
       } else {
-        throw Exception('Failed to fetch subject assignments: ${response.statusCode}');
+        throw Exception(
+            'Failed to fetch subject assignments: ${response.statusCode}');
       }
     } catch (e) {
       debugPrint('Error fetching subject assignments: $e');
@@ -143,17 +162,20 @@ class AssignmentsService {
 
       final uri = Uri.parse('$_baseUrl/assignments/user/assignments')
           .replace(queryParameters: queryParams);
-      
+
       final response = await http.get(uri, headers: headers);
-      
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final List<dynamic> assignmentsJson = data['assignments'] ?? [];
-        return assignmentsJson.map((json) => Assignment.fromJson(json)).toList();
+        return assignmentsJson
+            .map((json) => Assignment.fromJson(json))
+            .toList();
       } else if (response.statusCode == 401) {
         throw Exception('Authentication failed');
       } else {
-        throw Exception('Failed to fetch user assignments: ${response.statusCode}');
+        throw Exception(
+            'Failed to fetch user assignments: ${response.statusCode}');
       }
     } catch (e) {
       debugPrint('Error fetching user assignments: $e');
@@ -162,7 +184,8 @@ class AssignmentsService {
   }
 
   /// Filter assignments by type locally
-  List<Assignment> filterAssignmentsByType(List<Assignment> assignments, String filterType) {
+  List<Assignment> filterAssignmentsByType(
+      List<Assignment> assignments, String filterType) {
     switch (filterType) {
       case 'all':
         return assignments;
@@ -180,7 +203,8 @@ class AssignmentsService {
   }
 
   /// Filter assignments by user role
-  List<Assignment> filterAssignmentsByRole(List<Assignment> assignments, UserType userRole) {
+  List<Assignment> filterAssignmentsByRole(
+      List<Assignment> assignments, UserType userRole) {
     switch (userRole) {
       case UserType.student:
       case UserType.parent:
@@ -194,6 +218,5 @@ class AssignmentsService {
 }
 
 final assignmentsServiceProvider = Provider<AssignmentsService>((ref) {
-  final api = ref.read(apiServiceProvider);
-  return AssignmentsService(api);
+  return AssignmentsService();
 });

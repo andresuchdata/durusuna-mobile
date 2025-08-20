@@ -1,7 +1,49 @@
+import 'package:flutter/material.dart';
 import 'package:json_annotation/json_annotation.dart';
 import '../../core/constants/app_theme.dart';
 
 part 'assignment.g.dart';
+
+// Helper functions for JSON parsing
+int _intFromDynamic(dynamic value) {
+  if (value == null) throw ArgumentError.notNull('value');
+  if (value is int) return value;
+  if (value is double) return value.toInt();
+  if (value is String) {
+    if (value.isEmpty) {
+      throw ArgumentError.value(
+          value, 'value', 'Empty string cannot be converted to int');
+    }
+
+    // Handle decimal strings by parsing as double first
+    return double.parse(value).toInt();
+  }
+
+  throw ArgumentError.value(value, 'value', 'Cannot convert to int');
+}
+
+int? _intFromDynamicNullable(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is double) return value.toInt();
+  if (value is String) {
+    if (value.isEmpty) return null;
+    // Handle decimal strings by parsing as double first
+    return double.parse(value).toInt();
+  }
+  throw ArgumentError.value(value, 'value', 'Cannot convert to int');
+}
+
+double? _doubleFromDynamicNullable(dynamic value) {
+  if (value == null) return null;
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is String) {
+    if (value.isEmpty) return null;
+    return double.parse(value);
+  }
+  throw ArgumentError.value(value, 'value', 'Cannot convert to double');
+}
 
 enum AssignmentType {
   @JsonValue('assignment')
@@ -33,13 +75,13 @@ class Assignment {
   final AssignmentType type;
   final String title;
   final String? description;
-  @JsonKey(name: 'max_score')
+  @JsonKey(name: 'max_score', fromJson: _intFromDynamic)
   final int maxScore;
-  @JsonKey(name: 'weight_override')
+  @JsonKey(name: 'weight_override', fromJson: _doubleFromDynamicNullable)
   final double? weightOverride;
   @JsonKey(name: 'group_tag')
   final String? groupTag;
-  @JsonKey(name: 'sequence_no')
+  @JsonKey(name: 'sequence_no', fromJson: _intFromDynamicNullable)
   final int? sequenceNo;
   @JsonKey(name: 'assigned_date')
   final DateTime? assignedDate;
@@ -51,7 +93,7 @@ class Assignment {
   final bool isPublished;
   @JsonKey(name: 'allow_late_submission')
   final bool allowLateSubmission;
-  @JsonKey(name: 'late_penalty_per_day')
+  @JsonKey(name: 'late_penalty_per_day', fromJson: _doubleFromDynamicNullable)
   final double? latePenaltyPerDay;
   @JsonKey(name: 'created_by')
   final String createdBy;
@@ -73,21 +115,21 @@ class Assignment {
   final String? creatorLastName;
 
   // Student-specific fields (when applicable)
-  @JsonKey(name: 'submitted_count')
+  @JsonKey(name: 'submitted_count', fromJson: _intFromDynamicNullable)
   final int? submittedCount;
-  @JsonKey(name: 'total_students')
+  @JsonKey(name: 'total_students', fromJson: _intFromDynamicNullable)
   final int? totalStudents;
-  @JsonKey(name: 'grades_count')
+  @JsonKey(name: 'grades_count', fromJson: _intFromDynamicNullable)
   final int? gradesCount;
-  @JsonKey(name: 'graded_count')
+  @JsonKey(name: 'graded_count', fromJson: _intFromDynamicNullable)
   final int? gradedCount;
-  @JsonKey(name: 'average_score')
+  @JsonKey(name: 'average_score', fromJson: _doubleFromDynamicNullable)
   final double? averageScore;
 
   // Student submission status (if user is a student)
   @JsonKey(name: 'submission_status')
   final AssignmentStatus? submissionStatus;
-  @JsonKey(name: 'student_score')
+  @JsonKey(name: 'student_score', fromJson: _doubleFromDynamicNullable)
   final double? studentScore;
   @JsonKey(name: 'is_late')
   final bool? isLate;
@@ -192,7 +234,7 @@ class Assignment {
           return 'Active';
       }
     }
-    
+
     // Fallback for non-student users
     if (isOverdue) return 'Overdue';
     if (isDueSoon) return 'Due Soon';
@@ -215,7 +257,7 @@ class Assignment {
           return AppTheme.primaryColor;
       }
     }
-    
+
     // Fallback for non-student users
     if (isOverdue) return AppTheme.errorColor;
     if (isDueSoon) return AppTheme.warningColor;

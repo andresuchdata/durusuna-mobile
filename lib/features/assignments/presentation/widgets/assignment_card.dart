@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_theme.dart';
+import '../../../../shared/models/assignment.dart';
 import '../pages/assignments_main_page.dart';
-import 'assignment_list_view.dart';
 
 class AssignmentCard extends StatelessWidget {
-  final MockAssignment assignment;
+  final Assignment assignment;
   final UserRoleType userRole;
   final VoidCallback? onTap;
 
@@ -73,7 +73,7 @@ class AssignmentCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    assignment.type,
+                    assignment.typeDisplayName,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -108,7 +108,7 @@ class AssignmentCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  assignment.subject,
+                  assignment.subjectName ?? 'Unknown Subject',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -123,7 +123,7 @@ class AssignmentCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  assignment.className,
+                  assignment.className ?? 'Unknown Class',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -146,7 +146,9 @@ class AssignmentCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  _formatDueDate(assignment.dueDate),
+                  assignment.dueDate != null
+                      ? _formatDueDate(assignment.dueDate!)
+                      : 'No due date',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -163,7 +165,7 @@ class AssignmentCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  '${assignment.totalPoints} pts',
+                  '${assignment.maxScore} pts',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -191,7 +193,9 @@ class AssignmentCard extends StatelessWidget {
   }
 
   Widget _buildProgressSection() {
-    final progress = assignment.submissionCount / assignment.totalStudents;
+    final submittedCount = assignment.submittedCount ?? 0;
+    final totalStudents = assignment.totalStudents ?? 1;
+    final progress = submittedCount / totalStudents;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -208,7 +212,7 @@ class AssignmentCard extends StatelessWidget {
               ),
             ),
             Text(
-              '${assignment.submissionCount}/${assignment.totalStudents}',
+              '$submittedCount/$totalStudents',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -253,7 +257,7 @@ class AssignmentCard extends StatelessWidget {
             ),
           ),
           Text(
-            '${assignment.grade?.toStringAsFixed(0) ?? 'N/A'}/${assignment.totalPoints}',
+            '${assignment.studentScore?.toStringAsFixed(0) ?? 'N/A'}/${assignment.maxScore}',
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,

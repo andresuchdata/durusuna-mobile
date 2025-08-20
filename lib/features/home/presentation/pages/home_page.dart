@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../core/utils/global_auth_handler.dart';
+import '../../../../shared/models/assignment.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/models/notification.dart';
@@ -311,7 +312,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
   Widget _buildRecentAssignmentsSection() {
     final authState = ref.watch(authStateProvider);
     final user = authState.user;
-    if (user == null || user.userType != UserType.teacher) {
+    if (user == null) {
       return const SizedBox.shrink();
     }
 
@@ -321,13 +322,28 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Recent Assignments',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimary,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Recent Assignments',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const AssignmentsMainPage(),
+                    ),
+                  );
+                },
+                child: const Text('View All'),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           assignmentsFuture.when(
@@ -367,13 +383,11 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     );
   }
 
-  Widget _buildAssignmentRow(Map<String, dynamic> assignment) {
-    final title = assignment['title'] as String? ?? 'Assignment';
-    final type = assignment['type'] as String? ?? 'assignment';
-    final subjectName = assignment['subject'] != null
-        ? (assignment['subject']['name'] as String? ?? '')
-        : '';
-    final dueDateStr = assignment['due_date'] as String?;
+  Widget _buildAssignmentRow(Assignment assignment) {
+    final title = assignment.title;
+    final type = assignment.typeDisplayName;
+    final subjectName = assignment.subjectName ?? '';
+    final dueDateStr = assignment.dueDate?.toIso8601String();
 
     return Container(
       decoration: const BoxDecoration(
@@ -442,9 +456,23 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
   }
 
   static final _recentAssignmentsProvider =
-      FutureProvider<List<Map<String, dynamic>>>((ref) async {
+      FutureProvider<List<Assignment>>((ref) async {
+    final authState = ref.read(authStateProvider);
+    final user = authState.user;
     final service = ref.read(assignmentsServiceProvider);
-    return await service.getRecentAssignments(limit: 5);
+
+    if (user == null) return <Assignment>[];
+
+    if (user.userType == UserType.teacher) {
+      // Teachers get recent assignments they created
+      return await service.getRecentAssignments(limit: 5);
+    } else {
+      // Students/parents get their recent assignments (due soon)
+      return await service.getUserAssignments(
+        limit: 5,
+        status: 'published',
+      );
+    }
   });
 
   Widget _buildHeaderBackground(User user) {

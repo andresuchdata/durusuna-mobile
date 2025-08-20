@@ -56,6 +56,8 @@ class _SubjectsMainPageState extends ConsumerState<SubjectsMainPage> {
         ),
         backgroundColor: AppTheme.primaryColor,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.search),

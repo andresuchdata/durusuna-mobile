@@ -57,6 +57,8 @@ class _AssignmentsMainPageState extends ConsumerState<AssignmentsMainPage>
         ),
         backgroundColor: AppTheme.primaryColor,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        foregroundColor: Colors.white,
         actions: [
           if (isTeacher || isAdmin)
             IconButton(
