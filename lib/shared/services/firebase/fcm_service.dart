@@ -149,4 +149,44 @@ class FCMService {
   Future<void> refreshToken() async {
     await _refreshToken();
   }
+
+  /// Subscribe to class update topic
+  Future<void> subscribeToClassTopic(String classId) async {
+    try {
+      final topic = 'class_${classId}_updates';
+      await _messaging.subscribeToTopic(topic);
+      debugPrint('🔥 Subscribed to topic: $topic');
+    } catch (error) {
+      debugPrint('🔥 Failed to subscribe to class topic $classId: $error');
+    }
+  }
+
+  /// Unsubscribe from class update topic
+  Future<void> unsubscribeFromClassTopic(String classId) async {
+    try {
+      final topic = 'class_${classId}_updates';
+      await _messaging.unsubscribeFromTopic(topic);
+      debugPrint('🔥 Unsubscribed from topic: $topic');
+    } catch (error) {
+      debugPrint('🔥 Failed to unsubscribe from class topic $classId: $error');
+    }
+  }
+
+  /// Subscribe to multiple class topics (for user's enrolled classes)
+  Future<void> subscribeToUserClasses(List<String> classIds) async {
+    debugPrint('🔥 Subscribing to ${classIds.length} class topics...');
+    for (final classId in classIds) {
+      await subscribeToClassTopic(classId);
+    }
+    debugPrint('✅ Subscribed to all user class topics');
+  }
+
+  /// Unsubscribe from all class topics (for logout)
+  Future<void> unsubscribeFromAllClassTopics(List<String> classIds) async {
+    debugPrint('🔥 Unsubscribing from ${classIds.length} class topics...');
+    for (final classId in classIds) {
+      await unsubscribeFromClassTopic(classId);
+    }
+    debugPrint('✅ Unsubscribed from all class topics');
+  }
 }

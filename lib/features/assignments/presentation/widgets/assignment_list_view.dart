@@ -5,7 +5,7 @@ import '../../../../shared/models/assignment.dart';
 import '../../../../shared/providers/assignment_providers.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../pages/assignments_main_page.dart';
-import 'assignment_card.dart';
+import '../pages/assignment_detail_page.dart';
 
 class AssignmentListView extends ConsumerWidget {
   final AssignmentFilterType filterType;
@@ -56,24 +56,237 @@ class AssignmentListView extends ConsumerWidget {
           onRefresh: () async {
             ref.invalidate(userAssignmentsProvider(params));
           },
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: assignments.length,
-            itemBuilder: (context, index) {
-              final assignment = assignments[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: AssignmentCard(
-                  assignment: assignment,
-                  userRole: userRole,
-                  onTap: () => _navigateToAssignmentDetail(context, assignment),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 800),
+              child: Container(
+                margin: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-              );
-            },
+                child: ListView.separated(
+                  padding: EdgeInsets.zero,
+                  itemCount: assignments.length,
+                  separatorBuilder: (context, index) => Divider(
+                    height: 1,
+                    color: AppTheme.textSecondary.withValues(alpha: 0.2),
+                    indent: 16,
+                    endIndent: 16,
+                  ),
+                  itemBuilder: (context, index) {
+                    final assignment = assignments[index];
+                    return _buildAssignmentItem(context, assignment);
+                  },
+                ),
+              ),
+            ),
           ),
         );
       },
     );
+  }
+
+  Widget _buildAssignmentItem(BuildContext context, Assignment assignment) {
+    return InkWell(
+      onTap: () => _navigateToAssignmentDetail(context, assignment),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            // Assignment type icon and color indicator
+            Container(
+              width: 4,
+              height: 64,
+              decoration: BoxDecoration(
+                color: assignment.statusColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Assignment content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          assignment.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: assignment.statusColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          assignment.typeDisplayName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: assignment.statusColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Subject and class info (without duplicate assignment title)
+                  Text(
+                    '${assignment.subjectName ?? 'Unknown Subject'}${assignment.className != null ? ' • ${assignment.className}' : ''}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppTheme.textSecondary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Due date and status row
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.schedule,
+                        size: 14,
+                        color: AppTheme.textTertiary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        assignment.dueDate != null
+                            ? _formatDueDate(assignment.dueDate!)
+                            : 'No due date',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                      const Spacer(),
+
+                      // Status indicator
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: assignment.statusColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          assignment.statusText,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: assignment.statusColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Show score for students if available
+                  if (userRole == UserRoleType.student &&
+                      assignment.studentScore != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.grade,
+                          size: 14,
+                          color: AppTheme.successColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Score: ${assignment.studentScore}/${assignment.maxScore}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.successColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+
+                  // Show stats for teachers
+                  if (userRole != UserRoleType.student &&
+                      assignment.totalStudents != null) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.people,
+                          size: 14,
+                          color: AppTheme.textTertiary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${assignment.submittedCount ?? 0}/${assignment.totalStudents} submitted',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textTertiary,
+                          ),
+                        ),
+                        if (assignment.gradedCount != null) ...[
+                          Text(
+                            ' • ${assignment.gradedCount} graded',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textTertiary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Chevron indicator
+            const Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: AppTheme.textTertiary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDueDate(DateTime dueDate) {
+    final now = DateTime.now();
+    final difference = dueDate.difference(now).inDays;
+
+    if (difference < 0) {
+      return 'Overdue';
+    } else if (difference == 0) {
+      return 'Due today';
+    } else if (difference == 1) {
+      return 'Due tomorrow';
+    } else if (difference < 7) {
+      return 'Due in ${difference}d';
+    } else {
+      return 'Due ${dueDate.day}/${dueDate.month}';
+    }
   }
 
   // Helper method to convert AssignmentFilterType to string
@@ -215,26 +428,10 @@ class AssignmentListView extends ConsumerWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => AssignmentDetailPage(assignment: assignment),
-      ),
-    );
-  }
-}
-
-// Placeholder for assignment detail page
-class AssignmentDetailPage extends StatelessWidget {
-  final Assignment assignment;
-
-  const AssignmentDetailPage({super.key, required this.assignment});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(assignment.title),
-      ),
-      body: Center(
-        child: Text('Assignment Detail - ${assignment.title}'),
+        builder: (context) => AssignmentDetailPage(
+          assignmentId: assignment.id,
+          title: assignment.title,
+        ),
       ),
     );
   }

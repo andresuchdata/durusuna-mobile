@@ -12,6 +12,7 @@ import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/widgets/global_app_drawer.dart';
 import '../../../../shared/widgets/global_bottom_navigation.dart';
 import '../../../../core/utils/date_utils.dart' as app_date_utils;
+import '../../../assignments/presentation/pages/assignment_detail_page.dart';
 
 import 'student_list_page.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
@@ -1001,107 +1002,129 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
 
     final isPublished = assignment['is_published'] as bool? ?? false;
     final isOverdue = dueDate != null && dueDate.isBefore(DateTime.now());
+    final assignmentId = assignment['id'] as String?;
+    final assignmentTitle = assignment['title'] as String? ?? 'Assignment';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: Color(0xFFE5E5E5),
-            width: 0.5,
+    return InkWell(
+      onTap: assignmentId != null
+          ? () => _navigateToAssignmentDetail(assignmentId, assignmentTitle)
+          : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Color(0xFFE5E5E5),
+              width: 0.5,
+            ),
           ),
         ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(top: 6),
-            decoration: BoxDecoration(
-              color: !isPublished
-                  ? AppTheme.textSecondary
-                  : isOverdue
-                      ? AppTheme.errorColor
-                      : AppTheme.warningColor,
-              borderRadius: BorderRadius.circular(4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(top: 6),
+              decoration: BoxDecoration(
+                color: !isPublished
+                    ? AppTheme.textSecondary
+                    : isOverdue
+                        ? AppTheme.errorColor
+                        : AppTheme.warningColor,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  assignment['title'] ?? 'Assignment',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.textPrimary,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      assignment['type'] ?? 'assignment',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    assignmentTitle,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textPrimary,
                     ),
-                    if (dueDate != null) ...[
-                      const Text(' • '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
                       Text(
-                        app_date_utils.DateUtils.formatDueDate(dueDate),
-                        style: TextStyle(
+                        assignment['type'] ?? 'assignment',
+                        style: const TextStyle(
                           fontSize: 12,
-                          color: isOverdue
-                              ? AppTheme.errorColor
-                              : AppTheme.textSecondary,
-                          fontWeight:
-                              isOverdue ? FontWeight.w500 : FontWeight.normal,
+                          color: AppTheme.textSecondary,
                         ),
                       ),
+                      if (dueDate != null) ...[
+                        const Text(' • '),
+                        Text(
+                          app_date_utils.DateUtils.formatDueDate(dueDate),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isOverdue
+                                ? AppTheme.errorColor
+                                : AppTheme.textSecondary,
+                            fontWeight:
+                                isOverdue ? FontWeight.w500 : FontWeight.normal,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: !isPublished
-                        ? AppTheme.textSecondary.withValues(alpha: 0.1)
-                        : isOverdue
-                            ? AppTheme.errorColor.withValues(alpha: 0.1)
-                            : AppTheme.successColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(
-                    !isPublished
-                        ? 'Draft'
-                        : isOverdue
-                            ? 'Overdue'
-                            : 'Active',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
+                  const SizedBox(height: 4),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
                       color: !isPublished
-                          ? AppTheme.textSecondary
+                          ? AppTheme.textSecondary.withValues(alpha: 0.1)
                           : isOverdue
-                              ? AppTheme.errorColor
-                              : AppTheme.successColor,
+                              ? AppTheme.errorColor.withValues(alpha: 0.1)
+                              : AppTheme.successColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      !isPublished
+                          ? 'Draft'
+                          : isOverdue
+                              ? 'Overdue'
+                              : 'Active',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: !isPublished
+                            ? AppTheme.textSecondary
+                            : isOverdue
+                                ? AppTheme.errorColor
+                                : AppTheme.successColor,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            if (assignmentId != null)
+              const Icon(Icons.chevron_right,
+                  size: 18, color: AppTheme.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateToAssignmentDetail(String assignmentId, String title) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssignmentDetailPage(
+          assignmentId: assignmentId,
+          title: title,
+        ),
       ),
     );
   }

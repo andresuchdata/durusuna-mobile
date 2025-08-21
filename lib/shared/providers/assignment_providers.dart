@@ -35,6 +35,7 @@ final userAssignmentsProvider =
         limit: params.limit,
         type: params.type,
         status: params.status,
+        searchQuery: params.searchQuery,
       );
     } else {
       // Get all user assignments (supports subjectId-only filtering via backend)

@@ -5,6 +5,7 @@ import '../models/class_model.dart';
 import '../models/user.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/storage/storage_service.dart';
+import 'firebase/fcm_service.dart';
 
 class ClassManagementService {
   static final String _baseUrl = ApiConstants.baseUrl;
@@ -30,7 +31,13 @@ class ClassManagementService {
         final Map<String, dynamic> data = json.decode(response.body);
         final List<dynamic> classesJson = data['classes'] ?? [];
 
-        return classesJson.map((json) => ClassModel.fromJson(json)).toList();
+        final classes =
+            classesJson.map((json) => ClassModel.fromJson(json)).toList();
+
+        // Subscribe to FCM topics for all user classes
+        await _subscribeToClassTopics(classes);
+
+        return classes;
       } else if (response.statusCode == 401) {
         throw Exception('Authentication failed');
       } else {
@@ -38,6 +45,19 @@ class ClassManagementService {
       }
     } catch (e) {
       throw Exception('Error fetching user classes: $e');
+    }
+  }
+
+  /// Subscribe to FCM topics for user's classes
+  Future<void> _subscribeToClassTopics(List<ClassModel> classes) async {
+    try {
+      final fcmService = FCMService();
+      final classIds = classes.map((c) => c.id).toList();
+      await fcmService.subscribeToUserClasses(classIds);
+      debugPrint('✅ Subscribed to ${classIds.length} class FCM topics');
+    } catch (e) {
+      debugPrint('⚠️ Failed to subscribe to class FCM topics: $e');
+      // Don't throw error - FCM subscription failure shouldn't break class loading
     }
   }
 

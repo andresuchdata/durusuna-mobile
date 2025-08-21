@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/models/user.dart';
@@ -66,6 +67,7 @@ class _FlexibleAssignmentsPageState
   String _selectedSubjectFilter = 'all';
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  Timer? _debounceTimer;
 
   @override
   void initState() {
@@ -86,7 +88,22 @@ class _FlexibleAssignmentsPageState
   void dispose() {
     _tabController?.dispose();
     _searchController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    // Cancel the previous timer
+    _debounceTimer?.cancel();
+
+    // Create a new timer
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() {
+          _searchQuery = value;
+        });
+      }
+    });
   }
 
   @override
@@ -263,11 +280,7 @@ class _FlexibleAssignmentsPageState
       ),
       child: TextField(
         controller: _searchController,
-        onChanged: (value) {
-          setState(() {
-            _searchQuery = value;
-          });
-        },
+        onChanged: _onSearchChanged,
         decoration: InputDecoration(
           hintText: 'Search assignments by title...',
           hintStyle: const TextStyle(
@@ -287,8 +300,9 @@ class _FlexibleAssignmentsPageState
                     size: 20,
                   ),
                   onPressed: () {
+                    _debounceTimer?.cancel();
+                    _searchController.clear();
                     setState(() {
-                      _searchController.clear();
                       _searchQuery = '';
                     });
                   },

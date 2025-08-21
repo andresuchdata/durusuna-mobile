@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../core/constants/api_constants.dart';
 import '../../core/storage/storage_service.dart';
 import '../models/assignment.dart';
+import '../models/assignment_detail.dart';
 import '../models/user.dart';
 
 class AssignmentsService {
@@ -58,6 +59,7 @@ class AssignmentsService {
     int limit = 50,
     String? type,
     String status = 'all',
+    String? searchQuery,
   }) async {
     try {
       final headers = await _getHeaders();
@@ -69,10 +71,20 @@ class AssignmentsService {
       if (type != null && type != 'all') {
         queryParams['type'] = type;
       }
+      if (searchQuery != null && searchQuery.isNotEmpty) {
+        queryParams['search'] = searchQuery;
+        if (kDebugMode) {
+          debugPrint('🔍 getClassAssignments search query: "$searchQuery"');
+        }
+      }
 
       final uri =
           Uri.parse('$_baseUrl/assignments/classes/$classId/assignments')
               .replace(queryParameters: queryParams);
+
+      if (kDebugMode && searchQuery != null && searchQuery.isNotEmpty) {
+        debugPrint('🔍 getClassAssignments API URL: $uri');
+      }
 
       final response = await http.get(uri, headers: headers);
 
@@ -163,6 +175,9 @@ class AssignmentsService {
       }
       if (searchQuery != null && searchQuery.isNotEmpty) {
         queryParams['search'] = searchQuery;
+        if (kDebugMode) {
+          debugPrint('🔍 getUserAssignments search query: "$searchQuery"');
+        }
       }
       if (subjectId != null && subjectId.isNotEmpty) {
         queryParams['subject_id'] = subjectId;
@@ -170,6 +185,10 @@ class AssignmentsService {
 
       final uri = Uri.parse('$_baseUrl/assignments/user/assignments')
           .replace(queryParameters: queryParams);
+
+      if (kDebugMode && searchQuery != null && searchQuery.isNotEmpty) {
+        debugPrint('🔍 getUserAssignments API URL: $uri');
+      }
 
       final response = await http.get(uri, headers: headers);
 
@@ -279,6 +298,39 @@ class AssignmentsService {
     } catch (e) {
       debugPrint('Error fetching teacher accessible classes: $e');
       throw Exception('Error fetching accessible classes: $e');
+    }
+  }
+
+  /// Get assignment details with student submissions
+  Future<AssignmentDetail> getAssignmentDetails(String assignmentId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/assignments/$assignmentId/details'),
+        headers: headers,
+      );
+
+      if (kDebugMode) {
+        debugPrint('Assignment details response: ${response.statusCode}');
+        debugPrint('Assignment details body: ${response.body}');
+      }
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return AssignmentDetail.fromJson(data);
+      } else if (response.statusCode == 404) {
+        throw Exception('Assignment not found');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied to this assignment');
+      } else {
+        throw Exception(
+            'Failed to load assignment details: ${response.statusCode}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error getting assignment details: $e');
+      }
+      rethrow;
     }
   }
 }

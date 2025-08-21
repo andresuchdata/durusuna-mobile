@@ -13,6 +13,7 @@ import '../../../../shared/widgets/global_app_drawer.dart';
 import '../../../../shared/widgets/global_bottom_navigation.dart';
 
 import '../../../notifications/presentation/pages/notifications_page.dart';
+import '../../../assignments/presentation/pages/assignment_detail_page.dart';
 import '../../../chat/presentation/pages/conversations_page.dart';
 import '../../../chat/presentation/pages/local_chat_page.dart';
 import '../../../class_management/presentation/pages/class_management_page.dart';
@@ -397,68 +398,83 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     final subjectName = assignment.subjectName ?? '';
     final dueDateStr = assignment.dueDate?.toIso8601String();
 
-    return Container(
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E5E5), width: 0.5),
+    return InkWell(
+      onTap: () => _navigateToAssignmentDetail(assignment),
+      child: Container(
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: Color(0xFFE5E5E5), width: 0.5),
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Icon(
+              type == 'test'
+                  ? Icons.quiz
+                  : type == 'final_exam'
+                      ? Icons.fact_check
+                      : Icons.assignment,
+              color: AppTheme.primaryColor,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      if (subjectName.isNotEmpty)
+                        Text(
+                          subjectName,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      if (subjectName.isNotEmpty && dueDateStr != null)
+                        const Text(' • '),
+                      if (dueDateStr != null)
+                        Text(
+                          dueDateStr,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right,
+                size: 18, color: AppTheme.textSecondary),
+          ],
         ),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Icon(
-            type == 'test'
-                ? Icons.quiz
-                : type == 'final_exam'
-                    ? Icons.fact_check
-                    : Icons.assignment,
-            color: AppTheme.primaryColor,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    if (subjectName.isNotEmpty)
-                      Text(
-                        subjectName,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    if (subjectName.isNotEmpty && dueDateStr != null)
-                      const Text(' • '),
-                    if (dueDateStr != null)
-                      Text(
-                        dueDateStr,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right,
-              size: 18, color: AppTheme.textSecondary),
-        ],
+    );
+  }
+
+  void _navigateToAssignmentDetail(Assignment assignment) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssignmentDetailPage(
+          assignmentId: assignment.id,
+          title: assignment.title,
+        ),
       ),
     );
   }
