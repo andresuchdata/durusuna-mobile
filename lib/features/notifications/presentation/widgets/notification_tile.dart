@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/notification.dart';
+import '../../../../shared/utils/notification_helpers.dart';
 
 class NotificationTile extends StatelessWidget {
   final NotificationModel notification;
@@ -102,37 +103,14 @@ class NotificationTile extends StatelessWidget {
   }
 
   Widget _buildNotificationIcon() {
-    IconData iconData;
-    Color iconColor;
-
-    switch (notification.type) {
-      case NotificationType.message:
-        iconData = Icons.message;
-        iconColor = AppTheme.successColor;
-        break;
-      case NotificationType.assignment:
-        iconData = Icons.assignment;
-        iconColor = AppTheme.warningColor;
-        break;
-      case NotificationType.announcement:
-        iconData = Icons.campaign;
-        iconColor = AppTheme.primaryColor;
-        break;
-      case NotificationType.event:
-        iconData = Icons.event;
-        iconColor = Colors.purple;
-        break;
-      case NotificationType.system:
-        iconData = Icons.settings;
-        iconColor = AppTheme.textSecondary;
-        break;
-    }
+    final iconData = NotificationHelpers.getIcon(notification.type);
+    final iconColor = NotificationHelpers.getColor(notification.type);
 
     return Container(
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: iconColor.withOpacity(0.1),
+        color: NotificationHelpers.getLightColor(notification.type),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Icon(
@@ -161,18 +139,5 @@ class NotificationTile extends StatelessWidget {
     );
   }
 
-  Color _getBadgeColor() {
-    switch (notification.type) {
-      case NotificationType.message:
-        return AppTheme.successColor;
-      case NotificationType.assignment:
-        return AppTheme.warningColor;
-      case NotificationType.announcement:
-        return AppTheme.primaryColor;
-      case NotificationType.event:
-        return Colors.purple;
-      case NotificationType.system:
-        return AppTheme.textSecondary;
-    }
-  }
+  Color _getBadgeColor() => NotificationHelpers.getColor(notification.type);
 }

@@ -33,19 +33,50 @@ class NotificationNavigationService {
     if (context == null) return;
 
     switch (notification.type) {
+      // Message Related
       case NotificationType.message:
+      case NotificationType.messageReceived:
+      case NotificationType.conversationCreated:
         await _handleMessageNotification(context, notification);
         break;
+
+      // Assignment Related
       case NotificationType.assignment:
+      case NotificationType.assignmentCreated:
+      case NotificationType.assignmentUpdated:
+      case NotificationType.assignmentDueSoon:
+      case NotificationType.assignmentSubmitted:
+      case NotificationType.assignmentGraded:
         await _handleAssignmentNotification(context, notification);
         break;
+
+      // Class Update/Announcement Related
       case NotificationType.announcement:
+      case NotificationType.classUpdateAnnouncement:
+      case NotificationType.classUpdateHomework:
+      case NotificationType.classUpdateReminder:
+      case NotificationType.classUpdateComment:
+      case NotificationType.classUpdateReply:
         await _handleAnnouncementNotification(context, notification);
         break;
+
+      // Event Related
       case NotificationType.event:
+      case NotificationType.classUpdateEvent:
+      case NotificationType.reminder:
         await _handleEventNotification(context, notification);
         break;
+
+      // System and Other Types
       case NotificationType.system:
+      case NotificationType.systemAnnouncement:
+      case NotificationType.systemMaintenance:
+      case NotificationType.systemUpdate:
+      case NotificationType.attendanceMarked:
+      case NotificationType.attendanceLate:
+      case NotificationType.attendanceAbsent:
+      case NotificationType.gradePosted:
+      case NotificationType.gradeUpdated:
         await _handleSystemNotification(context, notification);
         break;
     }

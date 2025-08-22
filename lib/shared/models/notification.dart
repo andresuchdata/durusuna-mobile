@@ -1,17 +1,79 @@
 import 'package:json_annotation/json_annotation.dart';
 import 'user.dart';
+import '../utils/notification_helpers.dart';
 
 part 'notification.g.dart';
 
 enum NotificationType {
-  @JsonValue('message')
-  message,
-  @JsonValue('assignment')
-  assignment,
+  // Class Update Related
+  @JsonValue('class_update_announcement')
+  classUpdateAnnouncement,
+  @JsonValue('class_update_homework')
+  classUpdateHomework,
+  @JsonValue('class_update_reminder')
+  classUpdateReminder,
+  @JsonValue('class_update_event')
+  classUpdateEvent,
+
+  // Class Update Comments
+  @JsonValue('class_update_comment')
+  classUpdateComment,
+  @JsonValue('class_update_reply')
+  classUpdateReply,
+
+  // Assignment Related
+  @JsonValue('assignment_created')
+  assignmentCreated,
+  @JsonValue('assignment_updated')
+  assignmentUpdated,
+  @JsonValue('assignment_due_soon')
+  assignmentDueSoon,
+  @JsonValue('assignment_submitted')
+  assignmentSubmitted,
+  @JsonValue('assignment_graded')
+  assignmentGraded,
+
+  // Attendance Related
+  @JsonValue('attendance_marked')
+  attendanceMarked,
+  @JsonValue('attendance_late')
+  attendanceLate,
+  @JsonValue('attendance_absent')
+  attendanceAbsent,
+
+  // Grade Related
+  @JsonValue('grade_posted')
+  gradePosted,
+  @JsonValue('grade_updated')
+  gradeUpdated,
+
+  // Message Related
+  @JsonValue('message_received')
+  messageReceived,
+  @JsonValue('conversation_created')
+  conversationCreated,
+
+  // System Related
+  @JsonValue('system_announcement')
+  systemAnnouncement,
+  @JsonValue('system_maintenance')
+  systemMaintenance,
+  @JsonValue('system_update')
+  systemUpdate,
+
+  // General
   @JsonValue('announcement')
   announcement,
   @JsonValue('event')
   event,
+  @JsonValue('reminder')
+  reminder,
+
+  // Legacy types (for backward compatibility)
+  @JsonValue('message')
+  message,
+  @JsonValue('assignment')
+  assignment,
   @JsonValue('system')
   system,
 }
@@ -130,20 +192,7 @@ class NotificationModel {
     }
   }
 
-  String get typeDisplayName {
-    switch (type) {
-      case NotificationType.message:
-        return 'Message';
-      case NotificationType.assignment:
-        return 'Assignment';
-      case NotificationType.announcement:
-        return 'Announcement';
-      case NotificationType.event:
-        return 'Event';
-      case NotificationType.system:
-        return 'System';
-    }
-  }
+  String get typeDisplayName => NotificationHelpers.getDisplayName(type);
 
   @override
   bool operator ==(Object other) =>

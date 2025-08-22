@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/chat/presentation/pages/local_chat_page.dart';
 import '../../features/class_updates/presentation/pages/class_updates_page.dart';
+import '../../features/assignments/presentation/pages/assignments_main_page.dart';
+import '../../features/assignments/presentation/pages/assignment_detail_page.dart';
+import '../../features/attendance/presentation/pages/student_attendance_page.dart';
+import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../main.dart';
 import '../models/conversation.dart';
@@ -20,16 +24,117 @@ class NotificationDeepLinkRouter {
       final String? actionUrl = _readString(data, ['actionUrl', 'action_url']);
       final Map<String, dynamic>? actionData = _readActionData(data);
 
-      if (type == 'message' || (actionUrl?.startsWith('chat/') ?? false)) {
-        await _navigateToMessage(context, actionUrl, actionData);
-        return;
-      }
+      debugPrint('🔔 FCM Navigation: type=$type, actionUrl=$actionUrl');
+      debugPrint('🔔 FCM Navigation: actionData=$actionData');
 
-      // Default all other types to class updates page
-      await _navigateToClassUpdates(context, actionUrl, actionData);
+      // Route based on notification type
+      if (type != null) {
+        await _routeByNotificationType(context, type, actionUrl, actionData);
+      } else if (actionUrl != null) {
+        // Fallback: route by URL pattern
+        await _routeByActionUrl(context, actionUrl, actionData);
+      } else {
+        // Last resort: go to notifications page
+        await _navigateToNotifications(context);
+      }
     } catch (e) {
+      debugPrint('❌ FCM Navigation error: $e');
       // Last resort: go home
       await _navigateToHome(context);
+    }
+  }
+
+  /// Route based on notification type (BE standard)
+  static Future<void> _routeByNotificationType(
+    BuildContext context,
+    String type,
+    String? actionUrl,
+    Map<String, dynamic>? actionData,
+  ) async {
+    switch (type.toLowerCase()) {
+      // Class Update Related
+      case 'class_update_announcement':
+      case 'class_update_homework':
+      case 'class_update_reminder':
+      case 'class_update_event':
+      case 'class_update_comment':
+      case 'class_update_reply':
+        await _navigateToClassUpdate(context, actionUrl, actionData);
+        break;
+
+      // Assignment Related
+      case 'assignment_created':
+      case 'assignment_updated':
+      case 'assignment_due_soon':
+      case 'assignment_submitted':
+      case 'assignment_graded':
+        await _navigateToAssignment(context, actionUrl, actionData);
+        break;
+
+      // Attendance Related
+      case 'attendance_marked':
+      case 'attendance_late':
+      case 'attendance_absent':
+        await _navigateToAttendance(context, actionUrl, actionData);
+        break;
+
+      // Grade Related
+      case 'grade_posted':
+      case 'grade_updated':
+        await _navigateToGrades(context, actionUrl, actionData);
+        break;
+
+      // Message Related
+      case 'message_received':
+      case 'conversation_created':
+      case 'message': // Legacy
+        await _navigateToMessage(context, actionUrl, actionData);
+        break;
+
+      // System Related
+      case 'system_announcement':
+      case 'system_maintenance':
+      case 'system_update':
+      case 'system': // Legacy
+        await _navigateToNotifications(context);
+        break;
+
+      // General notifications
+      case 'announcement':
+      case 'event':
+      case 'reminder':
+        await _navigateToClassUpdate(context, actionUrl, actionData);
+        break;
+
+      // Legacy assignment type
+      case 'assignment':
+        await _navigateToAssignment(context, actionUrl, actionData);
+        break;
+
+      default:
+        debugPrint(
+            '⚠️ Unknown notification type: $type, falling back to notifications');
+        await _navigateToNotifications(context);
+    }
+  }
+
+  /// Fallback routing by action URL pattern
+  static Future<void> _routeByActionUrl(
+    BuildContext context,
+    String actionUrl,
+    Map<String, dynamic>? actionData,
+  ) async {
+    if (actionUrl.contains('/chat/') || actionUrl.contains('/conversation/')) {
+      await _navigateToMessage(context, actionUrl, actionData);
+    } else if (actionUrl.contains('/classes/') &&
+        actionUrl.contains('/updates/')) {
+      await _navigateToClassUpdate(context, actionUrl, actionData);
+    } else if (actionUrl.contains('/assignment/')) {
+      await _navigateToAssignment(context, actionUrl, actionData);
+    } else if (actionUrl.contains('/attendance/')) {
+      await _navigateToAttendance(context, actionUrl, actionData);
+    } else {
+      await _navigateToNotifications(context);
     }
   }
 
@@ -107,7 +212,8 @@ class NotificationDeepLinkRouter {
     );
   }
 
-  static Future<void> _navigateToClassUpdates(
+  /// Navigate to class update (renamed and enhanced)
+  static Future<void> _navigateToClassUpdate(
     BuildContext context,
     String? actionUrl,
     Map<String, dynamic>? actionData,
@@ -121,8 +227,15 @@ class NotificationDeepLinkRouter {
       final uri = Uri.tryParse(actionUrl);
       final segments = uri?.pathSegments ?? actionUrl.split('/');
       if (segments.isNotEmpty) {
-        final idx = segments.first == 'class' ? 1 : 0;
-        if (segments.length > idx) classId = segments[idx];
+        final idx = segments.indexWhere((s) => s == 'classes');
+        if (idx >= 0 && segments.length > idx + 1) {
+          classId = segments[idx + 1];
+          // Try to extract update ID from URL like /classes/{id}/updates/{updateId}
+          final updateIdx = segments.indexWhere((s) => s == 'updates');
+          if (updateIdx >= 0 && segments.length > updateIdx + 1) {
+            updateId = segments[updateIdx + 1];
+          }
+        }
       }
     }
 
@@ -139,6 +252,84 @@ class NotificationDeepLinkRouter {
           highlightUpdateId: updateId,
           scrollToUpdate: updateId != null,
         ),
+      ),
+      (route) => route.isFirst,
+    );
+  }
+
+  /// Navigate to assignment page
+  static Future<void> _navigateToAssignment(
+    BuildContext context,
+    String? actionUrl,
+    Map<String, dynamic>? actionData,
+  ) async {
+    String? assignmentId = actionData?['assignment_id'] as String?;
+    String? assignmentTitle = actionData?['assignment_title'] as String?;
+
+    // Try to extract assignment ID from URL
+    if (assignmentId == null && actionUrl != null) {
+      final uri = Uri.tryParse(actionUrl);
+      final segments = uri?.pathSegments ?? actionUrl.split('/');
+      final assignmentIdx =
+          segments.indexWhere((s) => s == 'assignment' || s == 'assignments');
+      if (assignmentIdx >= 0 && segments.length > assignmentIdx + 1) {
+        assignmentId = segments[assignmentIdx + 1];
+      }
+    }
+
+    // Navigate to specific assignment or assignments page
+    if (assignmentId != null) {
+      await Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => AssignmentDetailPage(
+            assignmentId: assignmentId!,
+            title: assignmentTitle,
+          ),
+        ),
+        (route) => route.isFirst,
+      );
+    } else {
+      await Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const AssignmentsMainPage(),
+        ),
+        (route) => route.isFirst,
+      );
+    }
+  }
+
+  /// Navigate to attendance page
+  static Future<void> _navigateToAttendance(
+    BuildContext context,
+    String? actionUrl,
+    Map<String, dynamic>? actionData,
+  ) async {
+    // Note: Currently navigates to general attendance page
+    // Future enhancement: could navigate to specific class/date if StudentAttendancePage supports it
+
+    await Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const StudentAttendancePage(),
+      ),
+      (route) => route.isFirst,
+    );
+  }
+
+  /// Navigate to grades (assignments page for now, could be specialized later)
+  static Future<void> _navigateToGrades(
+    BuildContext context,
+    String? actionUrl,
+    Map<String, dynamic>? actionData,
+  ) async {
+    // For now, grades are part of assignments
+    await _navigateToAssignment(context, actionUrl, actionData);
+  }
+
+  /// Navigate to notifications page
+  static Future<void> _navigateToNotifications(BuildContext context) async {
+    await Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const NotificationsPage(),
       ),
       (route) => route.isFirst,
     );

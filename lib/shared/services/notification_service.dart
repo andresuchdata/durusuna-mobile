@@ -295,16 +295,78 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
 
   NotificationType _parseNotificationType(String type) {
     switch (type.toLowerCase()) {
-      case 'message':
-        return NotificationType.message;
-      case 'assignment':
-        return NotificationType.assignment;
+      // Class Update Related
+      case 'class_update_announcement':
+        return NotificationType.classUpdateAnnouncement;
+      case 'class_update_homework':
+        return NotificationType.classUpdateHomework;
+      case 'class_update_reminder':
+        return NotificationType.classUpdateReminder;
+      case 'class_update_event':
+        return NotificationType.classUpdateEvent;
+
+      // Class Update Comments
+      case 'class_update_comment':
+        return NotificationType.classUpdateComment;
+      case 'class_update_reply':
+        return NotificationType.classUpdateReply;
+
+      // Assignment Related
+      case 'assignment_created':
+        return NotificationType.assignmentCreated;
+      case 'assignment_updated':
+        return NotificationType.assignmentUpdated;
+      case 'assignment_due_soon':
+        return NotificationType.assignmentDueSoon;
+      case 'assignment_submitted':
+        return NotificationType.assignmentSubmitted;
+      case 'assignment_graded':
+        return NotificationType.assignmentGraded;
+
+      // Attendance Related
+      case 'attendance_marked':
+        return NotificationType.attendanceMarked;
+      case 'attendance_late':
+        return NotificationType.attendanceLate;
+      case 'attendance_absent':
+        return NotificationType.attendanceAbsent;
+
+      // Grade Related
+      case 'grade_posted':
+        return NotificationType.gradePosted;
+      case 'grade_updated':
+        return NotificationType.gradeUpdated;
+
+      // Message Related
+      case 'message_received':
+        return NotificationType.messageReceived;
+      case 'conversation_created':
+        return NotificationType.conversationCreated;
+
+      // System Related
+      case 'system_announcement':
+        return NotificationType.systemAnnouncement;
+      case 'system_maintenance':
+        return NotificationType.systemMaintenance;
+      case 'system_update':
+        return NotificationType.systemUpdate;
+
+      // General
       case 'announcement':
         return NotificationType.announcement;
       case 'event':
         return NotificationType.event;
+      case 'reminder':
+        return NotificationType.reminder;
+
+      // Legacy types (for backward compatibility)
+      case 'message':
+        return NotificationType.message;
+      case 'assignment':
+        return NotificationType.assignment;
       case 'system':
         return NotificationType.system;
+
       default:
         return NotificationType.announcement;
     }

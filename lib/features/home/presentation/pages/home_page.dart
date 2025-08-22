@@ -11,6 +11,7 @@ import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/notification_service.dart';
 import '../../../../shared/widgets/global_app_drawer.dart';
 import '../../../../shared/widgets/global_bottom_navigation.dart';
+import '../../../../shared/utils/notification_helpers.dart';
 
 import '../../../notifications/presentation/pages/notifications_page.dart';
 import '../../../assignments/presentation/pages/assignment_detail_page.dart';
@@ -1298,18 +1299,46 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     // Navigate based on notification type and action data
     try {
       switch (notification.type) {
+        // Message Related
         case NotificationType.message:
+        case NotificationType.messageReceived:
+        case NotificationType.conversationCreated:
           await _navigateToConversation(notification);
           break;
-        case NotificationType.assignment:
-          await _navigateToClassUpdates(notification);
-          break;
+
+        // Class Update Related
+        case NotificationType.classUpdateAnnouncement:
+        case NotificationType.classUpdateHomework:
+        case NotificationType.classUpdateReminder:
+        case NotificationType.classUpdateEvent:
+        case NotificationType.classUpdateComment:
+        case NotificationType.classUpdateReply:
         case NotificationType.announcement:
+        case NotificationType.event:
+        case NotificationType.reminder:
           await _navigateToClassUpdates(notification);
           break;
-        case NotificationType.event:
+
+        // Assignment Related
+        case NotificationType.assignment:
+        case NotificationType.assignmentCreated:
+        case NotificationType.assignmentUpdated:
+        case NotificationType.assignmentDueSoon:
+        case NotificationType.assignmentSubmitted:
+        case NotificationType.assignmentGraded:
+          await _navigateToClassUpdates(notification);
+          break;
+
+        // All other types navigate to notifications page
+        case NotificationType.attendanceMarked:
+        case NotificationType.attendanceLate:
+        case NotificationType.attendanceAbsent:
+        case NotificationType.gradePosted:
+        case NotificationType.gradeUpdated:
         case NotificationType.system:
-          // For other types, just navigate to notifications page
+        case NotificationType.systemAnnouncement:
+        case NotificationType.systemMaintenance:
+        case NotificationType.systemUpdate:
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => const NotificationsPage(),
@@ -1442,35 +1471,11 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     }
   }
 
-  Color _getNotificationTypeColor(NotificationType type) {
-    switch (type) {
-      case NotificationType.message:
-        return AppTheme.successColor;
-      case NotificationType.assignment:
-        return AppTheme.warningColor;
-      case NotificationType.announcement:
-        return AppTheme.primaryColor;
-      case NotificationType.event:
-        return AppTheme.infoColor;
-      case NotificationType.system:
-        return AppTheme.textSecondary;
-    }
-  }
+  Color _getNotificationTypeColor(NotificationType type) =>
+      NotificationHelpers.getColor(type);
 
-  IconData _getNotificationTypeIcon(NotificationType type) {
-    switch (type) {
-      case NotificationType.message:
-        return Icons.message;
-      case NotificationType.assignment:
-        return Icons.assignment;
-      case NotificationType.announcement:
-        return Icons.campaign;
-      case NotificationType.event:
-        return Icons.event;
-      case NotificationType.system:
-        return Icons.settings;
-    }
-  }
+  IconData _getNotificationTypeIcon(NotificationType type) =>
+      NotificationHelpers.getIcon(type);
 
   String _formatNotificationTime(DateTime dateTime) {
     final now = DateTime.now();
