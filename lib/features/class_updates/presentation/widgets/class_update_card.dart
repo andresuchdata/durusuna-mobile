@@ -427,9 +427,18 @@ class ClassUpdateCard extends StatelessWidget {
   }
 
   Widget _buildReactions() {
+    // Filter out reactions with 0 count
+    final validReactions = update.reactions!.entries
+        .where((entry) => entry.value.count > 0)
+        .toList();
+
+    if (validReactions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return Wrap(
       spacing: 8,
-      children: update.reactions!.entries.map((entry) {
+      children: validReactions.map((entry) {
         final emoji = entry.key;
         final reaction = entry.value;
         final hasUserReacted = currentUserId != null &&

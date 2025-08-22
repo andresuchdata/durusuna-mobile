@@ -163,12 +163,17 @@ class ClassUpdate {
   Map<String, dynamic> toJson() => _$ClassUpdateToJson(this);
 
   bool get hasAttachments => attachments != null && attachments!.isNotEmpty;
-  bool get hasReactions => reactions != null && reactions!.isNotEmpty;
+  bool get hasReactions =>
+      reactions != null &&
+      reactions!.isNotEmpty &&
+      reactions!.values.any((reaction) => reaction.count > 0);
   bool get hasComments => commentsCount != null && commentsCount! > 0;
 
   int get totalReactions {
     if (reactions == null) return 0;
-    return reactions!.values.fold(0, (sum, reaction) => sum + reaction.count);
+    return reactions!.values
+        .where((reaction) => reaction.count > 0)
+        .fold(0, (sum, reaction) => sum + reaction.count);
   }
 
   // Helper method to get reaction count for a specific emoji

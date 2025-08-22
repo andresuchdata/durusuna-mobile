@@ -4,10 +4,12 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/models/class_update.dart';
+import '../../../../shared/models/notification.dart';
 import '../../../../shared/services/class_management_service.dart';
 import '../../../../shared/services/class_updates_service.dart'
     show classUpdatesServiceProvider;
 import '../../../../shared/services/auth_service.dart';
+import '../../../../shared/services/notification_service.dart';
 
 import '../../../../shared/widgets/global_app_drawer.dart';
 import '../../../../shared/widgets/global_bottom_navigation.dart';
@@ -83,6 +85,17 @@ final classAssignmentsProvider =
     debugPrint('🔍 [FLUTTER DEBUG] getClassAssignments error: $e');
     rethrow;
   }
+});
+
+// Provider for class-specific notifications (preview - limited to 5 most recent)
+final classNotificationsProvider =
+    FutureProvider.family<List<NotificationModel>, String>(
+        (ref, classId) async {
+  final notificationService = ref.read(notificationServiceProvider);
+  return await notificationService.getNotifications(
+    classId: classId,
+    limit: 5,
+  );
 });
 
 class ClassDetailsPage extends ConsumerStatefulWidget {

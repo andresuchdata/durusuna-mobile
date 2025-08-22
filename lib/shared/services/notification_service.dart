@@ -17,12 +17,14 @@ class NotificationService {
     int page = 1,
     int limit = 20,
     bool? isRead,
+    String? classId, // ✅ Add class filtering support
   }) async {
     try {
       final queryParams = {
         'page': page.toString(),
         'limit': limit.toString(),
         if (isRead != null) 'is_read': isRead.toString(),
+        if (classId != null) 'class_id': classId,
       };
 
       final response = await _apiService.get(

@@ -367,9 +367,18 @@ class _ClassUpdateDetailPageState extends ConsumerState<ClassUpdateDetailPage> {
   Widget _buildReactions() {
     final authState = ref.watch(authStateProvider);
 
+    // Filter out reactions with 0 count
+    final validReactions = widget.update.reactions!.entries
+        .where((entry) => entry.value.count > 0)
+        .toList();
+
+    if (validReactions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return Wrap(
       spacing: 8,
-      children: widget.update.reactions!.entries.map((entry) {
+      children: validReactions.map((entry) {
         final emoji = entry.key;
         final reaction = entry.value;
         final hasUserReacted = authState.user?.id != null &&
