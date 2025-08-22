@@ -15,14 +15,26 @@ class ClassUpdatesService {
     String classId, {
     int page = 1,
     int limit = 20,
+    bool excludePinned = false,
+    String? subjectOfferingId,
   }) async {
     try {
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+      };
+
+      if (excludePinned) {
+        queryParams['exclude_pinned'] = 'true';
+      }
+
+      if (subjectOfferingId != null) {
+        queryParams['subject_offering_id'] = subjectOfferingId;
+      }
+
       final response = await _apiService.get(
         ApiConstants.getClassUpdates(classId),
-        queryParameters: {
-          'page': page,
-          'limit': limit,
-        },
+        queryParameters: queryParams,
       );
 
       if (response.statusCode == 200) {
@@ -757,37 +769,42 @@ class SubjectUpdatesNotifier extends ClassUpdatesNotifier {
 
   @override
   Future<void> loadUpdates({bool refresh = false}) async {
-    // Load updates from parent class first
-    await super.loadUpdates(refresh: refresh);
-
-    // Apply subject-specific filtering to the loaded updates
-    if (!state.isLoading && state.error == null) {
-      final filteredUpdates = _filterBySubjectOffering(state.updates);
-      state = state.copyWith(updates: filteredUpdates);
+    if (refresh) {
+      state = ClassUpdatesState(isLoading: true);
+    } else if (state.isLoading) {
+      return;
     }
-  }
 
-  List<ClassUpdate> _filterBySubjectOffering(List<ClassUpdate> updates) {
-    // TODO: Backend enhancement needed - add subject_offering_id field to class_updates table
-    // For proper filtering: return updates.where((update) => update.subjectOfferingId == subjectOfferingId).toList();
+    state = state.copyWith(isLoading: true, error: null);
 
-    // Temporary frontend filtering approach:
-    // For now, show all updates since we don't have reliable subject association
-    // This maintains the functionality while we wait for backend improvements
+    try {
+      // Load updates with subject offering filter applied on backend
+      final updates = await _service.getClassUpdates(
+        _classId,
+        page: refresh ? 1 : state.currentPage,
+        subjectOfferingId: subjectOfferingId,
+      );
 
-    return updates;
-
-    // Alternative approach for future implementation with basic content filtering:
-    // return updates.where((update) {
-    //   // Filter by update type (homework/assignments are likely subject-specific)
-    //   if (update.updateType == UpdateType.homework) return true;
-    //
-    //   // TODO: Add more sophisticated filtering logic once we have:
-    //   // 1. subject_offering_id field in class_updates table
-    //   // 2. teacher assignment to specific subject offerings
-    //   // 3. subject mentions in update content
-    //
-    //   return false;
-    // }).toList();
+      if (refresh) {
+        state = state.copyWith(
+          updates: updates,
+          isLoading: false,
+          hasMore: updates.length == 20,
+          currentPage: 1,
+        );
+      } else {
+        state = state.copyWith(
+          updates: [...state.updates, ...updates],
+          isLoading: false,
+          hasMore: updates.length == 20,
+          currentPage: state.currentPage + 1,
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: e.toString(),
+      );
+    }
   }
 }

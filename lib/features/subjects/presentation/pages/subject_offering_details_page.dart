@@ -5,6 +5,7 @@ import '../../../../shared/services/subjects_service.dart';
 import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/models/class_update.dart';
 import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
+import '../../../assignments/presentation/pages/assignment_detail_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 
@@ -74,7 +75,7 @@ class _SubjectOfferingDetailsPageState
               colors: [
                 Color(widget.offering.color['primary'] ?? 0xFF757575),
                 Color(widget.offering.color['primary'] ?? 0xFF757575)
-                    .withOpacity(0.8),
+                    .withValues(alpha: 0.8),
               ],
             ),
           ),
@@ -164,7 +165,7 @@ class _SubjectOfferingDetailsPageState
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -231,7 +232,7 @@ class _SubjectOfferingDetailsPageState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -323,7 +324,7 @@ class _SubjectOfferingDetailsPageState
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -345,7 +346,7 @@ class _SubjectOfferingDetailsPageState
             children: [
               CircleAvatar(
                 radius: 25,
-                backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
                 backgroundImage: widget.offering.teacherAvatarUrl != null
                     ? NetworkImage(widget.offering.teacherAvatarUrl!)
                     : null,
@@ -403,7 +404,7 @@ class _SubjectOfferingDetailsPageState
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -486,7 +487,7 @@ class _SubjectOfferingDetailsPageState
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -527,7 +528,7 @@ class _SubjectOfferingDetailsPageState
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -601,9 +602,9 @@ class _SubjectOfferingDetailsPageState
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [
@@ -636,62 +637,81 @@ class _SubjectOfferingDetailsPageState
   }
 
   Widget _buildAssignmentCard(Map<String, dynamic> assignment) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  assignment['title'] ?? 'Untitled Assignment',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+    final assignmentId = assignment['id']?.toString();
+    final assignmentTitle = assignment['title'] ?? 'Untitled Assignment';
+
+    return GestureDetector(
+      onTap: () => _navigateToAssignmentDetail(assignmentId, assignmentTitle),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    assignmentTitle,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
                 ),
-              ),
-              _buildAssignmentStatusChip(assignment),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (assignment['description'] != null)
-            Text(
-              assignment['description'],
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppTheme.textSecondary,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildAssignmentStatusChip(assignment),
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 18,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ],
+                ),
+              ],
             ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _buildAssignmentInfo('Type', assignment['type'] ?? 'assignment'),
-              const SizedBox(width: 16),
-              _buildAssignmentInfo(
-                  'Max Score', '${assignment['max_score'] ?? 0}'),
-              const SizedBox(width: 16),
-              _buildAssignmentInfo('Due', _formatDate(assignment['due_date'])),
-            ],
-          ),
-        ],
+            const SizedBox(height: 8),
+            if (assignment['description'] != null)
+              Text(
+                assignment['description'],
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppTheme.textSecondary,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _buildAssignmentInfo(
+                    'Type', assignment['type'] ?? 'assignment'),
+                const SizedBox(width: 16),
+                _buildAssignmentInfo(
+                    'Max Score', '${assignment['max_score'] ?? 0}'),
+                const SizedBox(width: 16),
+                _buildAssignmentInfo(
+                    'Due', _formatDate(assignment['due_date'])),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -702,8 +722,8 @@ class _SubjectOfferingDetailsPageState
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: isPublished
-            ? AppTheme.successColor.withOpacity(0.1)
-            : AppTheme.warningColor.withOpacity(0.1),
+            ? AppTheme.successColor.withValues(alpha: 0.1)
+            : AppTheme.warningColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -807,7 +827,7 @@ class _SubjectOfferingDetailsPageState
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -969,7 +989,7 @@ class _SubjectOfferingDetailsPageState
               children: [
                 CircleAvatar(
                   radius: 10,
-                  backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                  backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
                   child: Text(
                     _getInitials(
                         '${update.author!.firstName} ${update.author!.lastName}'),
@@ -1148,6 +1168,30 @@ class _SubjectOfferingDetailsPageState
           classId: widget.offering.classId,
           className:
               '${widget.offering.className} - ${widget.offering.subjectName}',
+          showSubjectFilter: false,
+          subjectOfferingId: widget.offering.id,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToAssignmentDetail(String? assignmentId, String title) {
+    if (assignmentId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Assignment ID not available'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssignmentDetailPage(
+          assignmentId: assignmentId,
+          title: title,
         ),
       ),
     );

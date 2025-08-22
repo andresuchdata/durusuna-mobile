@@ -36,13 +36,14 @@ final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
 
 // Using the existing provider from the service file
 
-// Provider for recent class updates (preview - limited to 2 most recent)
+// Provider for recent class updates (preview - limited to 2 most recent, excluding pinned)
 final recentClassUpdatesProvider =
     FutureProvider.family<List<ClassUpdate>, String>((ref, classId) async {
   final service = ref.read(classUpdatesServiceProvider);
-  final allUpdates = await service.getClassUpdates(classId);
-  // Return only the 2 most recent updates for preview
-  return allUpdates.take(2).toList();
+  final allUpdates =
+      await service.getClassUpdates(classId, limit: 2, excludePinned: true);
+  // Return updates excluding pinned ones (as pinned will be shown separately on top)
+  return allUpdates;
 });
 
 // Provider for class students (preview - limited to first 5)

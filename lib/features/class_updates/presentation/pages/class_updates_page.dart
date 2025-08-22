@@ -12,6 +12,7 @@ import '../../../../shared/widgets/reactions_widget.dart';
 import '../widgets/class_update_card.dart';
 import '../widgets/class_update_comment_card.dart';
 import 'create_update_page.dart';
+import 'class_update_detail_page.dart';
 
 // Helper class to represent comments with embedded replies
 class CommentDisplayItem {
@@ -29,6 +30,8 @@ class ClassUpdatesPage extends ConsumerStatefulWidget {
   final String className;
   final String? highlightUpdateId;
   final bool scrollToUpdate;
+  final bool showSubjectFilter;
+  final String? subjectOfferingId;
 
   const ClassUpdatesPage({
     super.key,
@@ -36,6 +39,8 @@ class ClassUpdatesPage extends ConsumerStatefulWidget {
     required this.className,
     this.highlightUpdateId,
     this.scrollToUpdate = false,
+    this.showSubjectFilter = true,
+    this.subjectOfferingId,
   });
 
   @override
@@ -74,9 +79,9 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
-      final state = ref.read(classUpdatesProvider(widget.classId));
+      final state = ref.read(_getUpdatesProvider());
       if (!state.isLoading && state.hasMore) {
-        ref.read(classUpdatesProvider(widget.classId).notifier).loadUpdates();
+        ref.read(_getUpdatesProvider().notifier).loadUpdates();
       }
     }
   }
@@ -92,9 +97,19 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
 
     // Refresh updates if the form was submitted successfully
     if (result == true) {
-      ref
-          .read(classUpdatesProvider(widget.classId).notifier)
-          .loadUpdates(refresh: true);
+      ref.read(_getUpdatesProvider().notifier).loadUpdates(refresh: true);
+    }
+  }
+
+  // Helper method to get the appropriate updates provider based on context
+  StateNotifierProvider<dynamic, ClassUpdatesState> _getUpdatesProvider() {
+    if (widget.subjectOfferingId != null) {
+      return subjectUpdatesProvider(SubjectUpdatesParams(
+        classId: widget.classId,
+        subjectOfferingId: widget.subjectOfferingId!,
+      ));
+    } else {
+      return classUpdatesProvider(widget.classId);
     }
   }
 
@@ -110,6 +125,17 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
     } catch (e) {
       debugPrint('Error loading subjects for filter: $e');
     }
+  }
+
+  void _navigateToUpdateDetail(ClassUpdate update) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ClassUpdateDetailPage(
+          update: update,
+          className: widget.className,
+        ),
+      ),
+    );
   }
 
   void _selectSubjectFilter(String? subjectId, String? subjectName) {
@@ -238,12 +264,12 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-    final updatesState = ref.watch(classUpdatesProvider(widget.classId));
+    final updatesState = ref.watch(_getUpdatesProvider());
     final canPost = authState.user?.userType == UserType.teacher;
 
     // Listen for errors and show error feedback
     ref.listen<ClassUpdatesState>(
-      classUpdatesProvider(widget.classId),
+      _getUpdatesProvider(),
       (previous, next) {
         // Show error message if there's a new error
         if (next.error != null &&
@@ -257,7 +283,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
             ),
           );
           // Clear the error after showing it
-          ref.read(classUpdatesProvider(widget.classId).notifier).clearError();
+          ref.read(_getUpdatesProvider().notifier).clearError();
         }
       },
     );
@@ -278,7 +304,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
             icon: const Icon(Icons.refresh),
             onPressed: () {
               ref
-                  .read(classUpdatesProvider(widget.classId).notifier)
+                  .read(_getUpdatesProvider().notifier)
                   .loadUpdates(refresh: true);
             },
           ),
@@ -287,13 +313,14 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
       body: RefreshIndicator(
         onRefresh: () async {
           await ref
-              .read(classUpdatesProvider(widget.classId).notifier)
+              .read(_getUpdatesProvider().notifier)
               .loadUpdates(refresh: true);
         },
         child: Column(
           children: [
             // Subject filter chips
-            if (_availableSubjects.isNotEmpty) _buildSubjectFilterChips(),
+            if (widget.showSubjectFilter && _availableSubjects.isNotEmpty)
+              _buildSubjectFilterChips(),
 
             // Create post section for teachers
             if (canPost) ...[
@@ -379,8 +406,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
                               currentUserId: authState.user?.id,
                               onReaction: (emoji) {
                                 ref
-                                    .read(classUpdatesProvider(widget.classId)
-                                        .notifier)
+                                    .read(_getUpdatesProvider().notifier)
                                     .toggleReaction(update.id, emoji);
                               },
                               onComment: () {
@@ -395,6 +421,8 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
                                   ? () => _confirmDeleteUpdate(update)
                                   : null,
                               onPin: canPost ? () => _togglePin(update) : null,
+                              onViewDetails: () =>
+                                  _navigateToUpdateDetail(update),
                             );
                           },
                         ),
@@ -447,9 +475,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
 
     // Refresh updates if the form was submitted successfully
     if (result == true) {
-      ref
-          .read(classUpdatesProvider(widget.classId).notifier)
-          .loadUpdates(refresh: true);
+      ref.read(_getUpdatesProvider().notifier).loadUpdates(refresh: true);
     }
   }
 
@@ -458,9 +484,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
     final willBePinned = !update.isPinned;
 
     // Trigger optimistic update (UI updates immediately)
-    ref
-        .read(classUpdatesProvider(widget.classId).notifier)
-        .togglePin(update.id);
+    ref.read(_getUpdatesProvider().notifier).togglePin(update.id);
 
     // Show immediate optimistic feedback
     ScaffoldMessenger.of(context).showSnackBar(
@@ -492,7 +516,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
               Navigator.of(context).pop();
               try {
                 await ref
-                    .read(classUpdatesProvider(widget.classId).notifier)
+                    .read(_getUpdatesProvider().notifier)
                     .deleteUpdate(update.id);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -532,9 +556,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
         classId: widget.classId,
         onCommentPosted: () {
           // Refresh the main feed when comments are posted
-          ref
-              .read(classUpdatesProvider(widget.classId).notifier)
-              .loadUpdates(refresh: true);
+          ref.read(_getUpdatesProvider().notifier).loadUpdates(refresh: true);
         },
       ),
     );

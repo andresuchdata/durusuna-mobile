@@ -14,6 +14,8 @@ class ClassUpdateCard extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final VoidCallback? onPin;
+  final VoidCallback? onViewDetails;
+  final int maxCharacters;
 
   const ClassUpdateCard({
     super.key,
@@ -24,6 +26,8 @@ class ClassUpdateCard extends StatelessWidget {
     this.onEdit,
     this.onDelete,
     this.onPin,
+    this.onViewDetails,
+    this.maxCharacters = 200,
   });
 
   @override
@@ -204,13 +208,7 @@ class ClassUpdateCard extends StatelessWidget {
           // Content
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(
-              update.content,
-              style: const TextStyle(
-                fontSize: 15,
-                height: 1.4,
-              ),
-            ),
+            child: _buildContent(context),
           ),
 
           // Attachments
@@ -305,6 +303,40 @@ class ClassUpdateCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    final content = update.content;
+    final isContentTruncated = content.length > maxCharacters;
+    final displayContent =
+        isContentTruncated ? content.substring(0, maxCharacters) : content;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          displayContent,
+          style: const TextStyle(
+            fontSize: 15,
+            height: 1.4,
+          ),
+        ),
+        if (isContentTruncated) ...[
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: onViewDetails,
+            child: const Text(
+              '... See all',
+              style: TextStyle(
+                fontSize: 15,
+                color: AppTheme.accentColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
