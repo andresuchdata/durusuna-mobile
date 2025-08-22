@@ -23,6 +23,7 @@ import '../../../subjects/presentation/pages/subjects_main_page.dart';
 import '../../../subjects/presentation/pages/subject_offering_details_page.dart';
 import '../../../../shared/services/subjects_service.dart';
 import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
+import '../../../notifications/presentation/pages/notifications_page.dart';
 
 // Providers for class details data
 final classSubjectsProvider =
@@ -95,6 +96,7 @@ final classNotificationsProvider =
   return await notificationService.getNotifications(
     classId: classId,
     limit: 5,
+    page: 1, // Always get the first page for preview
   );
 });
 
@@ -163,6 +165,9 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 ),
                 SliverToBoxAdapter(
                   child: _buildAssignmentsPreview(),
+                ),
+                SliverToBoxAdapter(
+                  child: _buildNotificationsPreview(),
                 ),
                 SliverToBoxAdapter(
                   child: subjects.isEmpty
@@ -1003,6 +1008,99 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
+  Widget _buildNotificationsPreview() {
+    final notificationsAsync =
+        ref.watch(classNotificationsProvider(widget.classModel.id));
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Recent Notifications',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _navigateToNotifications(),
+                  child: const Text('See all'),
+                ),
+              ],
+            ),
+          ),
+          notificationsAsync.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, stack) => const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Unable to load notifications',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            data: (notifications) {
+              if (notifications.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.notifications_outlined,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'No notifications yet',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                children: notifications
+                    .map((notification) => _buildNotificationTile(notification))
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAssignmentTile(Map<String, dynamic> assignment) {
     // Parse due date from API response
     DateTime? dueDate;
@@ -1141,6 +1239,111 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildNotificationTile(NotificationModel notification) {
+    return InkWell(
+      onTap: () => _handleNotificationTap(notification),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Color(0xFFE5E5E5),
+              width: 0.5,
+            ),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(top: 6),
+              decoration: BoxDecoration(
+                color: notification.isRead
+                    ? AppTheme.textSecondary.withValues(alpha: 0.5)
+                    : AppTheme.primaryColor,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notification.title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: notification.isRead
+                          ? FontWeight.w400
+                          : FontWeight.w500,
+                      color: notification.isRead
+                          ? AppTheme.textSecondary
+                          : AppTheme.textPrimary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (notification.content.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      notification.content,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text(
+                    app_date_utils.DateUtils.formatRelativeTime(
+                        notification.createdAt),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: AppTheme.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateToNotifications() {
+    // Navigate to notifications page
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const NotificationsPage(),
+      ),
+    );
+  }
+
+  void _handleNotificationTap(NotificationModel notification) {
+    // Mark as read if not already read
+    if (!notification.isRead) {
+      ref.read(notificationServiceProvider).markAsRead(notification.id);
+    }
+
+    // Handle notification action if there's an action URL
+    if (notification.actionUrl != null && notification.actionUrl!.isNotEmpty) {
+      // Navigate based on action URL
+      // You can implement deep linking logic here
+      Navigator.pushNamed(context, notification.actionUrl!);
+    }
   }
 
   Widget _buildSubjectCard(Map<String, dynamic> offering) {

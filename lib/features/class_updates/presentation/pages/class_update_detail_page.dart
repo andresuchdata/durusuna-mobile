@@ -6,7 +6,7 @@ import '../../../../shared/models/class_update_comment.dart';
 import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/services/auth_service.dart';
 
-import '../widgets/class_update_comment_card.dart';
+import '../widgets/comment_list.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../widgets/attachment_preview_widget.dart';
 import '../../../../shared/models/attachment.dart';
@@ -262,7 +262,7 @@ class _ClassUpdateDetailPageState extends ConsumerState<ClassUpdateDetailPage> {
                           // Pin indicator
                           if (widget.update.isPinned) ...[
                             const SizedBox(width: 8),
-                            Icon(
+                            const Icon(
                               Icons.push_pin,
                               size: 18,
                               color: AppTheme.primaryColor,
@@ -444,6 +444,8 @@ class _ClassUpdateDetailPageState extends ConsumerState<ClassUpdateDetailPage> {
   }
 
   Widget _buildCommentsSection() {
+    final authState = ref.watch(authStateProvider);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -455,27 +457,15 @@ class _ClassUpdateDetailPageState extends ConsumerState<ClassUpdateDetailPage> {
           ),
         ),
         const SizedBox(height: 16),
-        if (_comments.isEmpty && !_isLoadingComments)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(32),
-              child: Text(
-                'No comments yet. Be the first to comment!',
-                style: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ),
-        ...(_comments.map((comment) => Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: ClassUpdateCommentCard(
-                comment: comment,
-                onReply: _replyToComment,
-              ),
-            ))),
-        if (_isLoadingComments)
+        CommentList(
+          comments: _comments,
+          displayMode: CommentDisplayMode.flat,
+          currentUserId: authState.user?.id,
+          isLoading: _isLoadingComments && _comments.isEmpty,
+          onReply: _replyToComment,
+          scrollController: null, // No nested scroll controller needed
+        ),
+        if (_isLoadingComments && _comments.isNotEmpty)
           const Center(
             child: Padding(
               padding: EdgeInsets.all(16),
@@ -562,7 +552,7 @@ class _ClassUpdateDetailPageState extends ConsumerState<ClassUpdateDetailPage> {
               const SizedBox(width: 8),
               IconButton(
                 onPressed: _submitComment,
-                icon: Icon(
+                icon: const Icon(
                   Icons.send,
                   color: AppTheme.primaryColor,
                 ),

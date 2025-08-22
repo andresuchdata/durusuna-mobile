@@ -10,20 +10,9 @@ import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/class_management_service.dart';
 import '../../../../shared/widgets/reactions_widget.dart';
 import '../widgets/class_update_card.dart';
-import '../widgets/class_update_comment_card.dart';
+import '../widgets/comment_list.dart';
 import 'create_update_page.dart';
 import 'class_update_detail_page.dart';
-
-// Helper class to represent comments with embedded replies
-class CommentDisplayItem {
-  final ClassUpdateComment comment;
-  final List<ClassUpdateComment> embeddedReplies;
-
-  CommentDisplayItem({
-    required this.comment,
-    required this.embeddedReplies,
-  });
-}
 
 class ClassUpdatesPage extends ConsumerStatefulWidget {
   final String classId;
@@ -53,7 +42,6 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
 
   // Filter state
   String? _selectedSubjectId;
-  String? _selectedSubjectName;
   List<Map<String, dynamic>> _availableSubjects = [];
 
   @override
@@ -141,7 +129,6 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
   void _selectSubjectFilter(String? subjectId, String? subjectName) {
     setState(() {
       _selectedSubjectId = subjectId;
-      _selectedSubjectName = subjectName;
     });
     // TODO: Implement actual filtering when backend supports it
     // For now, this just updates the UI state
@@ -206,14 +193,14 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: AppTheme.primaryColor.withOpacity(0.3),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
                 ]
               : [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 4,
                     offset: const Offset(0, 1),
                   ),
@@ -247,17 +234,24 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
     if (name.contains('math')) return Icons.calculate;
     if (name.contains('science') ||
         name.contains('physics') ||
-        name.contains('chemistry')) return Icons.science;
-    if (name.contains('english') || name.contains('literature'))
+        name.contains('chemistry')) {
+      return Icons.science;
+    }
+    if (name.contains('english') || name.contains('literature')) {
       return Icons.menu_book;
-    if (name.contains('islamic') || name.contains('islam')) return Icons.mosque;
+    }
+    if (name.contains('islamic') || name.contains('islam')) {
+      return Icons.mosque;
+    }
     if (name.contains('arabic')) return Icons.language;
     if (name.contains('history')) return Icons.history_edu;
     if (name.contains('geography')) return Icons.public;
     if (name.contains('art')) return Icons.palette;
     if (name.contains('music')) return Icons.music_note;
-    if (name.contains('sport') || name.contains('physical'))
+    if (name.contains('sport') || name.contains('physical')) {
       return Icons.sports;
+    }
+
     return Icons.book;
   }
 
@@ -518,13 +512,13 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
                 await ref
                     .read(_getUpdatesProvider().notifier)
                     .deleteUpdate(update.id);
-                if (mounted) {
+                if (mounted && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Update deleted')),
                   );
                 }
               } catch (e) {
-                if (mounted) {
+                if (mounted && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Failed to delete update: $e'),
@@ -624,11 +618,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
 
   // Reply state management
   ClassUpdateComment? _replyingToComment;
-  int _replyDepth = 0;
   String? _mentionText;
-
-  // Cache organized comments to avoid recalculating on every build
-  List<CommentDisplayItem>? _organizedComments;
 
   // Track optimistic comments (temp IDs that haven't been confirmed by server)
   final Set<String> _optimisticCommentIds = {};
@@ -660,7 +650,6 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
       if (mounted) {
         setState(() {
           _comments = comments;
-          _organizedComments = null; // Clear cache to force refresh
           _isLoading = false;
         });
       }
@@ -688,7 +677,6 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
     setState(() {
       _comments.add(optimisticComment);
       _optimisticCommentIds.add(optimisticComment.id);
-      _organizedComments = null; // Clear cache to refresh display
       _isPosting = true;
     });
 
@@ -725,18 +713,19 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
             _comments[index] = serverComment;
           }
           _optimisticCommentIds.remove(optimisticComment.id);
-          _organizedComments = null; // Clear cache
           _isPosting = false;
         });
 
         // Success feedback (brief)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isReply ? 'Reply posted' : 'Comment posted'),
-            duration: const Duration(seconds: 1),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isReply ? 'Reply posted' : 'Comment posted'),
+              duration: const Duration(seconds: 1),
+              backgroundColor: AppTheme.successColor,
+            ),
+          );
+        }
 
         // Keep focus for continued conversation
         _focusNode.requestFocus();
@@ -761,35 +750,36 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
         setState(() {
           _comments.removeWhere((c) => c.id == optimisticComment.id);
           _optimisticCommentIds.remove(optimisticComment.id);
-          _organizedComments = null; // Clear cache
           _isPosting = false;
         });
 
         // Show error feedback
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to post comment. Tap to retry.'),
-            backgroundColor: AppTheme.errorColor,
-            duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: 'Retry',
-              textColor: Colors.white,
-              onPressed: () {
-                // Restore the content and retry
-                _commentController.text = content;
-                if (isReply) {
-                  // Find the comment we were replying to and restore reply state
-                  final parentComment = _comments.firstWhere(
-                    (c) => c.id == replyToId,
-                    orElse: () => optimisticComment.replyTo!,
-                  );
-                  _replyToComment(parentComment);
-                }
-                _postComment();
-              },
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Failed to post comment. Tap to retry.'),
+              backgroundColor: AppTheme.errorColor,
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: () {
+                  // Restore the content and retry
+                  _commentController.text = content;
+                  if (isReply) {
+                    // Find the comment we were replying to and restore reply state
+                    final parentComment = _comments.firstWhere(
+                      (c) => c.id == replyToId,
+                      orElse: () => optimisticComment.replyTo!,
+                    );
+                    _replyToComment(parentComment);
+                  }
+                  _postComment();
+                },
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
     }
   }
@@ -826,8 +816,6 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
     // Update local state optimistically
     setState(() {
       _comments[commentIndex] = updatedComment;
-      _organizedComments =
-          null; // Clear cache to force refresh with new reaction
     });
 
     try {
@@ -838,7 +826,7 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
       );
 
       // Success - show feedback
-      if (mounted) {
+      if (mounted && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Reacted with $emoji'),
@@ -851,16 +839,16 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
       if (mounted) {
         setState(() {
           _comments[commentIndex] = originalComment;
-          _organizedComments =
-              null; // Clear cache to force refresh with rollback
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to add reaction: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to add reaction: $e'),
+              backgroundColor: AppTheme.errorColor,
+            ),
+          );
+        }
       }
     }
   }
@@ -930,124 +918,6 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
     );
   }
 
-  // Helper method to organize comments with embedded replies
-  List<CommentDisplayItem> _organizeCommentsWithReplies() {
-    // Return cached result if available
-    if (_organizedComments != null) {
-      return _organizedComments!;
-    }
-
-    final organized = <CommentDisplayItem>[];
-    final Map<String, List<ClassUpdateComment>> repliesMap = {};
-
-    // Group ALL replies by their root parent (traverse up reply chains)
-    for (final comment in _comments) {
-      if (comment.replyToId != null) {
-        String rootParentId = _findRootParent(comment, _comments);
-        repliesMap.putIfAbsent(rootParentId, () => []).add(comment);
-      }
-    }
-
-    // Find all top-level comments (no parent) and create display items
-    // Backend now sorts these newest-first, so maintain that order
-    final topLevelComments =
-        _comments.where((comment) => comment.replyToId == null).toList();
-
-    for (final parentComment in topLevelComments) {
-      // Get all replies for this parent (including nested ones flattened)
-      final allReplies = repliesMap[parentComment.id] ?? [];
-
-      // Sort replies by creation time
-      allReplies.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-
-      // Create display item with parent comment and embedded replies
-      organized.add(CommentDisplayItem(
-        comment: parentComment,
-        embeddedReplies: allReplies,
-      ));
-    }
-
-    // Cache the result
-    _organizedComments = organized;
-    return organized;
-  }
-
-  // Find the root parent of a comment (traverse up the reply chain)
-  String _findRootParent(
-      ClassUpdateComment comment, List<ClassUpdateComment> allComments) {
-    if (comment.replyToId == null) return comment.id;
-
-    final parent = allComments.firstWhere(
-      (c) => c.id == comment.replyToId,
-      orElse: () => comment, // Fallback if parent not found
-    );
-
-    if (parent.replyToId == null) {
-      return parent.id; // This is the root
-    } else {
-      return _findRootParent(parent, allComments); // Continue traversing up
-    }
-  }
-
-  // Build a comment with its embedded replies
-  Widget _buildCommentWithReplies(
-      CommentDisplayItem displayItem, String? currentUserId) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Parent comment
-        ClassUpdateCommentCard(
-          comment: displayItem.comment,
-          currentUserId: currentUserId,
-          level: 0, // Parent is always level 0
-          isOptimistic: _optimisticCommentIds.contains(displayItem.comment.id),
-          onReactionTap: (comment, emoji) =>
-              _handleCommentReaction(comment, emoji),
-          onAddReaction: (comment) => _showCommentReactionPicker(comment),
-          onReply: (comment) => _replyToComment(comment),
-          onEdit: currentUserId == displayItem.comment.authorId
-              ? (comment) => _editComment(comment)
-              : null,
-          onDelete: currentUserId == displayItem.comment.authorId
-              ? (comment) => _deleteComment(comment)
-              : null,
-        ),
-
-        // Embedded replies with indentation
-        if (displayItem.embeddedReplies.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(left: 20), // Indent replies
-            child: Column(
-              children: displayItem.embeddedReplies.map((reply) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: ClassUpdateCommentCard(
-                    comment: reply,
-                    currentUserId: currentUserId,
-                    level: 1, // All replies are level 1 (max indentation)
-                    isOptimistic: _optimisticCommentIds.contains(reply.id),
-                    onReactionTap: (comment, emoji) =>
-                        _handleCommentReaction(comment, emoji),
-                    onAddReaction: (comment) =>
-                        _showCommentReactionPicker(comment),
-                    onReply: (comment) => _replyToComment(comment),
-                    onEdit: currentUserId == reply.authorId
-                        ? (comment) => _editComment(comment)
-                        : null,
-                    onDelete: currentUserId == reply.authorId
-                        ? (comment) => _deleteComment(comment)
-                        : null,
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-
-        const SizedBox(height: 12), // Space between comment groups
-      ],
-    );
-  }
-
   void _replyToComment(ClassUpdateComment comment) {
     // Find the root parent comment (level 0) to reply to
     ClassUpdateComment parentComment = comment;
@@ -1059,7 +929,6 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
 
     setState(() {
       _replyingToComment = parentComment; // Always reply to the root parent
-      _replyDepth = 1; // Always level 1 (max depth)
 
       // Always use @mention for replies to show context
       _mentionText = '@$authorName ';
@@ -1083,7 +952,6 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
   void _cancelReply() {
     setState(() {
       _replyingToComment = null;
-      _replyDepth = 0;
       _mentionText = null;
     });
     _commentController.clear();
@@ -1207,55 +1075,21 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
 
               // Comments list
               Expanded(
-                child: _isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(),
-                      )
-                    : _error != null
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'Failed to load comments',
-                                  style: TextStyle(color: AppTheme.errorColor),
-                                ),
-                                const SizedBox(height: 8),
-                                TextButton(
-                                  onPressed: _loadComments,
-                                  child: const Text('Retry'),
-                                ),
-                              ],
-                            ),
-                          )
-                        : _comments.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  'No comments yet.\nBe the first to comment!',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              )
-                            : ListView.builder(
-                                controller: _scrollController,
-                                padding: const EdgeInsets.all(16),
-                                itemCount:
-                                    _organizeCommentsWithReplies().length,
-                                itemBuilder: (context, index) {
-                                  final organizedComments =
-                                      _organizeCommentsWithReplies();
-                                  final displayItem = organizedComments[index];
-                                  final currentUserId =
-                                      ref.read(authStateProvider).user?.id;
-
-                                  return _buildCommentWithReplies(
-                                    displayItem,
-                                    currentUserId,
-                                  );
-                                },
-                              ),
+                child: CommentList(
+                  comments: _comments,
+                  displayMode: CommentDisplayMode.nested,
+                  currentUserId: ref.read(authStateProvider).user?.id,
+                  isLoading: _isLoading,
+                  error: _error,
+                  optimisticCommentIds: _optimisticCommentIds,
+                  onReactionTap: _handleCommentReaction,
+                  onAddReaction: _showCommentReactionPicker,
+                  onReply: _replyToComment,
+                  onEdit: _editComment,
+                  onDelete: _deleteComment,
+                  onRetry: _loadComments,
+                  scrollController: _scrollController,
+                ),
               ),
 
               // Reply indicator (shown when replying)

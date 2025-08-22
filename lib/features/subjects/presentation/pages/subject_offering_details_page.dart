@@ -856,62 +856,198 @@ class _SubjectOfferingDetailsPageState
           const SizedBox(height: 12),
           Consumer(
             builder: (context, ref, child) {
-              final subjectParams = SubjectUpdatesParams(
-                classId: widget.offering.classId,
-                subjectOfferingId: widget.offering.id,
-              );
-              final updatesState =
-                  ref.watch(subjectUpdatesProvider(subjectParams));
-
-              if (updatesState.isLoading) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: CircularProgressIndicator(),
-                  ),
+              try {
+                // Try subject-specific updates first
+                final subjectParams = SubjectUpdatesParams(
+                  classId: widget.offering.classId,
+                  subjectOfferingId: widget.offering.id,
                 );
-              }
+                final subjectUpdatesState =
+                    ref.watch(subjectUpdatesProvider(subjectParams));
 
-              if (updatesState.error != null) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        Icon(Icons.error_outline,
-                            color: Colors.grey[400], size: 32),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Failed to load updates',
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 14),
-                        ),
-                      ],
+                // If subject updates are loading, show loading state
+                if (subjectUpdatesState.isLoading &&
+                    subjectUpdatesState.updates.isEmpty) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: CircularProgressIndicator(),
                     ),
-                  ),
+                  );
+                }
+
+                // If subject updates have an error, fallback to class updates
+                if (subjectUpdatesState.error != null) {
+                  final classUpdatesState =
+                      ref.watch(classUpdatesProvider(widget.offering.classId));
+
+                  if (classUpdatesState.isLoading &&
+                      classUpdatesState.updates.isEmpty) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
+
+                  if (classUpdatesState.error != null) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            Icon(Icons.error_outline,
+                                color: Colors.grey[400], size: 32),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Failed to load updates',
+                              style: TextStyle(
+                                  color: Colors.grey[600], fontSize: 14),
+                            ),
+                            const SizedBox(height: 8),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                ref
+                                    .read(classUpdatesProvider(
+                                            widget.offering.classId)
+                                        .notifier)
+                                    .loadUpdates(refresh: true);
+                              },
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: const Text('Retry'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryColor,
+                                foregroundColor: Colors.white,
+                                textStyle: const TextStyle(fontSize: 12),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  // Use class updates as fallback
+                  final fallbackUpdates =
+                      classUpdatesState.updates.take(3).toList();
+                  if (fallbackUpdates.isNotEmpty) {
+                    return Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warningColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Showing general class updates',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: AppTheme.warningColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        ...fallbackUpdates
+                            .map((update) => _buildCompactUpdateCard(update))
+                            .toList(),
+                      ],
+                    );
+                  }
+                }
+
+                // Use subject-specific updates if available
+                final recentUpdates =
+                    subjectUpdatesState.updates.take(3).toList();
+
+                if (recentUpdates.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          Icon(Icons.update, color: Colors.grey[400], size: 32),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No recent updates',
+                            style: TextStyle(
+                                color: Colors.grey[600], fontSize: 14),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Updates for this subject will appear here',
+                            style: TextStyle(
+                                color: Colors.grey[500], fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                return Column(
+                  children: recentUpdates
+                      .map((update) => _buildCompactUpdateCard(update))
+                      .toList(),
                 );
-              }
+              } catch (error) {
+                // Final fallback - try to show class updates
+                final classUpdatesState =
+                    ref.watch(classUpdatesProvider(widget.offering.classId));
+                final fallbackUpdates =
+                    classUpdatesState.updates.take(3).toList();
 
-              final recentUpdates = updatesState.updates.take(3).toList();
+                if (fallbackUpdates.isNotEmpty) {
+                  return Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.errorColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Error loading subject updates - showing class updates',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.errorColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      ...fallbackUpdates
+                          .map((update) => _buildCompactUpdateCard(update))
+                          .toList(),
+                    ],
+                  );
+                }
 
-              if (recentUpdates.isEmpty) {
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        Icon(Icons.update, color: Colors.grey[400], size: 32),
+                        Icon(Icons.warning,
+                            color: Colors.orange[400], size: 32),
                         const SizedBox(height: 8),
                         Text(
-                          'No recent updates',
+                          'Updates unavailable',
                           style:
                               TextStyle(color: Colors.grey[600], fontSize: 14),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Updates for this subject will appear here',
+                          'Error: ${error.toString()}',
                           style:
-                              TextStyle(color: Colors.grey[500], fontSize: 12),
+                              TextStyle(color: Colors.grey[500], fontSize: 10),
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -919,12 +1055,6 @@ class _SubjectOfferingDetailsPageState
                   ),
                 );
               }
-
-              return Column(
-                children: recentUpdates
-                    .map((update) => _buildCompactUpdateCard(update))
-                    .toList(),
-              );
             },
           ),
         ],
