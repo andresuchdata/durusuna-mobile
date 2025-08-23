@@ -5,9 +5,11 @@ import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/models/class_update.dart';
 import '../../../../shared/models/notification.dart';
-import '../../../../shared/services/class_management_service.dart';
 import '../../../../shared/services/class_updates_service.dart'
     show classUpdatesServiceProvider;
+import '../../../../shared/providers/app_providers.dart'
+    show classManagementServiceProvider;
+import '../../../../shared/services/class_management_service.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/notification_service.dart';
 
@@ -31,10 +33,6 @@ final classSubjectsProvider =
         (ref, classId) async {
   final service = ref.read(classManagementServiceProvider);
   return await service.getClassOfferings(classId);
-});
-
-final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
-  return ClassManagementService();
 });
 
 // Using the existing provider from the service file

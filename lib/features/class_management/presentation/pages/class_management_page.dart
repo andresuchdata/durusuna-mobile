@@ -5,6 +5,7 @@ import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/class_management_service.dart';
 import '../../../../shared/services/auth_service.dart';
+import '../../../../shared/services/api_service.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
 import '../widgets/class_card.dart';
 import '../widgets/create_class_dialog.dart';
@@ -12,7 +13,7 @@ import 'class_details_page.dart';
 
 // Provider for class management service
 final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
-  return ClassManagementService();
+  return ClassManagementService(ref.read(apiServiceProvider));
 });
 
 // Provider for user classes

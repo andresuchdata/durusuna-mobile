@@ -7,7 +7,7 @@ import '../../../../shared/models/class_update_comment.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/class_updates_service.dart';
 import '../../../../shared/services/auth_service.dart';
-import '../../../../shared/services/class_management_service.dart';
+import '../../../../shared/providers/app_providers.dart';
 import '../../../../shared/widgets/reactions_widget.dart';
 import '../widgets/class_update_card.dart';
 import '../widgets/comment_list.dart';
@@ -103,7 +103,7 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
 
   void _loadSubjects() async {
     try {
-      final classService = ClassManagementService();
+      final classService = ref.read(classManagementServiceProvider);
       final subjects = await classService.getClassOfferings(widget.classId);
       if (mounted) {
         setState(() {

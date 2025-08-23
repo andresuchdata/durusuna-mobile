@@ -1,34 +1,28 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import '../models/class_model.dart';
 import '../models/user.dart';
-import '../../core/constants/api_constants.dart';
-import '../../core/storage/storage_service.dart';
 import 'firebase/fcm_service.dart';
+import 'api_service.dart';
 
 class ClassManagementService {
-  static final String _baseUrl = ApiConstants.baseUrl;
+  final ApiService _apiService;
 
-  Future<Map<String, String>> _getHeaders() async {
-    final token = StorageService.getToken();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
+  ClassManagementService(this._apiService);
+
+  // Keep legacy constructor for backwards compatibility
+  factory ClassManagementService.legacy() {
+    return ClassManagementService._legacy();
   }
+
+  ClassManagementService._legacy() : _apiService = ApiService();
 
   /// Get classes that the current user is enrolled in
   Future<List<ClassModel>> getUserClasses() async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/classes/my-classes'),
-        headers: headers,
-      );
+      final response = await _apiService.get('/classes/my-classes');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = response.data;
         final List<dynamic> classesJson = data['classes'] ?? [];
 
         final classes =
@@ -38,12 +32,14 @@ class ClassManagementService {
         await _subscribeToClassTopics(classes);
 
         return classes;
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
       } else {
         throw Exception('Failed to fetch user classes: ${response.statusCode}');
       }
     } catch (e) {
+      if (e is ApiException) {
+        throw Exception('Error fetching user classes: ${e.message}');
+      }
+
       throw Exception('Error fetching user classes: $e');
     }
   }
@@ -64,17 +60,11 @@ class ClassManagementService {
   /// Get detailed information about a specific class
   Future<ClassModel> getClassDetails(String classId) async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/classes/$classId'),
-        headers: headers,
-      );
+      final response = await _apiService.get('/classes/$classId');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = response.data;
         return ClassModel.fromJson(data['class'] ?? data);
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else if (response.statusCode == 404) {
@@ -84,6 +74,9 @@ class ClassManagementService {
             'Failed to fetch class details: ${response.statusCode}');
       }
     } catch (e) {
+      if (e is ApiException) {
+        throw Exception('Error fetching class details: ${e.message}');
+      }
       throw Exception('Error fetching class details: $e');
     }
   }
@@ -99,20 +92,22 @@ class ClassManagementService {
   Future<ClassStudentsResponse> getClassStudentsPaginated(String classId,
       {int page = 1, int limit = 20, String? search}) async {
     try {
-      final headers = await _getHeaders();
+      final queryParams = {
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
 
-      var url = '$_baseUrl/classes/$classId/students?page=$page&limit=$limit';
       if (search != null && search.isNotEmpty) {
-        url += '&search=${Uri.encodeComponent(search)}';
+        queryParams['search'] = search;
       }
 
-      final response = await http.get(
-        Uri.parse(url),
-        headers: headers,
+      final response = await _apiService.get(
+        '/classes/$classId/students',
+        queryParameters: queryParams,
       );
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = response.data;
         final List<dynamic> studentsJson = data['students'] ?? [];
         final Map<String, dynamic> paginationJson = data['pagination'] ?? {};
 
@@ -120,8 +115,6 @@ class ClassManagementService {
           students: studentsJson.map((json) => User.fromJson(json)).toList(),
           pagination: PaginationInfo.fromJson(paginationJson),
         );
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
@@ -129,6 +122,9 @@ class ClassManagementService {
             'Failed to fetch class students: ${response.statusCode}');
       }
     } catch (e) {
+      if (e is ApiException) {
+        throw Exception('Error fetching class students: ${e.message}');
+      }
       throw Exception('Error fetching class students: $e');
     }
   }
@@ -136,23 +132,20 @@ class ClassManagementService {
   /// Get class counts (student count, teacher count, etc.)
   Future<ClassCounts> getClassCounts(String classId) async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/classes/$classId/counts'),
-        headers: headers,
-      );
+      final response = await _apiService.get('/classes/$classId/counts');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = response.data;
         return ClassCounts.fromJson(data);
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
         throw Exception('Failed to fetch class counts: ${response.statusCode}');
       }
     } catch (e) {
+      if (e is ApiException) {
+        throw Exception('Error fetching class counts: ${e.message}');
+      }
       throw Exception('Error fetching class counts: $e');
     }
   }
@@ -168,15 +161,16 @@ class ClassManagementService {
   Future<ClassTeachersResponse> getClassTeachersPaginated(String classId,
       {int page = 1, int limit = 20}) async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse(
-            '$_baseUrl/classes/$classId/teachers?page=$page&limit=$limit'),
-        headers: headers,
+      final response = await _apiService.get(
+        '/classes/$classId/teachers',
+        queryParameters: {
+          'page': page.toString(),
+          'limit': limit.toString(),
+        },
       );
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = response.data;
         final List<dynamic> teachersJson = data['teachers'] ?? [];
         final Map<String, dynamic> paginationJson = data['pagination'] ?? {};
 
@@ -184,8 +178,6 @@ class ClassManagementService {
           teachers: teachersJson.map((json) => User.fromJson(json)).toList(),
           pagination: PaginationInfo.fromJson(paginationJson),
         );
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
@@ -193,6 +185,9 @@ class ClassManagementService {
             'Failed to fetch class teachers: ${response.statusCode}');
       }
     } catch (e) {
+      if (e is ApiException) {
+        throw Exception('Error fetching class teachers: ${e.message}');
+      }
       throw Exception('Error fetching class teachers: $e');
     }
   }
@@ -200,19 +195,13 @@ class ClassManagementService {
   /// Get lessons for a specific class
   Future<List<Map<String, dynamic>>> getClassLessons(String classId) async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/classes/$classId/lessons'),
-        headers: headers,
-      );
+      final response = await _apiService.get('/classes/$classId/lessons');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = response.data;
         final List<dynamic> lessonsJson = data['lessons'] ?? [];
 
         return lessonsJson.cast<Map<String, dynamic>>();
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
@@ -220,6 +209,9 @@ class ClassManagementService {
             'Failed to fetch class lessons: ${response.statusCode}');
       }
     } catch (e) {
+      if (e is ApiException) {
+        throw Exception('Error fetching class lessons: ${e.message}');
+      }
       throw Exception('Error fetching class lessons: $e');
     }
   }
@@ -227,19 +219,13 @@ class ClassManagementService {
   /// Get subjects for a specific class with their lessons
   Future<List<Map<String, dynamic>>> getClassSubjects(String classId) async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/classes/$classId/subjects'),
-        headers: headers,
-      );
+      final response = await _apiService.get('/classes/$classId/subjects');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = response.data;
         final List<dynamic> subjectsJson = data['subjects'] ?? [];
 
         return subjectsJson.cast<Map<String, dynamic>>();
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
@@ -247,6 +233,9 @@ class ClassManagementService {
             'Failed to fetch class subjects: ${response.statusCode}');
       }
     } catch (e) {
+      if (e is ApiException) {
+        throw Exception('Error fetching class subjects: ${e.message}');
+      }
       throw Exception('Error fetching class subjects: $e');
     }
   }
@@ -254,18 +243,12 @@ class ClassManagementService {
   /// Get offerings (subject-classes) for a specific class
   Future<List<Map<String, dynamic>>> getClassOfferings(String classId) async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/classes/$classId/offerings'),
-        headers: headers,
-      );
+      final response = await _apiService.get('/classes/$classId/offerings');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = response.data;
         final List<dynamic> offeringsJson = data['offerings'] ?? [];
         return offeringsJson.cast<Map<String, dynamic>>();
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
@@ -273,6 +256,9 @@ class ClassManagementService {
             'Failed to fetch class offerings: ${response.statusCode}');
       }
     } catch (e) {
+      if (e is ApiException) {
+        throw Exception('Error fetching class offerings: ${e.message}');
+      }
       throw Exception('Error fetching class offerings: $e');
     }
   }
@@ -283,27 +269,21 @@ class ClassManagementService {
     try {
       debugPrint(
           '🔍 [SERVICE DEBUG] getClassAssignments called with classId: $classId, limit: $limit');
-      final headers = await _getHeaders();
-      final url =
-          '$_baseUrl/assignments/classes/$classId/assignments?limit=$limit';
-      debugPrint('🔍 [SERVICE DEBUG] Making request to: $url');
-      final response = await http.get(
-        Uri.parse(url),
-        headers: headers,
+
+      final response = await _apiService.get(
+        '/assignments/classes/$classId/assignments',
+        queryParameters: {'limit': limit.toString()},
       );
 
       debugPrint('🔍 [SERVICE DEBUG] Response status: ${response.statusCode}');
-      debugPrint('🔍 [SERVICE DEBUG] Response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = response.data;
         final List<dynamic> assignmentsJson = data['assignments'] ?? [];
         debugPrint(
             '🔍 [SERVICE DEBUG] Found ${assignmentsJson.length} assignments');
 
         return assignmentsJson.cast<Map<String, dynamic>>();
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
@@ -312,6 +292,9 @@ class ClassManagementService {
       }
     } catch (e) {
       debugPrint('🔍 [SERVICE DEBUG] Error in getClassAssignments: $e');
+      if (e is ApiException) {
+        throw Exception('Error fetching class assignments: ${e.message}');
+      }
       throw Exception('Error fetching class assignments: $e');
     }
   }
@@ -325,33 +308,29 @@ class ClassManagementService {
     required String academicYear,
   }) async {
     try {
-      final headers = await _getHeaders();
-      final body = json.encode({
+      final data = {
         'name': name,
         'description': description,
         'grade_level': gradeLevel,
         'section': section,
         'academic_year': academicYear,
-      });
+      };
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/classes'),
-        headers: headers,
-        body: body,
-      );
+      final response = await _apiService.post('/classes', data: data);
 
       if (response.statusCode == 201) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        return ClassModel.fromJson(data['class']);
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
+        final Map<String, dynamic> responseData = response.data;
+        return ClassModel.fromJson(responseData['class']);
       } else if (response.statusCode == 403) {
         throw Exception('Access denied - teachers only');
       } else {
-        final Map<String, dynamic> errorData = json.decode(response.body);
+        final Map<String, dynamic> errorData = response.data;
         throw Exception(errorData['error'] ?? 'Failed to create class');
       }
     } catch (e) {
+      if (e is ApiException) {
+        throw Exception('Error creating class: ${e.message}');
+      }
       throw Exception('Error creating class: $e');
     }
   }
@@ -367,7 +346,6 @@ class ClassManagementService {
     bool? isActive,
   }) async {
     try {
-      final headers = await _getHeaders();
       final Map<String, dynamic> updateData = {};
 
       if (name != null) updateData['name'] = name;
@@ -377,28 +355,24 @@ class ClassManagementService {
       if (academicYear != null) updateData['academic_year'] = academicYear;
       if (isActive != null) updateData['is_active'] = isActive;
 
-      final body = json.encode(updateData);
-
-      final response = await http.put(
-        Uri.parse('$_baseUrl/classes/$classId'),
-        headers: headers,
-        body: body,
-      );
+      final response =
+          await _apiService.put('/classes/$classId', data: updateData);
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
+        final Map<String, dynamic> data = response.data;
         return ClassModel.fromJson(data['class']);
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
       } else if (response.statusCode == 403) {
         throw Exception('Access denied - teachers only');
       } else if (response.statusCode == 404) {
         throw Exception('Class not found');
       } else {
-        final Map<String, dynamic> errorData = json.decode(response.body);
+        final Map<String, dynamic> errorData = response.data;
         throw Exception(errorData['error'] ?? 'Failed to update class');
       }
     } catch (e) {
+      if (e is ApiException) {
+        throw Exception('Error updating class: ${e.message}');
+      }
       throw Exception('Error updating class: $e');
     }
   }

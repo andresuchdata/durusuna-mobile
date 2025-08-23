@@ -1,21 +1,12 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import '../../core/constants/api_constants.dart';
-import '../../core/storage/storage_service.dart';
 import 'class_management_service.dart';
+import 'api_service.dart';
 
 class SubjectsService {
-  static final String _baseUrl = ApiConstants.baseUrl;
-  final ClassManagementService _classService = ClassManagementService();
+  final ApiService _apiService;
+  final ClassManagementService _classService;
 
-  Future<Map<String, String>> _getHeaders() async {
-    final token = StorageService.getToken();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
-  }
+  SubjectsService(this._apiService, this._classService);
 
   /// Get all subjects/offerings for the current user across all their classes
   Future<List<SubjectOffering>> getUserSubjects() async {
@@ -106,87 +97,73 @@ class SubjectsService {
   /// Get all subject offerings for admin users
   Future<List<SubjectOffering>> getAllSubjectOfferingsForAdmin() async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/class-offerings/all'),
-        headers: headers,
-      );
+      final response = await _apiService.get('/class-offerings/all');
+      final Map<String, dynamic> data = response.data;
+      final List<dynamic> offeringsJson = data['offerings'] ?? [];
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        final List<dynamic> offeringsJson = data['offerings'] ?? [];
+      List<SubjectOffering> allOfferings = [];
 
-        List<SubjectOffering> allOfferings = [];
+      for (final offering in offeringsJson) {
+        try {
+          // Get assignments for this offering
+          final assignments = await _getOfferingAssignments(
+              offering['class_id'] ?? '', offering['subject_id'] ?? '');
 
-        for (final offering in offeringsJson) {
-          try {
-            // Get assignments for this offering
-            final assignments = await _getOfferingAssignments(
-                offering['class_id'] ?? '', offering['subject_id'] ?? '');
+          final subjectOffering = SubjectOffering(
+            id: offering['id'] ?? '',
+            subjectId: offering['subject_id'] ?? '',
+            subjectName: offering['subject_name'] ?? 'Unknown Subject',
+            subjectCode: offering['subject_code'] ?? '',
+            subjectDescription: offering['subject_description'] ?? '',
+            classId: offering['class_id'] ?? '',
+            className: offering['class_name'] ?? '',
+            gradeLevel: offering['grade_level'] ?? '',
+            hoursPerWeek: offering['hours_per_week'] ?? 0,
+            room: offering['room'] ?? '',
+            schedule: offering['schedule'] ?? {},
+            teacherId: offering['primary_teacher_id'],
+            teacherName: _getTeacherNameFromOffering(offering),
+            teacherEmail: offering['teacher_email'],
+            teacherAvatarUrl: offering['teacher_avatar_url'],
+            assignments: assignments,
+            studentCount: offering['enrollment_count'] ?? 0,
+            assignmentsCount: assignments.length,
+            pendingGrades: _countPendingGrades(assignments),
+            color: _getSubjectColor(offering['subject_name'] ?? ''),
+          );
 
-            final subjectOffering = SubjectOffering(
-              id: offering['id'] ?? '',
-              subjectId: offering['subject_id'] ?? '',
-              subjectName: offering['subject_name'] ?? 'Unknown Subject',
-              subjectCode: offering['subject_code'] ?? '',
-              subjectDescription: offering['subject_description'] ?? '',
-              classId: offering['class_id'] ?? '',
-              className: offering['class_name'] ?? '',
-              gradeLevel: offering['grade_level'] ?? '',
-              hoursPerWeek: offering['hours_per_week'] ?? 0,
-              room: offering['room'] ?? '',
-              schedule: offering['schedule'] ?? {},
-              teacherId: offering['primary_teacher_id'],
-              teacherName: _getTeacherNameFromOffering(offering),
-              teacherEmail: offering['teacher_email'],
-              teacherAvatarUrl: offering['teacher_avatar_url'],
-              assignments: assignments,
-              studentCount: offering['enrollment_count'] ?? 0,
-              assignmentsCount: assignments.length,
-              pendingGrades: _countPendingGrades(assignments),
-              color: _getSubjectColor(offering['subject_name'] ?? ''),
-            );
+          allOfferings.add(subjectOffering);
+        } catch (e) {
+          debugPrint('Error processing offering ${offering['id']}: $e');
+          // Continue with offering but without assignments
+          final subjectOffering = SubjectOffering(
+            id: offering['id'] ?? '',
+            subjectId: offering['subject_id'] ?? '',
+            subjectName: offering['subject_name'] ?? 'Unknown Subject',
+            subjectCode: offering['subject_code'] ?? '',
+            subjectDescription: offering['subject_description'] ?? '',
+            classId: offering['class_id'] ?? '',
+            className: offering['class_name'] ?? '',
+            gradeLevel: offering['grade_level'] ?? '',
+            hoursPerWeek: offering['hours_per_week'] ?? 0,
+            room: offering['room'] ?? '',
+            schedule: offering['schedule'] ?? {},
+            teacherId: offering['primary_teacher_id'],
+            teacherName: _getTeacherNameFromOffering(offering),
+            teacherEmail: offering['teacher_email'],
+            teacherAvatarUrl: offering['teacher_avatar_url'],
+            assignments: [],
+            studentCount: offering['enrollment_count'] ?? 0,
+            assignmentsCount: 0,
+            pendingGrades: 0,
+            color: _getSubjectColor(offering['subject_name'] ?? ''),
+          );
 
-            allOfferings.add(subjectOffering);
-          } catch (e) {
-            debugPrint('Error processing offering ${offering['id']}: $e');
-            // Continue with offering but without assignments
-            final subjectOffering = SubjectOffering(
-              id: offering['id'] ?? '',
-              subjectId: offering['subject_id'] ?? '',
-              subjectName: offering['subject_name'] ?? 'Unknown Subject',
-              subjectCode: offering['subject_code'] ?? '',
-              subjectDescription: offering['subject_description'] ?? '',
-              classId: offering['class_id'] ?? '',
-              className: offering['class_name'] ?? '',
-              gradeLevel: offering['grade_level'] ?? '',
-              hoursPerWeek: offering['hours_per_week'] ?? 0,
-              room: offering['room'] ?? '',
-              schedule: offering['schedule'] ?? {},
-              teacherId: offering['primary_teacher_id'],
-              teacherName: _getTeacherNameFromOffering(offering),
-              teacherEmail: offering['teacher_email'],
-              teacherAvatarUrl: offering['teacher_avatar_url'],
-              assignments: [],
-              studentCount: offering['enrollment_count'] ?? 0,
-              assignmentsCount: 0,
-              pendingGrades: 0,
-              color: _getSubjectColor(offering['subject_name'] ?? ''),
-            );
-
-            allOfferings.add(subjectOffering);
-          }
+          allOfferings.add(subjectOffering);
         }
-
-        return _sortSubjectOfferings(allOfferings);
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
-      } else if (response.statusCode == 403) {
-        throw Exception('Access denied');
-      } else {
-        throw Exception(
-            'Failed to fetch subject offerings: ${response.statusCode}');
       }
+
+      return _sortSubjectOfferings(allOfferings);
     } catch (e) {
       throw Exception('Error fetching all subject offerings: $e');
     }
@@ -195,88 +172,73 @@ class SubjectsService {
   /// Get subject offerings for student users (based on their enrollments)
   Future<List<SubjectOffering>> getStudentSubjectOfferings() async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/enrollments/my-offerings'),
-        headers: headers,
-      );
+      final response = await _apiService.get('/enrollments/my-offerings');
+      final Map<String, dynamic> data = response.data;
+      final List<dynamic> offeringsJson = data['offerings'] ?? [];
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        final List<dynamic> offeringsJson = data['offerings'] ?? [];
+      List<SubjectOffering> allOfferings = [];
 
-        List<SubjectOffering> allOfferings = [];
+      for (final offering in offeringsJson) {
+        try {
+          // Get assignments for this offering
+          final assignments = await _getOfferingAssignments(
+              offering['class_id'] ?? '', offering['subject_id'] ?? '');
 
-        for (final offering in offeringsJson) {
-          try {
-            // Get assignments for this offering
-            final assignments = await _getOfferingAssignments(
-                offering['class_id'] ?? '', offering['subject_id'] ?? '');
+          final subjectOffering = SubjectOffering(
+            id: offering['class_offering_id'] ?? offering['id'] ?? '',
+            subjectId: offering['subject_id'] ?? '',
+            subjectName: offering['subject_name'] ?? 'Unknown Subject',
+            subjectCode: offering['subject_code'] ?? '',
+            subjectDescription: offering['subject_description'] ?? '',
+            classId: offering['class_id'] ?? '',
+            className: offering['class_name'] ?? '',
+            gradeLevel: offering['grade_level'] ?? '',
+            hoursPerWeek: offering['hours_per_week'] ?? 0,
+            room: offering['room'] ?? '',
+            schedule: offering['schedule'] ?? {},
+            teacherId: offering['primary_teacher_id'],
+            teacherName: _getTeacherNameFromOffering(offering),
+            teacherEmail: offering['teacher_email'],
+            teacherAvatarUrl: offering['teacher_avatar_url'],
+            assignments: assignments,
+            studentCount: offering['enrollment_count'] ?? 0,
+            assignmentsCount: assignments.length,
+            pendingGrades: _countPendingGrades(assignments),
+            color: _getSubjectColor(offering['subject_name'] ?? ''),
+          );
 
-            final subjectOffering = SubjectOffering(
-              id: offering['class_offering_id'] ?? offering['id'] ?? '',
-              subjectId: offering['subject_id'] ?? '',
-              subjectName: offering['subject_name'] ?? 'Unknown Subject',
-              subjectCode: offering['subject_code'] ?? '',
-              subjectDescription: offering['subject_description'] ?? '',
-              classId: offering['class_id'] ?? '',
-              className: offering['class_name'] ?? '',
-              gradeLevel: offering['grade_level'] ?? '',
-              hoursPerWeek: offering['hours_per_week'] ?? 0,
-              room: offering['room'] ?? '',
-              schedule: offering['schedule'] ?? {},
-              teacherId: offering['primary_teacher_id'],
-              teacherName: _getTeacherNameFromOffering(offering),
-              teacherEmail: offering['teacher_email'],
-              teacherAvatarUrl: offering['teacher_avatar_url'],
-              assignments: assignments,
-              studentCount: offering['enrollment_count'] ?? 0,
-              assignmentsCount: assignments.length,
-              pendingGrades: _countPendingGrades(assignments),
-              color: _getSubjectColor(offering['subject_name'] ?? ''),
-            );
+          allOfferings.add(subjectOffering);
+        } catch (e) {
+          debugPrint('Error processing student offering ${offering['id']}: $e');
+          // Continue with offering but without assignments
+          final subjectOffering = SubjectOffering(
+            id: offering['class_offering_id'] ?? offering['id'] ?? '',
+            subjectId: offering['subject_id'] ?? '',
+            subjectName: offering['subject_name'] ?? 'Unknown Subject',
+            subjectCode: offering['subject_code'] ?? '',
+            subjectDescription: offering['subject_description'] ?? '',
+            classId: offering['class_id'] ?? '',
+            className: offering['class_name'] ?? '',
+            gradeLevel: offering['grade_level'] ?? '',
+            hoursPerWeek: offering['hours_per_week'] ?? 0,
+            room: offering['room'] ?? '',
+            schedule: offering['schedule'] ?? {},
+            teacherId: offering['primary_teacher_id'],
+            teacherName: _getTeacherNameFromOffering(offering),
+            teacherEmail: offering['teacher_email'],
+            teacherAvatarUrl: offering['teacher_avatar_url'],
+            assignments: [],
+            studentCount: offering['enrollment_count'] ?? 0,
+            assignmentsCount: 0,
+            pendingGrades: 0,
+            color: _getSubjectColor(offering['subject_name'] ?? ''),
+          );
 
-            allOfferings.add(subjectOffering);
-          } catch (e) {
-            debugPrint(
-                'Error processing student offering ${offering['id']}: $e');
-            // Continue with offering but without assignments
-            final subjectOffering = SubjectOffering(
-              id: offering['class_offering_id'] ?? offering['id'] ?? '',
-              subjectId: offering['subject_id'] ?? '',
-              subjectName: offering['subject_name'] ?? 'Unknown Subject',
-              subjectCode: offering['subject_code'] ?? '',
-              subjectDescription: offering['subject_description'] ?? '',
-              classId: offering['class_id'] ?? '',
-              className: offering['class_name'] ?? '',
-              gradeLevel: offering['grade_level'] ?? '',
-              hoursPerWeek: offering['hours_per_week'] ?? 0,
-              room: offering['room'] ?? '',
-              schedule: offering['schedule'] ?? {},
-              teacherId: offering['primary_teacher_id'],
-              teacherName: _getTeacherNameFromOffering(offering),
-              teacherEmail: offering['teacher_email'],
-              teacherAvatarUrl: offering['teacher_avatar_url'],
-              assignments: [],
-              studentCount: offering['enrollment_count'] ?? 0,
-              assignmentsCount: 0,
-              pendingGrades: 0,
-              color: _getSubjectColor(offering['subject_name'] ?? ''),
-            );
-
-            allOfferings.add(subjectOffering);
-          }
+          allOfferings.add(subjectOffering);
         }
-
-        return _sortSubjectOfferings(allOfferings);
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
-      } else if (response.statusCode == 403) {
-        throw Exception('Access denied');
-      } else {
-        throw Exception(
-            'Failed to fetch student subject offerings: ${response.statusCode}');
       }
+
+      return _sortSubjectOfferings(allOfferings);
     } catch (e) {
       throw Exception('Error fetching student subject offerings: $e');
     }
@@ -285,88 +247,73 @@ class SubjectsService {
   /// Get subject offerings for parent users (based on their children's enrollments)
   Future<List<SubjectOffering>> getParentSubjectOfferings() async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/enrollments/children-offerings'),
-        headers: headers,
-      );
+      final response = await _apiService.get('/enrollments/children-offerings');
+      final Map<String, dynamic> data = response.data;
+      final List<dynamic> offeringsJson = data['offerings'] ?? [];
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        final List<dynamic> offeringsJson = data['offerings'] ?? [];
+      List<SubjectOffering> allOfferings = [];
 
-        List<SubjectOffering> allOfferings = [];
+      for (final offering in offeringsJson) {
+        try {
+          // Get assignments for this offering
+          final assignments = await _getOfferingAssignments(
+              offering['class_id'] ?? '', offering['subject_id'] ?? '');
 
-        for (final offering in offeringsJson) {
-          try {
-            // Get assignments for this offering
-            final assignments = await _getOfferingAssignments(
-                offering['class_id'] ?? '', offering['subject_id'] ?? '');
+          final subjectOffering = SubjectOffering(
+            id: offering['class_offering_id'] ?? offering['id'] ?? '',
+            subjectId: offering['subject_id'] ?? '',
+            subjectName: offering['subject_name'] ?? 'Unknown Subject',
+            subjectCode: offering['subject_code'] ?? '',
+            subjectDescription: offering['subject_description'] ?? '',
+            classId: offering['class_id'] ?? '',
+            className: offering['class_name'] ?? '',
+            gradeLevel: offering['grade_level'] ?? '',
+            hoursPerWeek: offering['hours_per_week'] ?? 0,
+            room: offering['room'] ?? '',
+            schedule: offering['schedule'] ?? {},
+            teacherId: offering['primary_teacher_id'],
+            teacherName: _getTeacherNameFromOffering(offering),
+            teacherEmail: offering['teacher_email'],
+            teacherAvatarUrl: offering['teacher_avatar_url'],
+            assignments: assignments,
+            studentCount: offering['enrollment_count'] ?? 0,
+            assignmentsCount: assignments.length,
+            pendingGrades: _countPendingGrades(assignments),
+            color: _getSubjectColor(offering['subject_name'] ?? ''),
+          );
 
-            final subjectOffering = SubjectOffering(
-              id: offering['class_offering_id'] ?? offering['id'] ?? '',
-              subjectId: offering['subject_id'] ?? '',
-              subjectName: offering['subject_name'] ?? 'Unknown Subject',
-              subjectCode: offering['subject_code'] ?? '',
-              subjectDescription: offering['subject_description'] ?? '',
-              classId: offering['class_id'] ?? '',
-              className: offering['class_name'] ?? '',
-              gradeLevel: offering['grade_level'] ?? '',
-              hoursPerWeek: offering['hours_per_week'] ?? 0,
-              room: offering['room'] ?? '',
-              schedule: offering['schedule'] ?? {},
-              teacherId: offering['primary_teacher_id'],
-              teacherName: _getTeacherNameFromOffering(offering),
-              teacherEmail: offering['teacher_email'],
-              teacherAvatarUrl: offering['teacher_avatar_url'],
-              assignments: assignments,
-              studentCount: offering['enrollment_count'] ?? 0,
-              assignmentsCount: assignments.length,
-              pendingGrades: _countPendingGrades(assignments),
-              color: _getSubjectColor(offering['subject_name'] ?? ''),
-            );
+          allOfferings.add(subjectOffering);
+        } catch (e) {
+          debugPrint('Error processing parent offering ${offering['id']}: $e');
+          // Continue with offering but without assignments
+          final subjectOffering = SubjectOffering(
+            id: offering['class_offering_id'] ?? offering['id'] ?? '',
+            subjectId: offering['subject_id'] ?? '',
+            subjectName: offering['subject_name'] ?? 'Unknown Subject',
+            subjectCode: offering['subject_code'] ?? '',
+            subjectDescription: offering['subject_description'] ?? '',
+            classId: offering['class_id'] ?? '',
+            className: offering['class_name'] ?? '',
+            gradeLevel: offering['grade_level'] ?? '',
+            hoursPerWeek: offering['hours_per_week'] ?? 0,
+            room: offering['room'] ?? '',
+            schedule: offering['schedule'] ?? {},
+            teacherId: offering['primary_teacher_id'],
+            teacherName: _getTeacherNameFromOffering(offering),
+            teacherEmail: offering['teacher_email'],
+            teacherAvatarUrl: offering['teacher_avatar_url'],
+            assignments: [],
+            studentCount: offering['enrollment_count'] ?? 0,
+            assignmentsCount: 0,
+            pendingGrades: 0,
+            color: _getSubjectColor(offering['subject_name'] ?? ''),
+          );
 
-            allOfferings.add(subjectOffering);
-          } catch (e) {
-            debugPrint(
-                'Error processing parent offering ${offering['id']}: $e');
-            // Continue with offering but without assignments
-            final subjectOffering = SubjectOffering(
-              id: offering['class_offering_id'] ?? offering['id'] ?? '',
-              subjectId: offering['subject_id'] ?? '',
-              subjectName: offering['subject_name'] ?? 'Unknown Subject',
-              subjectCode: offering['subject_code'] ?? '',
-              subjectDescription: offering['subject_description'] ?? '',
-              classId: offering['class_id'] ?? '',
-              className: offering['class_name'] ?? '',
-              gradeLevel: offering['grade_level'] ?? '',
-              hoursPerWeek: offering['hours_per_week'] ?? 0,
-              room: offering['room'] ?? '',
-              schedule: offering['schedule'] ?? {},
-              teacherId: offering['primary_teacher_id'],
-              teacherName: _getTeacherNameFromOffering(offering),
-              teacherEmail: offering['teacher_email'],
-              teacherAvatarUrl: offering['teacher_avatar_url'],
-              assignments: [],
-              studentCount: offering['enrollment_count'] ?? 0,
-              assignmentsCount: 0,
-              pendingGrades: 0,
-              color: _getSubjectColor(offering['subject_name'] ?? ''),
-            );
-
-            allOfferings.add(subjectOffering);
-          }
+          allOfferings.add(subjectOffering);
         }
-
-        return _sortSubjectOfferings(allOfferings);
-      } else if (response.statusCode == 401) {
-        throw Exception('Authentication failed');
-      } else if (response.statusCode == 403) {
-        throw Exception('Access denied');
-      } else {
-        throw Exception(
-            'Failed to fetch parent subject offerings: ${response.statusCode}');
       }
+
+      return _sortSubjectOfferings(allOfferings);
     } catch (e) {
       throw Exception('Error fetching parent subject offerings: $e');
     }
@@ -376,25 +323,11 @@ class SubjectsService {
   Future<List<Map<String, dynamic>>> _getOfferingAssignments(
       String classId, String subjectId) async {
     try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse(
-            '$_baseUrl/assignments/classes/$classId/subjects/$subjectId/assignments'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        final List<dynamic> assignmentsJson = data['assignments'] ?? [];
-        return assignmentsJson.cast<Map<String, dynamic>>();
-      } else if (response.statusCode == 404) {
-        // No assignments found for this offering
-        return [];
-      } else {
-        debugPrint(
-            'Failed to fetch assignments for class $classId subject $subjectId: ${response.statusCode}');
-        return [];
-      }
+      final response = await _apiService
+          .get('/assignments/classes/$classId/subjects/$subjectId/assignments');
+      final Map<String, dynamic> data = response.data;
+      final List<dynamic> assignmentsJson = data['assignments'] ?? [];
+      return assignmentsJson.cast<Map<String, dynamic>>();
     } catch (e) {
       debugPrint(
           'Error fetching assignments for class $classId subject $subjectId: $e');

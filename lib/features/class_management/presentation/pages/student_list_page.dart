@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
-import '../../../../shared/services/class_management_service.dart';
+import '../../../../shared/providers/app_providers.dart'
+    show classManagementServiceProvider;
 import '../../../../shared/services/auth_service.dart';
 import '../../../attendance/presentation/pages/attendance_management_page.dart';
 import 'student_detail_page.dart';
@@ -14,10 +15,6 @@ final studentsListWithSearchProvider =
   final (classId, search) = params;
   final service = ref.read(classManagementServiceProvider);
   return await service.getClassStudents(classId, search: search);
-});
-
-final classManagementServiceProvider = Provider<ClassManagementService>((ref) {
-  return ClassManagementService();
 });
 
 class StudentListPage extends ConsumerStatefulWidget {

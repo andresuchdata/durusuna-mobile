@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
-import '../../../../shared/services/class_management_service.dart';
+import '../../../../shared/providers/app_providers.dart';
 
 class CreateClassDialog extends ConsumerStatefulWidget {
   final VoidCallback onClassCreated;
@@ -190,7 +190,7 @@ class _CreateClassDialogState extends ConsumerState<CreateClassDialog> {
     });
 
     try {
-      final service = ClassManagementService();
+      final service = ref.read(classManagementServiceProvider);
       await service.createClass(
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim().isEmpty

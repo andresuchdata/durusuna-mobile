@@ -4,6 +4,7 @@ import '../../core/storage/storage_service.dart';
 import '../services/subjects_service.dart';
 import '../services/class_management_service.dart';
 import '../services/auth_service.dart';
+import '../services/api_service.dart';
 import '../models/user.dart';
 
 // Export notification providers for easy access
@@ -14,10 +15,11 @@ export '../services/notification_service.dart'
         unreadNotificationsCountProvider;
 
 // Service Providers
-final subjectsServiceProvider =
-    Provider<SubjectsService>((ref) => SubjectsService());
-final classManagementServiceProvider =
-    Provider<ClassManagementService>((ref) => ClassManagementService());
+final subjectsServiceProvider = Provider<SubjectsService>((ref) =>
+    SubjectsService(ref.read(apiServiceProvider),
+        ref.read(classManagementServiceProvider)));
+final classManagementServiceProvider = Provider<ClassManagementService>(
+    (ref) => ClassManagementService(ref.read(apiServiceProvider)));
 
 // Data Providers
 final userSubjectsProvider = FutureProvider<List<SubjectOffering>>((ref) async {
