@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../core/constants/app_theme.dart';
-import '../../../assignments/presentation/pages/assignments_main_page.dart';
+import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
 import '../../../grading/pages/formula_builder_page.dart';
 import '../../../subjects/presentation/pages/subjects_main_page.dart';
@@ -209,7 +209,17 @@ class AcademicQuickActions extends ConsumerWidget {
             ? AppTheme.primaryColor
             : AppTheme.successColor,
         badge: user.userType == UserType.student ? '3' : null,
-        onTap: () => _navigateToPage(context, const AssignmentsMainPage()),
+        onTap: () => _navigateToPage(
+            context,
+            const FlexibleAssignmentsPage(
+              params: AssignmentListParams(
+                context: AssignmentNavigationContext.standalone,
+                title: 'My Assignments',
+                showClassFilter: true,
+                showSubjectFilter: true,
+                showStats: false,
+              ),
+            )),
       ),
     );
 

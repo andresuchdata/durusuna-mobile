@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/chat/presentation/pages/local_chat_page.dart';
 import '../../features/class_updates/presentation/pages/class_updates_page.dart';
-import '../../features/assignments/presentation/pages/assignments_main_page.dart';
+
 import '../../features/assignments/presentation/pages/assignment_detail_page.dart';
 import '../../features/attendance/presentation/pages/student_attendance_page.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
@@ -11,6 +11,7 @@ import '../../features/home/presentation/pages/home_page.dart';
 import '../../main.dart';
 import '../models/conversation.dart';
 import 'chat_service.dart';
+import '../../features/assignments/presentation/pages/flexible_assignments_page.dart';
 
 /// Centralized router for handling navigation from FCM payloads
 class NotificationDeepLinkRouter {
@@ -291,7 +292,15 @@ class NotificationDeepLinkRouter {
     } else {
       await Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (_) => const AssignmentsMainPage(),
+          builder: (_) => const FlexibleAssignmentsPage(
+            params: AssignmentListParams(
+              context: AssignmentNavigationContext.standalone,
+              title: 'My Assignments',
+              showClassFilter: true,
+              showSubjectFilter: true,
+              showStats: false,
+            ),
+          ),
         ),
         (route) => route.isFirst,
       );

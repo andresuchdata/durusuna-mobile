@@ -10,7 +10,7 @@ import '../../features/chat/presentation/pages/conversations_page.dart';
 import '../../features/attendance/presentation/pages/school_attendance_settings_page.dart';
 import '../../features/settings/presentation/pages/admin_settings_page.dart';
 import '../../features/subjects/presentation/pages/subjects_main_page.dart';
-import '../../features/assignments/presentation/pages/assignments_main_page.dart';
+import '../../features/assignments/presentation/pages/flexible_assignments_page.dart';
 
 class GlobalAppDrawer extends ConsumerWidget {
   const GlobalAppDrawer({super.key});
@@ -280,7 +280,15 @@ class GlobalAppDrawer extends ConsumerWidget {
     Navigator.of(context).pop(); // Close drawer
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => const AssignmentsMainPage(),
+        builder: (context) => const FlexibleAssignmentsPage(
+          params: AssignmentListParams(
+            context: AssignmentNavigationContext.standalone,
+            title: 'My Assignments',
+            showClassFilter: true,
+            showSubjectFilter: true,
+            showStats: false,
+          ),
+        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../core/constants/app_theme.dart';
@@ -18,11 +19,30 @@ class AssignmentsMainPage extends ConsumerStatefulWidget {
 class _AssignmentsMainPageState extends ConsumerState<AssignmentsMainPage>
     with TickerProviderStateMixin {
   TabController? _tabController;
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounceTimer;
 
   @override
   void dispose() {
     _tabController?.dispose();
+    _searchController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    // Cancel the previous timer
+    _debounceTimer?.cancel();
+
+    // Create a new timer
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() {
+          _searchQuery = value;
+        });
+      }
+    });
   }
 
   @override
@@ -118,6 +138,9 @@ class _AssignmentsMainPageState extends ConsumerState<AssignmentsMainPage>
       ),
       body: Column(
         children: [
+          // Search Section
+          _buildSearchSection(),
+
           // Stats Cards Section
           if (isTeacher || isAdmin) _buildStatsSection(),
 
@@ -130,24 +153,29 @@ class _AssignmentsMainPageState extends ConsumerState<AssignmentsMainPage>
                       AssignmentListView(
                         filterType: AssignmentFilterType.all,
                         userRole: _getUserRole(user),
+                        searchQuery: _searchQuery,
                       ),
                       AssignmentListView(
                         filterType: AssignmentFilterType.dueSoon,
                         userRole: _getUserRole(user),
+                        searchQuery: _searchQuery,
                       ),
                       AssignmentListView(
                         filterType: AssignmentFilterType.submitted,
                         userRole: _getUserRole(user),
+                        searchQuery: _searchQuery,
                       ),
                       AssignmentListView(
                         filterType: AssignmentFilterType.graded,
                         userRole: _getUserRole(user),
+                        searchQuery: _searchQuery,
                       ),
                     ],
                   )
                 : AssignmentListView(
                     filterType: AssignmentFilterType.all,
                     userRole: _getUserRole(user),
+                    searchQuery: _searchQuery,
                   ),
           ),
         ],
@@ -157,6 +185,62 @@ class _AssignmentsMainPageState extends ConsumerState<AssignmentsMainPage>
               onPressed: () => _createNewAssignment(context, user),
             )
           : null,
+    );
+  }
+
+  Widget _buildSearchSection() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        decoration: InputDecoration(
+          hintText: 'Search assignments by title...',
+          hintStyle: const TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+          ),
+          prefixIcon: const Icon(
+            Icons.search,
+            color: AppTheme.textSecondary,
+            size: 20,
+          ),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(
+                    Icons.clear,
+                    color: AppTheme.textSecondary,
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    _debounceTimer?.cancel();
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                    });
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        ),
+        style: const TextStyle(
+          fontSize: 14,
+          color: AppTheme.textPrimary,
+        ),
+      ),
     );
   }
 
