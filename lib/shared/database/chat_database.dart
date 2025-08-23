@@ -232,14 +232,14 @@ class ChatDatabase {
       if (serverMessage.clientMessageId != null) {
         print(
             '🔍 [DATABASE] Looking for optimistic message with clientMessageId: ${serverMessage.clientMessageId}');
-        final allInConv = await _isar.localMessages
-            .where()
-            .conversationIdEqualTo(serverMessage.conversationId)
-            .findAll();
-        print(
-            '🔍 [DATABASE] Found ${allInConv.length} messages in conversation for adoption check');
 
-        final optimistic = allInConv.firstWhere(
+        // IMPORTANT: Search across ALL conversations, not just the server's conversation ID
+        // This handles the case where conversation ID changes from "new_" to real ID during first message
+        final allMessages = await _isar.localMessages.where().findAll();
+        print(
+            '🔍 [DATABASE] Found ${allMessages.length} total messages for adoption check across all conversations');
+
+        final optimistic = allMessages.firstWhere(
           (m) => m.clientMessageId == serverMessage.clientMessageId,
           orElse: () => LocalMessage(
             serverId: null,
@@ -269,9 +269,11 @@ class ChatDatabase {
         // Check sentinel
         if (optimistic.conversationId.isNotEmpty) {
           print(
-              '🔄 [DATABASE] Found matching optimistic message (localId: ${optimistic.id}, readStatus: ${optimistic.readStatus}) - upgrading to server message');
+              '🔄 [DATABASE] Found matching optimistic message (localId: ${optimistic.id}, readStatus: ${optimistic.readStatus}, conversationId: ${optimistic.conversationId}) - upgrading to server message');
           final upgraded = optimistic.copyWith(
             serverId: serverMessage.serverId,
+            conversationId: serverMessage
+                .conversationId, // IMPORTANT: Update conversation ID too
             isSynced: true,
             readStatus: serverMessage.readStatus ?? optimistic.readStatus,
             createdAt: serverMessage.createdAt,
@@ -287,24 +289,32 @@ class ChatDatabase {
           );
           await _isar.localMessages.put(upgraded);
           print(
-              '✅ [DATABASE] Adopted by clientMessageId ${serverMessage.clientMessageId} - updated readStatus from "${optimistic.readStatus}" to "${upgraded.readStatus}"');
+              '✅ [DATABASE] Adopted by clientMessageId ${serverMessage.clientMessageId} - updated readStatus from "${optimistic.readStatus}" to "${upgraded.readStatus}", conversationId from "${optimistic.conversationId}" to "${upgraded.conversationId}"');
           // Cleanup any other optimistic duplicates (same content, same sender) after adoption
           try {
-            final duplicates = await _isar.localMessages
-                .where()
-                .conversationIdEqualTo(serverMessage.conversationId)
-                .filter()
-                .serverIdIsNull()
-                .and()
-                .isFromMeEqualTo(true)
-                .and()
-                .contentEqualTo(serverMessage.content)
-                .findAll();
-            for (final dup in duplicates) {
-              if (dup.id != upgraded.id) {
-                await _isar.localMessages.delete(dup.id);
-                print(
-                    '🧹 [DATABASE] Deleted optimistic duplicate ${dup.id} after clientMessageId adoption');
+            // Clean up from both the new conversation and old conversation if they're different
+            final conversationsToClean = {
+              serverMessage.conversationId,
+              optimistic.conversationId
+            };
+
+            for (final convId in conversationsToClean) {
+              final duplicates = await _isar.localMessages
+                  .where()
+                  .conversationIdEqualTo(convId)
+                  .filter()
+                  .serverIdIsNull()
+                  .and()
+                  .isFromMeEqualTo(true)
+                  .and()
+                  .contentEqualTo(serverMessage.content)
+                  .findAll();
+              for (final dup in duplicates) {
+                if (dup.id != upgraded.id) {
+                  await _isar.localMessages.delete(dup.id);
+                  print(
+                      '🧹 [DATABASE] Deleted optimistic duplicate ${dup.id} from conversation ${convId} after clientMessageId adoption');
+                }
               }
             }
           } catch (_) {}

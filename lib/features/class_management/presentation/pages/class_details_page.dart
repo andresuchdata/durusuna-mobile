@@ -1379,9 +1379,9 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             border: Border(
-              bottom: const BorderSide(
+              bottom: BorderSide(
                 color: Color(0xFFE5E5E5),
                 width: 0.5,
               ),
