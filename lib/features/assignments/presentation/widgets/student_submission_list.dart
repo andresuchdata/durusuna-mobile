@@ -6,7 +6,7 @@ import '../../../../shared/models/assignment_detail.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/auth_service.dart';
 
-class StudentSubmissionList extends StatelessWidget {
+class StudentSubmissionList extends ConsumerWidget {
   final List<StudentSubmission> submissions;
   final bool showSearch;
 
@@ -17,7 +17,7 @@ class StudentSubmissionList extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (submissions.isEmpty) {
       return _buildEmptyState();
     }
@@ -57,7 +57,7 @@ class StudentSubmissionList extends StatelessWidget {
           ),
           itemBuilder: (context, index) {
             final submission = sortedSubmissions[index];
-            return _buildSubmissionItem(context, submission);
+            return _buildSubmissionItem(context, submission, ref);
           },
         ),
       ],
@@ -76,7 +76,7 @@ class StudentSubmissionList extends StatelessWidget {
               color: AppTheme.textSecondary.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'No students enrolled',
               style: TextStyle(
                 fontSize: 16,
@@ -85,7 +85,7 @@ class StudentSubmissionList extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               'Students will appear here once they are enrolled in this class.',
               style: TextStyle(
                 fontSize: 14,
@@ -100,9 +100,9 @@ class StudentSubmissionList extends StatelessWidget {
   }
 
   Widget _buildSubmissionItem(
-      BuildContext context, StudentSubmission submission) {
+      BuildContext context, StudentSubmission submission, WidgetRef ref) {
     return InkWell(
-      onTap: () => _showSubmissionDetails(context, submission),
+      onTap: () => _showSubmissionDetails(context, submission, ref),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         child: Row(
@@ -131,7 +131,7 @@ class StudentSubmissionList extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             submission.studentNumber!,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 12,
                               color: AppTheme.textTertiary,
                             ),
@@ -320,17 +320,18 @@ class StudentSubmissionList extends StatelessWidget {
   }
 
   void _showSubmissionDetails(
-      BuildContext context, StudentSubmission submission) {
+      BuildContext context, StudentSubmission submission, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _buildSubmissionDetailsModal(context, submission),
+      builder: (context) =>
+          _buildSubmissionDetailsModal(context, submission, ref),
     );
   }
 
   Widget _buildSubmissionDetailsModal(
-      BuildContext context, StudentSubmission submission) {
+      BuildContext context, StudentSubmission submission, WidgetRef ref) {
     return Container(
       margin: const EdgeInsets.only(top: 80),
       decoration: const BoxDecoration(
@@ -453,36 +454,50 @@ class StudentSubmissionList extends StatelessWidget {
                   const SizedBox(height: 24),
 
                   // Action buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Close'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            _editGrade(submission);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryColor,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Edit Grade'),
-                        ),
-                      ),
-                    ],
-                  ),
+                  _buildActionButtons(context, submission, ref),
                 ],
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildActionButtons(
+      BuildContext context, StudentSubmission submission, WidgetRef ref) {
+    final authState = ref.read(authStateProvider);
+    final user = authState.user;
+
+    // Only teachers and admins can edit grades
+    final canEditGrades =
+        user?.userType == UserType.teacher || user?.role == UserRole.admin;
+
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ),
+        if (canEditGrades) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _editGrade(submission);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Edit Grade'),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
