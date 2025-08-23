@@ -50,14 +50,17 @@ class AssignmentDetailPage extends ConsumerWidget {
             icon: const Icon(Icons.more_vert),
             onSelected: (value) => _handleMenuAction(context, value),
             itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'edit',
-                child: ListTile(
-                  leading: Icon(Icons.edit),
-                  title: Text('Edit Assignment'),
-                  contentPadding: EdgeInsets.zero,
+              if (ref.read(authStateProvider).user?.role == UserRole.admin ||
+                  ref.read(authStateProvider).user?.userType ==
+                      UserType.teacher)
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: ListTile(
+                    leading: Icon(Icons.edit),
+                    title: Text('Edit Assignment'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
-              ),
               const PopupMenuItem(
                 value: 'export',
                 child: ListTile(
