@@ -1,49 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:json_annotation/json_annotation.dart';
 import '../../core/constants/app_theme.dart';
+import '../../core/utils/json_parsing_helpers.dart';
 
 part 'assignment.g.dart';
-
-// Helper functions for JSON parsing
-int _intFromDynamic(dynamic value) {
-  if (value == null) throw ArgumentError.notNull('value');
-  if (value is int) return value;
-  if (value is double) return value.toInt();
-  if (value is String) {
-    if (value.isEmpty) {
-      throw ArgumentError.value(
-          value, 'value', 'Empty string cannot be converted to int');
-    }
-
-    // Handle decimal strings by parsing as double first
-    return double.parse(value).toInt();
-  }
-
-  throw ArgumentError.value(value, 'value', 'Cannot convert to int');
-}
-
-int? _intFromDynamicNullable(dynamic value) {
-  if (value == null) return null;
-  if (value is int) return value;
-  if (value is double) return value.toInt();
-  if (value is String) {
-    if (value.isEmpty) return null;
-    // Handle decimal strings by parsing as double first
-    return double.parse(value).toInt();
-  }
-  throw ArgumentError.value(value, 'value', 'Cannot convert to int');
-}
-
-double? _doubleFromDynamicNullable(dynamic value) {
-  if (value == null) return null;
-  if (value is double) return value;
-  if (value is int) return value.toDouble();
-  if (value is String) {
-    if (value.isEmpty) return null;
-    return double.parse(value);
-  }
-  throw ArgumentError.value(value, 'value', 'Cannot convert to double');
-}
 
 enum AssignmentType {
   @JsonValue('assignment')
@@ -75,13 +35,13 @@ class Assignment {
   final AssignmentType type;
   final String title;
   final String? description;
-  @JsonKey(name: 'max_score', fromJson: _intFromDynamic)
+  @JsonKey(name: 'max_score', fromJson: intFromDynamic)
   final int maxScore;
-  @JsonKey(name: 'weight_override', fromJson: _doubleFromDynamicNullable)
+  @JsonKey(name: 'weight_override', fromJson: doubleFromDynamicNullable)
   final double? weightOverride;
   @JsonKey(name: 'group_tag')
   final String? groupTag;
-  @JsonKey(name: 'sequence_no', fromJson: _intFromDynamicNullable)
+  @JsonKey(name: 'sequence_no', fromJson: intFromDynamicNullable)
   final int? sequenceNo;
   @JsonKey(name: 'assigned_date')
   final DateTime? assignedDate;
@@ -93,7 +53,7 @@ class Assignment {
   final bool isPublished;
   @JsonKey(name: 'allow_late_submission')
   final bool allowLateSubmission;
-  @JsonKey(name: 'late_penalty_per_day', fromJson: _doubleFromDynamicNullable)
+  @JsonKey(name: 'late_penalty_per_day', fromJson: doubleFromDynamicNullable)
   final double? latePenaltyPerDay;
   @JsonKey(name: 'created_by')
   final String createdBy;
@@ -115,21 +75,21 @@ class Assignment {
   final String? creatorLastName;
 
   // Student-specific fields (when applicable)
-  @JsonKey(name: 'submitted_count', fromJson: _intFromDynamicNullable)
+  @JsonKey(name: 'submitted_count', fromJson: intFromDynamicNullable)
   final int? submittedCount;
-  @JsonKey(name: 'total_students', fromJson: _intFromDynamicNullable)
+  @JsonKey(name: 'total_students', fromJson: intFromDynamicNullable)
   final int? totalStudents;
-  @JsonKey(name: 'grades_count', fromJson: _intFromDynamicNullable)
+  @JsonKey(name: 'grades_count', fromJson: intFromDynamicNullable)
   final int? gradesCount;
-  @JsonKey(name: 'graded_count', fromJson: _intFromDynamicNullable)
+  @JsonKey(name: 'graded_count', fromJson: intFromDynamicNullable)
   final int? gradedCount;
-  @JsonKey(name: 'average_score', fromJson: _doubleFromDynamicNullable)
+  @JsonKey(name: 'average_score', fromJson: doubleFromDynamicNullable)
   final double? averageScore;
 
   // Student submission status (if user is a student)
   @JsonKey(name: 'submission_status')
   final AssignmentStatus? submissionStatus;
-  @JsonKey(name: 'student_score', fromJson: _doubleFromDynamicNullable)
+  @JsonKey(name: 'student_score', fromJson: doubleFromDynamicNullable)
   final double? studentScore;
   @JsonKey(name: 'is_late')
   final bool? isLate;

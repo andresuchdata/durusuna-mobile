@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
+import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import '../../../../shared/models/assignment_detail.dart';
 import '../../../../shared/services/assignments_service.dart';
 import '../../../../shared/widgets/attachment_list.dart';
@@ -244,7 +245,7 @@ class AssignmentDetailPage extends ConsumerWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.calendar_today,
                 size: 16,
                 color: AppTheme.textSecondary,
@@ -252,7 +253,7 @@ class AssignmentDetailPage extends ConsumerWidget {
               const SizedBox(width: 4),
               Text(
                 assignment.due_date != null
-                    ? 'Due: ${_formatDate(assignment.due_date)}'
+                    ? 'Due: ${app_date_utils.DateUtils.formatReadableDate(assignment.due_date)}'
                     : 'No due date',
                 style: const TextStyle(
                   fontSize: 14,
@@ -260,7 +261,7 @@ class AssignmentDetailPage extends ConsumerWidget {
                 ),
               ),
               const Spacer(),
-              Icon(
+              const Icon(
                 Icons.grade,
                 size: 16,
                 color: AppTheme.textSecondary,
@@ -518,11 +519,6 @@ class AssignmentDetailPage extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  String _formatDate(DateTime? date) {
-    if (date == null) return '';
-    return '${date.day}/${date.month}/${date.year}';
   }
 
   void _showAllAttachments(List<Map<String, dynamic>> attachments) {

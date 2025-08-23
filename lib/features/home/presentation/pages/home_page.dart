@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../core/utils/global_auth_handler.dart';
+import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import '../../../../shared/models/assignment.dart';
 import '../../../../shared/models/class_model.dart';
 import '../../../../shared/models/user.dart';
@@ -32,6 +33,8 @@ import '../../../../shared/services/chat_service.dart';
 // Import the existing provider to avoid conflicts
 import '../../../class_management/presentation/pages/class_management_page.dart'
     show userClassesProvider;
+import '../../../class_management/presentation/pages/class_details_page.dart'
+    show classCountsProvider;
 
 final classActivityProvider = FutureProvider.family
     .autoDispose<ClassActivitySummary, String>((ref, classId) async {
@@ -384,7 +387,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
 
               return Column(
                 children:
-                    items.take(5).map((a) => _buildAssignmentRow(a)).toList(),
+                    items.take(3).map((a) => _buildAssignmentRow(a)).toList(),
               );
             },
           ),
@@ -489,12 +492,15 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     if (user == null) return <Assignment>[];
 
     if (user.userType == UserType.teacher) {
-      // Teachers get recent assignments they created
-      return await service.getRecentAssignments(limit: 5);
+      // Teachers get recent assignments from subjects they teach
+      return await service.getUserAssignments(
+        limit: 3,
+        status: 'all', // Teachers see both published and draft assignments
+      );
     } else {
       // Students/parents get their recent assignments (due soon)
       return await service.getUserAssignments(
-        limit: 5,
+        limit: 3,
         status: 'published',
       );
     }
@@ -641,6 +647,8 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
   }
 
   Widget _buildCompactClassCard(ClassModel classModel) {
+    final countsAsync = ref.watch(classCountsProvider(classModel.id));
+
     return Card(
       key: ValueKey('class_card_${classModel.id}'),
       elevation: 2,
@@ -684,7 +692,9 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      classModel.academicYear,
+                      classModel.academicYear.isNotEmpty
+                          ? classModel.academicYear
+                          : 'Academic Year',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.9),
                         fontSize: 12,
@@ -700,12 +710,30 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
                           size: 14,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          '${classModel.studentsCount ?? 0}',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
+                        countsAsync.when(
+                          loading: () => Text(
+                            '${classModel.studentsCount ?? 0}',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          error: (error, stack) => Text(
+                            '${classModel.studentsCount ?? 0}',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          data: (counts) => Text(
+                            '${counts.studentCount}',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                            ),
                           ),
                         ),
                       ],
@@ -823,7 +851,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          '${notification.content} • ${_formatNotificationTime(notification.createdAt)}',
+          '${notification.content} • ${app_date_utils.DateUtils.formatRelativeTime(notification.createdAt)}',
           style: const TextStyle(
             fontSize: 12,
             color: AppTheme.textSecondary,
@@ -1476,23 +1504,6 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
 
   IconData _getNotificationTypeIcon(NotificationType type) =>
       NotificationHelpers.getIcon(type);
-
-  String _formatNotificationTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inDays < 1) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-    }
-  }
 
   Color _getUserTypeColor(UserType userType) {
     switch (userType) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_theme.dart';
+import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import '../../../../shared/models/assignment.dart';
 import '../pages/assignments_main_page.dart';
 
@@ -145,7 +146,8 @@ class AssignmentCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   assignment.dueDate != null
-                      ? _formatDueDate(assignment.dueDate!)
+                      ? app_date_utils.DateUtils.formatAssignmentDueDate(
+                          assignment.dueDate!)
                       : 'No due date',
                   style: TextStyle(
                     fontSize: 12,
@@ -254,22 +256,5 @@ class AssignmentCard extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _formatDueDate(DateTime dueDate) {
-    final now = DateTime.now();
-    final difference = dueDate.difference(now);
-
-    if (difference.isNegative) {
-      return 'Overdue';
-    } else if (difference.inDays == 0) {
-      return 'Due today';
-    } else if (difference.inDays == 1) {
-      return 'Due tomorrow';
-    } else if (difference.inDays <= 7) {
-      return 'Due in ${difference.inDays} days';
-    } else {
-      return 'Due ${dueDate.day}/${dueDate.month}';
-    }
   }
 }

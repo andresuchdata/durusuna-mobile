@@ -1,5 +1,6 @@
 import 'package:json_annotation/json_annotation.dart';
 import 'assignment.dart';
+import '../../core/utils/json_parsing_helpers.dart';
 
 part 'assignment_detail.g.dart';
 
@@ -18,9 +19,10 @@ class StudentSubmission {
   final String? avatarUrl;
 
   final String status;
+  @JsonKey(fromJson: doubleFromDynamicNullable)
   final double? score;
 
-  @JsonKey(name: 'max_score')
+  @JsonKey(name: 'max_score', fromJson: doubleFromDynamic)
   final double maxScore;
 
   @JsonKey(name: 'submitted_at')
@@ -35,7 +37,7 @@ class StudentSubmission {
   @JsonKey(name: 'is_late')
   final bool isLate;
 
-  @JsonKey(name: 'days_late')
+  @JsonKey(name: 'days_late', fromJson: intFromDynamicNullable)
   final int? daysLate;
 
   final String? feedback;
@@ -96,16 +98,16 @@ class StudentSubmission {
 
 @JsonSerializable()
 class AssignmentStats {
-  @JsonKey(name: 'total_students')
+  @JsonKey(name: 'total_students', fromJson: intFromDynamic)
   final int totalStudents;
 
-  @JsonKey(name: 'submitted_count')
+  @JsonKey(name: 'submitted_count', fromJson: intFromDynamic)
   final int submittedCount;
 
-  @JsonKey(name: 'graded_count')
+  @JsonKey(name: 'graded_count', fromJson: intFromDynamic)
   final int gradedCount;
 
-  @JsonKey(name: 'average_score')
+  @JsonKey(name: 'average_score', fromJson: doubleFromDynamicNullable)
   final double? averageScore;
 
   AssignmentStats({
@@ -129,11 +131,13 @@ class AssignmentStats {
 @JsonSerializable()
 class AssignmentDetail {
   final Assignment assignment;
+  @JsonKey(fromJson: _attachmentsFromJson)
   final List<Map<String, dynamic>> attachments;
 
-  @JsonKey(name: 'student_submissions')
+  @JsonKey(name: 'student_submissions', fromJson: _studentSubmissionsFromJson)
   final List<StudentSubmission> studentSubmissions;
 
+  @JsonKey(fromJson: _statsFromJson)
   final AssignmentStats stats;
 
   AssignmentDetail({
@@ -147,4 +151,53 @@ class AssignmentDetail {
       _$AssignmentDetailFromJson(json);
 
   Map<String, dynamic> toJson() => _$AssignmentDetailToJson(this);
+
+  // Custom JSON parsers to handle edge cases
+  static List<Map<String, dynamic>> _attachmentsFromJson(dynamic json) {
+    if (json == null) return [];
+    if (json is List) {
+      return json.map((e) => e as Map<String, dynamic>).toList();
+    }
+    if (json is Map) {
+      // If it's a map, it might be empty or have a different structure
+      return [];
+    }
+    return [];
+  }
+
+  static List<StudentSubmission> _studentSubmissionsFromJson(dynamic json) {
+    if (json == null) return [];
+    if (json is List) {
+      return json
+          .map((e) => StudentSubmission.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    if (json is Map) {
+      // If it's a map, it might be empty or have a different structure
+      return [];
+    }
+    return [];
+  }
+
+  static AssignmentStats _statsFromJson(dynamic json) {
+    if (json == null) {
+      // Return default stats if missing
+      return AssignmentStats(
+        totalStudents: 0,
+        submittedCount: 0,
+        gradedCount: 0,
+        averageScore: null,
+      );
+    }
+    if (json is Map<String, dynamic>) {
+      return AssignmentStats.fromJson(json);
+    }
+    // Fallback to default
+    return AssignmentStats(
+      totalStudents: 0,
+      submittedCount: 0,
+      gradedCount: 0,
+      averageScore: null,
+    );
+  }
 }

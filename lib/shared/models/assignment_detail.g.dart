@@ -13,8 +13,8 @@ StudentSubmission _$StudentSubmissionFromJson(Map<String, dynamic> json) =>
       studentNumber: json['student_number'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       status: json['status'] as String,
-      score: (json['score'] as num?)?.toDouble(),
-      maxScore: (json['max_score'] as num).toDouble(),
+      score: doubleFromDynamicNullable(json['score']),
+      maxScore: doubleFromDynamic(json['max_score']),
       submittedAt: json['submitted_at'] == null
           ? null
           : DateTime.parse(json['submitted_at'] as String),
@@ -23,7 +23,7 @@ StudentSubmission _$StudentSubmissionFromJson(Map<String, dynamic> json) =>
           : DateTime.parse(json['graded_at'] as String),
       graderName: json['grader_name'] as String?,
       isLate: json['is_late'] as bool,
-      daysLate: (json['days_late'] as num?)?.toInt(),
+      daysLate: intFromDynamicNullable(json['days_late']),
       feedback: json['feedback'] as String?,
       submissionAttachments: (json['submission_attachments'] as List<dynamic>)
           .map((e) => e as Map<String, dynamic>)
@@ -50,10 +50,10 @@ Map<String, dynamic> _$StudentSubmissionToJson(StudentSubmission instance) =>
 
 AssignmentStats _$AssignmentStatsFromJson(Map<String, dynamic> json) =>
     AssignmentStats(
-      totalStudents: (json['total_students'] as num).toInt(),
-      submittedCount: (json['submitted_count'] as num).toInt(),
-      gradedCount: (json['graded_count'] as num).toInt(),
-      averageScore: (json['average_score'] as num?)?.toDouble(),
+      totalStudents: intFromDynamic(json['total_students']),
+      submittedCount: intFromDynamic(json['submitted_count']),
+      gradedCount: intFromDynamic(json['graded_count']),
+      averageScore: doubleFromDynamicNullable(json['average_score']),
     );
 
 Map<String, dynamic> _$AssignmentStatsToJson(AssignmentStats instance) =>
@@ -68,13 +68,10 @@ AssignmentDetail _$AssignmentDetailFromJson(Map<String, dynamic> json) =>
     AssignmentDetail(
       assignment:
           Assignment.fromJson(json['assignment'] as Map<String, dynamic>),
-      attachments: (json['attachments'] as List<dynamic>)
-          .map((e) => e as Map<String, dynamic>)
-          .toList(),
-      studentSubmissions: (json['student_submissions'] as List<dynamic>)
-          .map((e) => StudentSubmission.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      stats: AssignmentStats.fromJson(json['stats'] as Map<String, dynamic>),
+      attachments: AssignmentDetail._attachmentsFromJson(json['attachments']),
+      studentSubmissions: AssignmentDetail._studentSubmissionsFromJson(
+          json['student_submissions']),
+      stats: AssignmentDetail._statsFromJson(json['stats']),
     );
 
 Map<String, dynamic> _$AssignmentDetailToJson(AssignmentDetail instance) =>

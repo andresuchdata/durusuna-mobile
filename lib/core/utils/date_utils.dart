@@ -43,21 +43,25 @@ class DateUtils {
     }
   }
 
-  /// Format a relative time difference (e.g., "2 hours ago", "3 days ago")
+  /// Format a relative time difference (e.g., "2h ago", "3d ago", "Just now")
+  /// Uses compact format like notifications
   static String formatRelativeTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
 
-    if (difference.inDays > 7) {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays} days ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} hours ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minutes ago';
-    } else {
+    if (difference.inMinutes < 1) {
       return 'Just now';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inDays < 1) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inDays < 30) {
+      final weeks = (difference.inDays / 7).floor();
+      return '${weeks}w ago';
+    } else {
+      return formatShortDate(dateTime);
     }
   }
 
@@ -102,6 +106,26 @@ class DateUtils {
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
+  /// Format a date in full month name format (e.g., "March 15, 2024")
+  static String formatFullDate(DateTime date) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
   /// Format time in 12-hour format (e.g., "2:30 PM")
   static String formatTime(DateTime dateTime) {
     final hour = dateTime.hour;
@@ -110,6 +134,59 @@ class DateUtils {
     final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
 
     return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
+  }
+
+  /// Format a date in short format (e.g., "12/03/2024")
+  static String formatShortDate(DateTime dateTime) {
+    return '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';
+  }
+
+  /// Format a DateTime into a full date and time format
+  /// Example: "March 12, 2024 at 2:30 PM"
+  static String formatFullDateTime(DateTime dateTime) {
+    final date = formatReadableDate(dateTime);
+    final time = formatTime(dateTime);
+    return '$date at $time';
+  }
+
+  /// Format a due date in a context-aware way for assignments
+  /// Examples: "Due in 2 days", "Due today", "Overdue by 3 days", "Due Mar 15"
+  static String formatAssignmentDueDate(DateTime dueDate) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dueDateOnly = DateTime(dueDate.year, dueDate.month, dueDate.day);
+    final difference = dueDateOnly.difference(today).inDays;
+
+    if (difference < 0) {
+      final overdueDays = -difference;
+      if (overdueDays == 1) {
+        return 'Overdue by 1 day';
+      } else {
+        return 'Overdue by $overdueDays days';
+      }
+    } else if (difference == 0) {
+      return 'Due today';
+    } else if (difference == 1) {
+      return 'Due tomorrow';
+    } else if (difference <= 7) {
+      return 'Due in $difference days';
+    } else {
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec'
+      ];
+      return 'Due ${months[dueDate.month - 1]} ${dueDate.day}';
+    }
   }
 
   /// Get days until a specific date

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_theme.dart';
+import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import '../../../../shared/models/assignment_detail.dart';
 
 class StudentSubmissionList extends StatelessWidget {
@@ -248,10 +249,12 @@ class StudentSubmissionList extends StatelessWidget {
 
     if (submission.isGraded && submission.gradedAt != null) {
       prefix = 'Graded';
-      dateText = _formatDate(submission.gradedAt!);
+      dateText =
+          app_date_utils.DateUtils.formatRelativeTime(submission.gradedAt!);
     } else if (submission.isSubmitted && submission.submittedAt != null) {
       prefix = submission.isLate ? 'Late' : 'Submitted';
-      dateText = _formatDate(submission.submittedAt!);
+      dateText =
+          app_date_utils.DateUtils.formatRelativeTime(submission.submittedAt!);
     } else if (submission.status == 'not_submitted') {
       prefix = 'Missing';
       dateText = '';
@@ -311,21 +314,6 @@ class StudentSubmissionList extends StatelessWidget {
     if (words.isEmpty) return '?';
     if (words.length == 1) return words[0][0].toUpperCase();
     return '${words[0][0]}${words[words.length - 1][0]}'.toUpperCase();
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date).inDays;
-
-    if (difference == 0) {
-      return 'Today';
-    } else if (difference == 1) {
-      return 'Yesterday';
-    } else if (difference < 7) {
-      return '${difference}d ago';
-    } else {
-      return '${date.day}/${date.month}';
-    }
   }
 
   void _showSubmissionDetails(
@@ -413,14 +401,16 @@ class StudentSubmissionList extends StatelessWidget {
                     const SizedBox(height: 12),
                     _buildDetailRow(
                       'Submitted',
-                      '${_formatFullDate(submission.submittedAt!)}${submission.isLate ? ' (Late)' : ''}',
+                      '${app_date_utils.DateUtils.formatFullDateTime(submission.submittedAt!)}${submission.isLate ? ' (Late)' : ''}',
                     ),
                   ],
 
                   if (submission.gradedAt != null) ...[
                     const SizedBox(height: 12),
                     _buildDetailRow(
-                        'Graded', _formatFullDate(submission.gradedAt!)),
+                        'Graded',
+                        app_date_utils.DateUtils.formatFullDateTime(
+                            submission.gradedAt!)),
                   ],
 
                   if (submission.graderName != null) ...[
@@ -519,10 +509,6 @@ class StudentSubmissionList extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  String _formatFullDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 
   void _editGrade(StudentSubmission submission) {

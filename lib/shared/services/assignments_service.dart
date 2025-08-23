@@ -306,7 +306,7 @@ class AssignmentsService {
     try {
       final headers = await _getHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/assignments/$assignmentId/details'),
+        Uri.parse('$_baseUrl/assignments/$assignmentId/details'),
         headers: headers,
       );
 

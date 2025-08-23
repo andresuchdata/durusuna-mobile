@@ -22,6 +22,7 @@ import '../../../attendance/presentation/pages/attendance_management_page.dart';
 import '../../../subjects/presentation/pages/subjects_main_page.dart';
 import '../../../subjects/presentation/pages/subject_offering_details_page.dart';
 import '../../../../shared/services/subjects_service.dart';
+import '../../../../shared/services/academic_service.dart';
 import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
 
 // Providers for class details data
@@ -198,14 +199,20 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
   }
 
   Widget _buildSliverAppBar() {
-    final teacher = widget.classModel.teachers?.isNotEmpty == true
-        ? widget.classModel.teachers!.first
-        : null;
     final authState = ref.watch(authStateProvider);
     final currentUser = authState.user;
 
+    // Get teacher from API instead of static model data
+    final teachersAsync =
+        ref.watch(classTeachersProvider(widget.classModel.id));
+    final teacher = teachersAsync.when(
+      data: (teachers) => teachers.isNotEmpty ? teachers.first : null,
+      loading: () => null,
+      error: (_, __) => null,
+    );
+
     return SliverAppBar(
-      expandedHeight: teacher != null ? 250 : 180,
+      expandedHeight: 180,
       floating: false,
       pinned: true,
       elevation: 0,
@@ -213,7 +220,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
       iconTheme: const IconThemeData(color: Colors.white),
       automaticallyImplyLeading: widget.showBackButton,
       title: Text(
-        widget.classModel.name,
+        'Kelas - ${widget.classModel.name}',
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.w600,
@@ -293,7 +300,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        widget.classModel.name,
+                        'Kelas - ${widget.classModel.name}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 24,
@@ -320,105 +327,41 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                           ),
                         ),
                       const SizedBox(height: 4),
-                      Text(
-                        widget.classModel.academicYear,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                        ),
+                      Consumer(
+                        builder: (context, ref, child) {
+                          final academicPeriodAsync =
+                              ref.watch(currentAcademicPeriodProvider);
+                          return academicPeriodAsync.when(
+                            data: (academicInfo) => Text(
+                              academicInfo.displayString,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            loading: () => Text(
+                              widget.classModel.academicYear,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            error: (_, __) => Text(
+                              widget.classModel.academicYear,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
                 ),
-
-                // Teacher info section - integrated into header
-                if (teacher != null) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 25,
-                          backgroundColor:
-                              AppTheme.primaryColor.withValues(alpha: 0.1),
-                          backgroundImage: teacher.avatarUrl?.isNotEmpty == true
-                              ? NetworkImage(teacher.avatarUrl!)
-                              : null,
-                          child: teacher.avatarUrl?.isEmpty != false
-                              ? const Icon(
-                                  Icons.person,
-                                  color: AppTheme.primaryColor,
-                                  size: 28,
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Teacher',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.textSecondary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                teacher.displayName,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  color: AppTheme.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                teacher.email,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: AppTheme.textSecondary
-                                      .withValues(alpha: 0.8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () {
-                            // TODO: Implement chat with teacher
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Chat with teacher coming soon'),
-                                backgroundColor: AppTheme.primaryColor,
-                              ),
-                            );
-                          },
-                          icon: const Icon(
-                            Icons.message,
-                            color: AppTheme.primaryColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -1436,11 +1379,82 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     final updatesAsync =
         ref.watch(recentClassUpdatesProvider(widget.classModel.id));
 
+    // Get teacher from API instead of static model data
+    final teachersAsync =
+        ref.watch(classTeachersProvider(widget.classModel.id));
+    final teacher = teachersAsync.when(
+      data: (teachers) => teachers.isNotEmpty ? teachers.first : null,
+      loading: () => null,
+      error: (_, __) => null,
+    );
+
+    return Column(
+      children: [
+        // Teacher info section
+        if (teacher != null) _buildTeacherInfoCard(teacher),
+
+        // Statistics section
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Class Overview',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                countsAsync.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (error, stack) => _buildStatisticsRow(
+                    studentCount: widget.classModel.studentsCount ?? 0,
+                    teacherCount: widget.classModel.teachersCount ?? 0,
+                    totalMembers: (widget.classModel.studentsCount ?? 0) +
+                        (widget.classModel.teachersCount ?? 0),
+                    subjectCount: subjectsAsync.valueOrNull?.length ?? 0,
+                    updatesCount: updatesAsync.valueOrNull?.length ?? 0,
+                  ),
+                  data: (counts) => _buildStatisticsRow(
+                    studentCount: counts.studentCount,
+                    teacherCount: counts.teacherCount,
+                    totalMembers: counts.totalMembers,
+                    subjectCount: subjectsAsync.valueOrNull?.length ?? 0,
+                    updatesCount: updatesAsync.valueOrNull?.length ?? 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTeacherInfoCard(User teacher) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -1449,84 +1463,116 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Class Overview',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 25,
+            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+            backgroundImage: teacher.avatarUrl?.isNotEmpty == true
+                ? NetworkImage(teacher.avatarUrl!)
+                : null,
+            child: teacher.avatarUrl?.isEmpty != false
+                ? const Icon(
+                    Icons.person,
+                    color: AppTheme.primaryColor,
+                    size: 28,
+                  )
+                : null,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Teacher',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  teacher.displayName,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  teacher.email,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            countsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => _buildStatisticsGrid(
-                studentCount: widget.classModel.studentsCount ?? 0,
-                teacherCount: widget.classModel.teachersCount ?? 0,
-                totalMembers: (widget.classModel.studentsCount ?? 0) +
-                    (widget.classModel.teachersCount ?? 0),
-                subjectCount: subjectsAsync.valueOrNull?.length ?? 0,
-                updatesCount: updatesAsync.valueOrNull?.length ?? 0,
-              ),
-              data: (counts) => _buildStatisticsGrid(
-                studentCount: counts.studentCount,
-                teacherCount: counts.teacherCount,
-                totalMembers: counts.totalMembers,
-                subjectCount: subjectsAsync.valueOrNull?.length ?? 0,
-                updatesCount: updatesAsync.valueOrNull?.length ?? 0,
-              ),
+          ),
+          IconButton(
+            onPressed: () {
+              // TODO: Implement chat with teacher
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Chat with teacher coming soon'),
+                  backgroundColor: AppTheme.primaryColor,
+                ),
+              );
+            },
+            icon: const Icon(
+              Icons.message,
+              color: AppTheme.primaryColor,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildStatisticsGrid({
+  Widget _buildStatisticsRow({
     required int studentCount,
     required int teacherCount,
     required int totalMembers,
     required int subjectCount,
     required int updatesCount,
   }) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 2.4,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      children: [
-        _buildStatCard(
-          icon: Icons.people,
-          title: 'Students',
-          count: studentCount,
-          color: Colors.blue,
-        ),
-        _buildStatCard(
-          icon: Icons.person,
-          title: 'Teachers',
-          count: teacherCount,
-          color: Colors.green,
-        ),
-        _buildStatCard(
-          icon: Icons.book,
-          title: 'Subjects',
-          count: subjectCount,
-          color: Colors.orange,
-        ),
-        _buildStatCard(
-          icon: Icons.announcement,
-          title: 'Updates',
-          count: updatesCount,
-          color: Colors.purple,
-        ),
-      ],
+    return SizedBox(
+      height: 90, // Increased height to prevent overflow
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _buildStatCard(
+            icon: Icons.people,
+            title: 'Students',
+            count: studentCount,
+            color: Colors.blue,
+          ),
+          const SizedBox(width: 12),
+          _buildStatCard(
+            icon: Icons.person,
+            title: 'Teachers',
+            count: teacherCount,
+            color: Colors.green,
+          ),
+          const SizedBox(width: 12),
+          _buildStatCard(
+            icon: Icons.book,
+            title: 'Subjects',
+            count: subjectCount,
+            color: Colors.orange,
+          ),
+          const SizedBox(width: 12),
+          _buildStatCard(
+            icon: Icons.announcement,
+            title: 'Updates',
+            count: updatesCount,
+            color: Colors.purple,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1537,55 +1583,44 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(10), // Slightly reduced padding
+      width: 120, // Fixed width for all cards
+      padding: const EdgeInsets.all(10), // Reduced padding to give more space
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min, // Use minimum space needed
         children: [
           Icon(
             icon,
             color: color,
             size: 22, // Slightly smaller icon
           ),
-          const SizedBox(width: 6), // Reduced spacing
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      count.toString(),
-                      style: TextStyle(
-                        fontSize: 14, // Further reduced for reliable fit
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                      ),
-                    ),
-                  ),
-                ),
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 10, // Smaller for better fit
-                        color: color.withValues(alpha: 0.8),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+          const SizedBox(height: 6), // Reduced spacing
+          Text(
+            count.toString(),
+            style: TextStyle(
+              fontSize: 15, // Slightly smaller font
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Flexible(
+            // Allow text to adapt to available space
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 11, // Slightly smaller font
+                color: color.withValues(alpha: 0.8),
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1, // Prevent text wrapping
+              overflow: TextOverflow.ellipsis, // Handle overflow gracefully
             ),
           ),
         ],

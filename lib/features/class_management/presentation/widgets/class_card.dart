@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/class_model.dart';
+import '../pages/class_details_page.dart' show classCountsProvider;
 
-class ClassCard extends StatelessWidget {
+class ClassCard extends ConsumerWidget {
   final ClassModel classModel;
   final VoidCallback onTap;
 
@@ -13,7 +15,8 @@ class ClassCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final countsAsync = ref.watch(classCountsProvider(classModel.id));
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
@@ -97,26 +100,60 @@ class ClassCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  _buildInfoChip(
-                    icon: Icons.people,
-                    label: '${classModel.studentsCount ?? 0} Students',
-                    color: AppTheme.successColor,
-                  ),
-                  const SizedBox(width: 8),
-                  _buildInfoChip(
-                    icon: Icons.person,
-                    label: '${classModel.teachersCount ?? 0} Teachers',
-                    color: AppTheme.infoColor,
-                  ),
-                ],
+              countsAsync.when(
+                loading: () => Row(
+                  children: [
+                    _buildInfoChip(
+                      icon: Icons.people,
+                      label: '${classModel.studentsCount ?? 0} Students',
+                      color: AppTheme.successColor,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildInfoChip(
+                      icon: Icons.person,
+                      label: '${classModel.teachersCount ?? 0} Teachers',
+                      color: AppTheme.infoColor,
+                    ),
+                  ],
+                ),
+                error: (error, stack) => Row(
+                  children: [
+                    _buildInfoChip(
+                      icon: Icons.people,
+                      label: '${classModel.studentsCount ?? 0} Students',
+                      color: AppTheme.successColor,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildInfoChip(
+                      icon: Icons.person,
+                      label: '${classModel.teachersCount ?? 0} Teachers',
+                      color: AppTheme.infoColor,
+                    ),
+                  ],
+                ),
+                data: (counts) => Row(
+                  children: [
+                    _buildInfoChip(
+                      icon: Icons.people,
+                      label: '${counts.studentCount} Students',
+                      color: AppTheme.successColor,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildInfoChip(
+                      icon: Icons.person,
+                      label: '${counts.teacherCount} Teachers',
+                      color: AppTheme.infoColor,
+                    ),
+                  ],
+                ),
               ),
               if (classModel.academicYear.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 _buildInfoChip(
                   icon: Icons.calendar_today,
-                  label: classModel.academicYear,
+                  label: classModel.academicYear.isNotEmpty
+                      ? classModel.academicYear
+                      : 'Academic Year',
                   color: AppTheme.warningColor,
                 ),
               ],

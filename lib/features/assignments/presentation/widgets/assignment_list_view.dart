@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
+import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import '../../../../shared/models/assignment.dart';
 import '../../../../shared/providers/assignment_providers.dart';
 import '../../../../shared/services/auth_service.dart';
@@ -172,7 +173,8 @@ class AssignmentListView extends ConsumerWidget {
                       const SizedBox(width: 4),
                       Text(
                         assignment.dueDate != null
-                            ? _formatDueDate(assignment.dueDate!)
+                            ? app_date_utils.DateUtils.formatAssignmentDueDate(
+                                assignment.dueDate!)
                             : 'No due date',
                         style: const TextStyle(
                           fontSize: 12,
@@ -270,23 +272,6 @@ class AssignmentListView extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  String _formatDueDate(DateTime dueDate) {
-    final now = DateTime.now();
-    final difference = dueDate.difference(now).inDays;
-
-    if (difference < 0) {
-      return 'Overdue';
-    } else if (difference == 0) {
-      return 'Due today';
-    } else if (difference == 1) {
-      return 'Due tomorrow';
-    } else if (difference < 7) {
-      return 'Due in ${difference}d';
-    } else {
-      return 'Due ${dueDate.day}/${dueDate.month}';
-    }
   }
 
   // Helper method to convert AssignmentFilterType to string

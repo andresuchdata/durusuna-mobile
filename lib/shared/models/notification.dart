@@ -1,6 +1,7 @@
 import 'package:json_annotation/json_annotation.dart';
 import 'user.dart';
 import '../utils/notification_helpers.dart';
+import '../../core/utils/date_utils.dart' as app_date_utils;
 
 part 'notification.g.dart';
 
@@ -177,20 +178,7 @@ class NotificationModel {
   }
 
   // Helper methods
-  String get timeAgo {
-    final now = DateTime.now();
-    final difference = now.difference(createdAt);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
-  }
+  String get timeAgo => app_date_utils.DateUtils.formatRelativeTime(createdAt);
 
   String get typeDisplayName => NotificationHelpers.getDisplayName(type);
 

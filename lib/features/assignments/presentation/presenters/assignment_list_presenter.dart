@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import '../../../../shared/models/assignment.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/providers/assignment_providers.dart';
-import '../../../../shared/services/assignments_service.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../pages/assignments_main_page.dart';
 
@@ -255,7 +255,8 @@ class AssignmentPresenterItem {
     // Build subtitle based on context
     String displaySubtitle = '';
     if (assignment.dueDate != null) {
-      displaySubtitle = _formatDueDate(assignment.dueDate!);
+      displaySubtitle =
+          app_date_utils.DateUtils.formatAssignmentDueDate(assignment.dueDate!);
     }
 
     // Determine what class/subject info to show
@@ -274,22 +275,5 @@ class AssignmentPresenterItem {
       showClassInfo: showClassInfo,
       showSubjectInfo: showSubjectInfo,
     );
-  }
-
-  static String _formatDueDate(DateTime dueDate) {
-    final now = DateTime.now();
-    final difference = dueDate.difference(now);
-
-    if (difference.isNegative) {
-      return 'Overdue';
-    } else if (difference.inDays == 0) {
-      return 'Due today';
-    } else if (difference.inDays == 1) {
-      return 'Due tomorrow';
-    } else if (difference.inDays <= 7) {
-      return 'Due in ${difference.inDays} days';
-    } else {
-      return 'Due ${dueDate.day}/${dueDate.month}';
-    }
   }
 }

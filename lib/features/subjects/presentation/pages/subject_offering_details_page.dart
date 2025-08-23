@@ -2,9 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/services/subjects_service.dart';
+import '../../../../shared/services/auth_service.dart';
+import '../../../../shared/models/user.dart';
+import '../../../../shared/providers/app_providers.dart';
 import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
-import '../../../assignments/presentation/pages/assignment_detail_page.dart';
+
+import '../../../assignments/presentation/widgets/assignment_list_view.dart';
+import '../../../assignments/presentation/pages/assignments_main_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
+import '../../../class_management/presentation/pages/student_detail_page.dart';
+import '../../../../shared/models/class_model.dart';
+
+// Import the provider for students list
+final studentsListWithSearchProvider =
+    FutureProvider.family<List<User>, (String, String?)>((ref, params) async {
+  final (classId, search) = params;
+  final service = ref.read(classManagementServiceProvider);
+  return await service.getClassStudents(classId, search: search);
+});
 
 class SubjectOfferingDetailsPage extends ConsumerStatefulWidget {
   final SubjectOffering offering;
@@ -125,14 +140,6 @@ class _SubjectOfferingDetailsPageState
           onSelected: (value) => _handleMenuAction(value),
           itemBuilder: (context) => [
             const PopupMenuItem(
-              value: 'edit',
-              child: ListTile(
-                leading: Icon(Icons.edit),
-                title: Text('Edit Offering'),
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-            const PopupMenuItem(
               value: 'export',
               child: ListTile(
                 leading: Icon(Icons.download),
@@ -180,44 +187,53 @@ class _SubjectOfferingDetailsPageState
             ),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatCard(
-                  'Students',
-                  '${widget.offering.studentCount}',
-                  Icons.people,
-                  AppTheme.primaryColor,
+          SizedBox(
+            height: 100,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                SizedBox(
+                  width: 120,
+                  child: _buildStatCard(
+                    'Students',
+                    '${widget.offering.studentCount}',
+                    Icons.people,
+                    AppTheme.primaryColor,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatCard(
-                  'Assignments',
-                  '${widget.offering.assignmentsCount}',
-                  Icons.assignment,
-                  AppTheme.successColor,
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 120,
+                  child: _buildStatCard(
+                    'Assignments',
+                    '${widget.offering.assignmentsCount}',
+                    Icons.assignment,
+                    AppTheme.successColor,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatCard(
-                  'Pending',
-                  '${widget.offering.pendingGrades}',
-                  Icons.assignment_late,
-                  AppTheme.warningColor,
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 120,
+                  child: _buildStatCard(
+                    'Pending',
+                    '${widget.offering.pendingGrades}',
+                    Icons.assignment_late,
+                    AppTheme.warningColor,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatCard(
-                  'Hours/Week',
-                  '${widget.offering.hoursPerWeek}',
-                  Icons.schedule,
-                  AppTheme.infoColor,
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 120,
+                  child: _buildStatCard(
+                    'Hours/Week',
+                    '${widget.offering.hoursPerWeek}',
+                    Icons.schedule,
+                    AppTheme.infoColor,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 16), // Extra padding at the end
+              ],
+            ),
           ),
         ],
       ),
@@ -392,6 +408,11 @@ class _SubjectOfferingDetailsPageState
   }
 
   Widget _buildScheduleCard() {
+    final authState = ref.read(authStateProvider);
+    final currentUser = authState.user;
+    final canEdit = currentUser?.userType == UserType.teacher ||
+        currentUser?.role == UserRole.admin;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -419,10 +440,11 @@ class _SubjectOfferingDetailsPageState
                   color: AppTheme.textPrimary,
                 ),
               ),
-              TextButton(
-                onPressed: () => _editSchedule(),
-                child: const Text('Edit'),
-              ),
+              if (canEdit)
+                TextButton(
+                  onPressed: () => _editSchedule(),
+                  child: const Text('Edit'),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -516,6 +538,11 @@ class _SubjectOfferingDetailsPageState
   }
 
   Widget _buildQuickActionsCard() {
+    final authState = ref.read(authStateProvider);
+    final currentUser = authState.user;
+    final canManage = currentUser?.userType == UserType.teacher ||
+        currentUser?.role == UserRole.admin;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -552,38 +579,50 @@ class _SubjectOfferingDetailsPageState
                 ),
               ),
               const SizedBox(width: 12),
-              Expanded(
-                child: _buildActionButton(
-                  'Grading',
-                  Icons.grade,
-                  AppTheme.successColor,
-                  () => _navigateToGrading(),
+              if (canManage)
+                Expanded(
+                  child: _buildActionButton(
+                    'Grading',
+                    Icons.grade,
+                    AppTheme.successColor,
+                    () => _navigateToGrading(),
+                  ),
                 ),
-              ),
+              if (!canManage)
+                Expanded(
+                  child: _buildActionButton(
+                    'Class Chat',
+                    Icons.chat,
+                    AppTheme.infoColor,
+                    () => _openClassChat(),
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildActionButton(
-                  'Create Assignment',
-                  Icons.add_task,
-                  AppTheme.warningColor,
-                  () => _createAssignment(),
+          if (canManage) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionButton(
+                    'Create Assignment',
+                    Icons.add_task,
+                    AppTheme.warningColor,
+                    () => _createAssignment(),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildActionButton(
-                  'Class Chat',
-                  Icons.chat,
-                  AppTheme.infoColor,
-                  () => _openClassChat(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildActionButton(
+                    'Class Chat',
+                    Icons.chat,
+                    AppTheme.infoColor,
+                    () => _openClassChat(),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -621,153 +660,130 @@ class _SubjectOfferingDetailsPageState
   }
 
   Widget _buildAssignmentsTab() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: widget.offering.assignments.length,
-      itemBuilder: (context, index) {
-        final assignment = widget.offering.assignments[index];
-        return _buildAssignmentCard(assignment);
-      },
-    );
-  }
+    final authState = ref.read(authStateProvider);
+    final currentUser = authState.user;
+    final userRole = currentUser?.userType == UserType.teacher ||
+            currentUser?.role == UserRole.admin
+        ? UserRoleType.teacher
+        : UserRoleType.student;
 
-  Widget _buildAssignmentCard(Map<String, dynamic> assignment) {
-    final assignmentId = assignment['id']?.toString();
-    final assignmentTitle = assignment['title'] ?? 'Untitled Assignment';
-
-    return GestureDetector(
-      onTap: () => _navigateToAssignmentDetail(assignmentId, assignmentTitle),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    assignmentTitle,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildAssignmentStatusChip(assignment),
-                    const SizedBox(width: 8),
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (assignment['description'] != null)
-              Text(
-                assignment['description'],
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.textSecondary,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _buildAssignmentInfo(
-                    'Type', assignment['type'] ?? 'assignment'),
-                const SizedBox(width: 16),
-                _buildAssignmentInfo(
-                    'Max Score', '${assignment['max_score'] ?? 0}'),
-                const SizedBox(width: 16),
-                _buildAssignmentInfo(
-                    'Due', _formatDate(assignment['due_date'])),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAssignmentStatusChip(Map<String, dynamic> assignment) {
-    final isPublished = assignment['is_published'] ?? false;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isPublished
-            ? AppTheme.successColor.withValues(alpha: 0.1)
-            : AppTheme.warningColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        isPublished ? 'Published' : 'Draft',
-        style: TextStyle(
-          fontSize: 12,
-          color: isPublished ? AppTheme.successColor : AppTheme.warningColor,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAssignmentInfo(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: AppTheme.textSecondary,
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 14,
-            color: AppTheme.textPrimary,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
+    return AssignmentListView(
+      filterType: AssignmentFilterType.all,
+      userRole: userRole,
+      classId: widget.offering.classId,
+      subjectId: widget.offering.subjectId,
+      searchQuery: null,
     );
   }
 
   Widget _buildStudentsTab() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.people, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text(
-            'Students list will be implemented',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-        ],
+    final studentsAsync = ref
+        .watch(studentsListWithSearchProvider((widget.offering.classId, null)));
+
+    return studentsAsync.when(
+      loading: () => const Center(
+        child: CircularProgressIndicator(),
       ),
+      error: (error, stack) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            Text(
+              'Error loading students: ${error.toString()}',
+              style: const TextStyle(fontSize: 16, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => ref.refresh(studentsListWithSearchProvider(
+                  (widget.offering.classId, null))),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+      data: (students) {
+        if (students.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                SizedBox(height: 16),
+                Text(
+                  'No students enrolled in this class yet',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: students.length,
+          itemBuilder: (context, index) {
+            final student = students[index];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  backgroundImage: student.avatarUrl != null
+                      ? NetworkImage(student.avatarUrl!)
+                      : null,
+                  child: student.avatarUrl == null
+                      ? Text(
+                          _getInitials(student.displayName),
+                          style: const TextStyle(
+                            color: AppTheme.primaryColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        )
+                      : null,
+                ),
+                title: Text(
+                  student.displayName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(student.email),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  // Create a minimal ClassModel for the student detail page
+                  final classModel = ClassModel(
+                    id: widget.offering.classId,
+                    schoolId: '', // Not available from offering
+                    name: widget.offering.className,
+                    gradeLevel: widget.offering.gradeLevel.isNotEmpty
+                        ? widget.offering.gradeLevel
+                        : null,
+                    academicYear: DateTime.now()
+                        .year
+                        .toString(), // Default to current year
+                    isActive: true,
+                    createdAt: DateTime.now(), // Placeholder
+                    updatedAt: DateTime.now(), // Placeholder
+                  );
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => StudentDetailPage(
+                        student: student,
+                        classModel: classModel,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -804,16 +820,6 @@ class _SubjectOfferingDetailsPageState
     return 'See detailed schedule';
   }
 
-  String _formatDate(dynamic date) {
-    if (date == null) return 'Not set';
-    try {
-      final DateTime parsedDate = DateTime.parse(date.toString());
-      return '${parsedDate.day}/${parsedDate.month}/${parsedDate.year}';
-    } catch (e) {
-      return 'Invalid date';
-    }
-  }
-
   // Action methods
   void _shareOffering() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -823,9 +829,6 @@ class _SubjectOfferingDetailsPageState
 
   void _handleMenuAction(String action) {
     switch (action) {
-      case 'edit':
-        _editOffering();
-        break;
       case 'export':
         _exportData();
         break;
@@ -833,12 +836,6 @@ class _SubjectOfferingDetailsPageState
         _viewAnalytics();
         break;
     }
-  }
-
-  void _editOffering() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Edit offering - Under Development')),
-    );
   }
 
   void _exportData() {
@@ -891,37 +888,15 @@ class _SubjectOfferingDetailsPageState
     );
   }
 
-  void _createAssignment() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Create assignment - Under Development')),
-    );
-  }
-
   void _openClassChat() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Class chat - Under Development')),
     );
   }
 
-  void _navigateToAssignmentDetail(String? assignmentId, String title) {
-    if (assignmentId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Assignment ID not available'),
-          backgroundColor: AppTheme.errorColor,
-        ),
-      );
-      return;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AssignmentDetailPage(
-          assignmentId: assignmentId,
-          title: title,
-        ),
-      ),
+  void _createAssignment() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Create assignment - Under Development')),
     );
   }
 }

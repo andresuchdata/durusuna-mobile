@@ -12,10 +12,10 @@ Assignment _$AssignmentFromJson(Map<String, dynamic> json) => Assignment(
       type: $enumDecode(_$AssignmentTypeEnumMap, json['type']),
       title: json['title'] as String,
       description: json['description'] as String?,
-      maxScore: _intFromDynamic(json['max_score']),
-      weightOverride: _doubleFromDynamicNullable(json['weight_override']),
+      maxScore: intFromDynamic(json['max_score']),
+      weightOverride: doubleFromDynamicNullable(json['weight_override']),
       groupTag: json['group_tag'] as String?,
-      sequenceNo: _intFromDynamicNullable(json['sequence_no']),
+      sequenceNo: intFromDynamicNullable(json['sequence_no']),
       assignedDate: json['assigned_date'] == null
           ? null
           : DateTime.parse(json['assigned_date'] as String),
@@ -27,7 +27,7 @@ Assignment _$AssignmentFromJson(Map<String, dynamic> json) => Assignment(
       isPublished: json['is_published'] as bool,
       allowLateSubmission: json['allow_late_submission'] as bool,
       latePenaltyPerDay:
-          _doubleFromDynamicNullable(json['late_penalty_per_day']),
+          doubleFromDynamicNullable(json['late_penalty_per_day']),
       createdBy: json['created_by'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -36,14 +36,14 @@ Assignment _$AssignmentFromJson(Map<String, dynamic> json) => Assignment(
       className: json['class_name'] as String?,
       creatorFirstName: json['creator_first_name'] as String?,
       creatorLastName: json['creator_last_name'] as String?,
-      submittedCount: _intFromDynamicNullable(json['submitted_count']),
-      totalStudents: _intFromDynamicNullable(json['total_students']),
-      gradesCount: _intFromDynamicNullable(json['grades_count']),
-      gradedCount: _intFromDynamicNullable(json['graded_count']),
-      averageScore: _doubleFromDynamicNullable(json['average_score']),
+      submittedCount: intFromDynamicNullable(json['submitted_count']),
+      totalStudents: intFromDynamicNullable(json['total_students']),
+      gradesCount: intFromDynamicNullable(json['grades_count']),
+      gradedCount: intFromDynamicNullable(json['graded_count']),
+      averageScore: doubleFromDynamicNullable(json['average_score']),
       submissionStatus: $enumDecodeNullable(
           _$AssignmentStatusEnumMap, json['submission_status']),
-      studentScore: _doubleFromDynamicNullable(json['student_score']),
+      studentScore: doubleFromDynamicNullable(json['student_score']),
       isLate: json['is_late'] as bool?,
       submittedAt: json['submitted_at'] == null
           ? null
