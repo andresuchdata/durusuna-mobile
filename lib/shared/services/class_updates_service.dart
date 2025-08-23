@@ -434,7 +434,7 @@ final classUpdatesProvider = StateNotifierProvider.family<ClassUpdatesNotifier,
 );
 
 // Subject-specific updates provider
-// TODO: Backend enhancement needed - add subject_offering_id field to class_updates table
+// Filters class updates by subject offering through teacher association
 final subjectUpdatesProvider = StateNotifierProvider.family<
     SubjectUpdatesNotifier, ClassUpdatesState, SubjectUpdatesParams>(
   (ref, params) {

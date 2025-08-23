@@ -74,21 +74,6 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
     }
   }
 
-  void _showCreateUpdateDialog() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (context) => CreateUpdatePage(
-          classId: widget.classId,
-        ),
-      ),
-    );
-
-    // Refresh updates if the form was submitted successfully
-    if (result == true) {
-      ref.read(_getUpdatesProvider().notifier).loadUpdates(refresh: true);
-    }
-  }
-
   // Helper method to get the appropriate updates provider based on context
   StateNotifierProvider<dynamic, ClassUpdatesState> _getUpdatesProvider() {
     if (widget.subjectOfferingId != null) {
@@ -289,11 +274,6 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         actions: [
-          if (canPost)
-            IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: _showCreateUpdateDialog,
-            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
@@ -315,61 +295,6 @@ class _ClassUpdatesPageState extends ConsumerState<ClassUpdatesPage> {
             // Subject filter chips
             if (widget.showSubjectFilter && _availableSubjects.isNotEmpty)
               _buildSubjectFilterChips(),
-
-            // Create post section for teachers
-            if (canPost) ...[
-              Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: AppTheme.primaryColor,
-                      child: Text(
-                        '${authState.user?.firstName[0]}${authState.user?.lastName[0]}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: _showCreateUpdateDialog,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.backgroundColor,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'Share an update with your class...',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
 
             // Updates list
             Expanded(
