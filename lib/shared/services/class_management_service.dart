@@ -201,7 +201,7 @@ class ClassManagementService {
         final Map<String, dynamic> data = response.data;
         final List<dynamic> lessonsJson = data['lessons'] ?? [];
 
-        return lessonsJson.cast<Map<String, dynamic>>();
+        return _safeListCast(lessonsJson);
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
@@ -216,6 +216,21 @@ class ClassManagementService {
     }
   }
 
+  /// Safely cast dynamic list to List<Map<String, dynamic>>
+  List<Map<String, dynamic>> _safeListCast(dynamic json) {
+    if (json == null) return [];
+    if (json is List) {
+      return json
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+    if (json is Map) {
+      return [Map<String, dynamic>.from(json)];
+    }
+    return [];
+  }
+
   /// Get subjects for a specific class with their lessons
   Future<List<Map<String, dynamic>>> getClassSubjects(String classId) async {
     try {
@@ -225,7 +240,7 @@ class ClassManagementService {
         final Map<String, dynamic> data = response.data;
         final List<dynamic> subjectsJson = data['subjects'] ?? [];
 
-        return subjectsJson.cast<Map<String, dynamic>>();
+        return _safeListCast(subjectsJson);
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
@@ -248,7 +263,7 @@ class ClassManagementService {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = response.data;
         final List<dynamic> offeringsJson = data['offerings'] ?? [];
-        return offeringsJson.cast<Map<String, dynamic>>();
+        return _safeListCast(offeringsJson);
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {
@@ -283,7 +298,7 @@ class ClassManagementService {
         debugPrint(
             '🔍 [SERVICE DEBUG] Found ${assignmentsJson.length} assignments');
 
-        return assignmentsJson.cast<Map<String, dynamic>>();
+        return _safeListCast(assignmentsJson);
       } else if (response.statusCode == 403) {
         throw Exception('Access denied to this class');
       } else {

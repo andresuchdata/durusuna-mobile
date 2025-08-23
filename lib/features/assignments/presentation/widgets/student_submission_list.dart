@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import '../../../../shared/models/assignment_detail.dart';
+import '../../../../shared/models/user.dart';
+import '../../../../shared/services/auth_service.dart';
 
 class StudentSubmissionList extends StatelessWidget {
   final List<StudentSubmission> submissions;

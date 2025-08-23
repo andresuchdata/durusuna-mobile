@@ -25,9 +25,8 @@ StudentSubmission _$StudentSubmissionFromJson(Map<String, dynamic> json) =>
       isLate: json['is_late'] as bool,
       daysLate: intFromDynamicNullable(json['days_late']),
       feedback: json['feedback'] as String?,
-      submissionAttachments: (json['submission_attachments'] as List<dynamic>)
-          .map((e) => e as Map<String, dynamic>)
-          .toList(),
+      submissionAttachments:
+          _submissionAttachmentsFromJson(json['submission_attachments']),
     );
 
 Map<String, dynamic> _$StudentSubmissionToJson(StudentSubmission instance) =>

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../core/utils/date_utils.dart' as app_date_utils;
+import '../../../../shared/models/assignment.dart';
 import '../../../../shared/models/assignment_detail.dart';
+import '../../../../shared/models/user.dart';
 import '../../../../shared/services/assignments_service.dart';
+import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/widgets/attachment_list.dart';
 import '../widgets/student_submission_list.dart';
 
@@ -78,7 +81,8 @@ class AssignmentDetailPage extends ConsumerWidget {
       body: assignmentDetailAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => _buildErrorState(context, error.toString()),
-        data: (assignmentDetail) => _buildContent(context, assignmentDetail),
+        data: (assignmentDetail) =>
+            _buildContent(context, assignmentDetail, ref),
       ),
     );
   }
@@ -90,13 +94,13 @@ class AssignmentDetailPage extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.error_outline,
               size: 64,
               color: AppTheme.errorColor,
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'Failed to load assignment details',
               style: TextStyle(
                 fontSize: 18,
@@ -108,7 +112,7 @@ class AssignmentDetailPage extends ConsumerWidget {
             const SizedBox(height: 8),
             Text(
               error,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 14,
                 color: AppTheme.textSecondary,
               ),
@@ -130,7 +134,7 @@ class AssignmentDetailPage extends ConsumerWidget {
   }
 
   Widget _buildContent(
-      BuildContext context, AssignmentDetail assignmentDetail) {
+      BuildContext context, AssignmentDetail assignmentDetail, WidgetRef ref) {
     return RefreshIndicator(
       onRefresh: () => Future.value(),
       child: SingleChildScrollView(
@@ -164,20 +168,22 @@ class AssignmentDetailPage extends ConsumerWidget {
               const SizedBox(height: 16),
             ],
 
-            // Submission Stats
-            _buildStatsSection(assignmentDetail.stats),
-            const SizedBox(height: 16),
+            // Submission Stats (only for teachers)
+            if (_shouldShowStats(ref)) ...[
+              _buildStatsSection(assignmentDetail.stats),
+              const SizedBox(height: 16),
+            ],
 
             // Student Submissions
             _buildStudentSubmissionsSection(
-                assignmentDetail.studentSubmissions),
+                assignmentDetail.studentSubmissions, ref),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAssignmentHeader(dynamic assignment) {
+  Widget _buildAssignmentHeader(Assignment assignment) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -227,14 +233,14 @@ class AssignmentDetailPage extends ConsumerWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.book,
                 size: 16,
                 color: AppTheme.textSecondary,
               ),
               const SizedBox(width: 4),
               Text(
-                '${assignment.subject_name} • ${assignment.class_name}',
+                '${assignment.subjectName} • ${assignment.className}',
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppTheme.textSecondary,
@@ -252,8 +258,8 @@ class AssignmentDetailPage extends ConsumerWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                assignment.due_date != null
-                    ? 'Due: ${app_date_utils.DateUtils.formatReadableDate(assignment.due_date)}'
+                assignment.dueDate != null
+                    ? 'Due: ${app_date_utils.DateUtils.formatReadableDate(assignment.dueDate!)}'
                     : 'No due date',
                 style: const TextStyle(
                   fontSize: 14,
@@ -268,7 +274,7 @@ class AssignmentDetailPage extends ConsumerWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                '${assignment.max_score} points',
+                '${assignment.maxScore} points',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -488,7 +494,11 @@ class AssignmentDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildStudentSubmissionsSection(List<StudentSubmission> submissions) {
+  Widget _buildStudentSubmissionsSection(
+      List<StudentSubmission> submissions, WidgetRef ref) {
+    // Filter submissions based on user role
+    final filteredSubmissions = _filterSubmissionsByUserRole(submissions, ref);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -507,7 +517,9 @@ class AssignmentDetailPage extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Student Submissions (${submissions.length})',
+            filteredSubmissions.isEmpty
+                ? 'Student Submissions'
+                : 'Student Submissions (${filteredSubmissions.length})',
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -515,10 +527,83 @@ class AssignmentDetailPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          StudentSubmissionList(submissions: submissions),
+          filteredSubmissions.isEmpty
+              ? _buildNoSubmissionsWidget(ref)
+              : StudentSubmissionList(submissions: filteredSubmissions),
         ],
       ),
     );
+  }
+
+  Widget _buildNoSubmissionsWidget(WidgetRef ref) {
+    final authState = ref.read(authStateProvider);
+    final user = authState.user;
+
+    String message = 'No submissions available';
+    if (user?.userType == UserType.student) {
+      message = 'You have not submitted this assignment yet';
+    } else if (user?.userType == UserType.parent) {
+      message = 'Your child has not submitted this assignment yet';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          Icon(
+            Icons.assignment_outlined,
+            size: 48,
+            color: AppTheme.textSecondary.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: TextStyle(
+              fontSize: 14,
+              color: AppTheme.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _shouldShowStats(WidgetRef ref) {
+    final authState = ref.read(authStateProvider);
+    final user = authState.user;
+
+    if (user == null) return false;
+
+    // Only show stats for teachers and admins
+    return user.userType == UserType.teacher || user.role == UserRole.admin;
+  }
+
+  List<StudentSubmission> _filterSubmissionsByUserRole(
+      List<StudentSubmission> submissions, WidgetRef ref) {
+    final authState = ref.read(authStateProvider);
+    final user = authState.user;
+
+    if (user == null) return submissions;
+
+    switch (user.userType) {
+      case UserType.student:
+        // Students only see their own submission
+        return submissions
+            .where((submission) => submission.studentId == user.id)
+            .toList();
+
+      case UserType.parent:
+        // For parents, we need to show their child's submission
+        // Note: This assumes the parent-child relationship is handled by the backend
+        // and only returns submissions for their child in the API response.
+        // If backend doesn't filter, we would need additional parent-child relationship data
+        return submissions;
+
+      case UserType.teacher:
+        // Teachers and admins see all submissions
+        return submissions;
+    }
   }
 
   void _showAllAttachments(List<Map<String, dynamic>> attachments) {

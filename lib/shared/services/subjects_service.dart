@@ -327,12 +327,28 @@ class SubjectsService {
           .get('/assignments/classes/$classId/subjects/$subjectId/assignments');
       final Map<String, dynamic> data = response.data;
       final List<dynamic> assignmentsJson = data['assignments'] ?? [];
-      return assignmentsJson.cast<Map<String, dynamic>>();
+      return _safeAssignmentListCast(assignmentsJson);
     } catch (e) {
       debugPrint(
           'Error fetching assignments for class $classId subject $subjectId: $e');
       return [];
     }
+  }
+
+  /// Safely cast assignment list with error handling
+  List<Map<String, dynamic>> _safeAssignmentListCast(dynamic json) {
+    if (json == null) return [];
+    if (json is List) {
+      return json
+          .where((item) => item is Map)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+    }
+    if (json is Map) {
+      // If it's a single assignment wrapped in a map, return it as a list
+      return [Map<String, dynamic>.from(json)];
+    }
+    return [];
   }
 
   /// Get statistics for user's subjects

@@ -4,6 +4,19 @@ import '../../core/utils/json_parsing_helpers.dart';
 
 part 'assignment_detail.g.dart';
 
+// Helper function for parsing submission attachments
+List<Map<String, dynamic>> _submissionAttachmentsFromJson(dynamic json) {
+  if (json == null) return [];
+  if (json is List) {
+    return json.map((e) => e as Map<String, dynamic>).toList();
+  }
+  if (json is Map) {
+    // If it's a map, it might be empty or have a different structure
+    return [];
+  }
+  return [];
+}
+
 @JsonSerializable()
 class StudentSubmission {
   @JsonKey(name: 'student_id')
@@ -42,7 +55,8 @@ class StudentSubmission {
 
   final String? feedback;
 
-  @JsonKey(name: 'submission_attachments')
+  @JsonKey(
+      name: 'submission_attachments', fromJson: _submissionAttachmentsFromJson)
   final List<Map<String, dynamic>> submissionAttachments;
 
   StudentSubmission({
