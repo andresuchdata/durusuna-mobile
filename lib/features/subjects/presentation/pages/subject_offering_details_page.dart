@@ -12,6 +12,7 @@ import '../../../assignments/presentation/pages/assignments_main_page.dart';
 import '../../../grading/pages/formula_templates_main_page.dart';
 import '../../../class_management/presentation/pages/student_detail_page.dart';
 import '../../../../shared/models/class_model.dart';
+import '../../../../shared/providers/subject_statistics_providers.dart';
 
 // Import the provider for students list
 final studentsListWithSearchProvider =
@@ -162,6 +163,11 @@ class _SubjectOfferingDetailsPageState
   }
 
   Widget _buildStatisticsCard() {
+    final statsAsync = ref.watch(subjectOfferingStatsProvider((
+      widget.offering.classId,
+      widget.offering.subjectId,
+    )));
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -178,61 +184,101 @@ class _SubjectOfferingDetailsPageState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Subject Statistics',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimary,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Subject Statistics',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              IconButton(
+                onPressed: () => ref.refresh(subjectOfferingStatsProvider((
+                  widget.offering.classId,
+                  widget.offering.subjectId,
+                ))),
+                icon: const Icon(Icons.refresh, size: 20),
+                tooltip: 'Refresh statistics',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            height: 100,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                SizedBox(
-                  width: 120,
-                  child: _buildStatCard(
-                    'Students',
-                    '${widget.offering.studentCount}',
-                    Icons.people,
-                    AppTheme.primaryColor,
-                  ),
+          statsAsync.when(
+            loading: () => const SizedBox(
+              height: 100,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, stack) => SizedBox(
+              height: 100,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.grey),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Error loading stats',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 120,
-                  child: _buildStatCard(
-                    'Assignments',
-                    '${widget.offering.assignmentsCount}',
-                    Icons.assignment,
-                    AppTheme.successColor,
+              ),
+            ),
+            data: (stats) => SizedBox(
+              height: 100,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  SizedBox(
+                    width: 120,
+                    child: _buildStatCard(
+                      'Students',
+                      '${stats.studentCount}',
+                      Icons.people,
+                      AppTheme.primaryColor,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 120,
-                  child: _buildStatCard(
-                    'Pending',
-                    '${widget.offering.pendingGrades}',
-                    Icons.assignment_late,
-                    AppTheme.warningColor,
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 120,
+                    child: _buildStatCard(
+                      'Assignments',
+                      '${stats.assignmentsCount}',
+                      Icons.assignment,
+                      AppTheme.successColor,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 120,
-                  child: _buildStatCard(
-                    'Hours/Week',
-                    '${widget.offering.hoursPerWeek}',
-                    Icons.schedule,
-                    AppTheme.infoColor,
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 120,
+                    child: _buildStatCard(
+                      'Pending',
+                      '${stats.pendingGrades}',
+                      Icons.assignment_late,
+                      AppTheme.warningColor,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 16), // Extra padding at the end
-              ],
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 120,
+                    child: _buildStatCard(
+                      'Hours/Week',
+                      '${widget.offering.hoursPerWeek}',
+                      Icons.schedule,
+                      AppTheme.infoColor,
+                    ),
+                  ),
+                  const SizedBox(width: 16), // Extra padding at the end
+                ],
+              ),
             ),
           ),
         ],
@@ -308,21 +354,34 @@ class _SubjectOfferingDetailsPageState
   }
 
   Widget _buildOverviewTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildStatisticsCard(),
-          const SizedBox(height: 16),
-          _buildTeacherInfoCard(),
-          const SizedBox(height: 16),
-          _buildScheduleCard(),
-          const SizedBox(height: 16),
-          _buildDescriptionCard(),
-          const SizedBox(height: 16),
-          _buildQuickActionsCard(),
-        ],
+    return RefreshIndicator(
+      onRefresh: () async {
+        // Refresh all relevant providers
+        ref.refresh(subjectOfferingStatsProvider((
+          widget.offering.classId,
+          widget.offering.subjectId,
+        )));
+        ref.refresh(studentsListWithSearchProvider((
+          widget.offering.classId,
+          null,
+        )));
+      },
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildStatisticsCard(),
+            const SizedBox(height: 16),
+            _buildTeacherInfoCard(),
+            const SizedBox(height: 16),
+            _buildScheduleCard(),
+            const SizedBox(height: 16),
+            _buildDescriptionCard(),
+            const SizedBox(height: 16),
+            _buildQuickActionsCard(),
+          ],
+        ),
       ),
     );
   }
@@ -667,12 +726,47 @@ class _SubjectOfferingDetailsPageState
         ? UserRoleType.teacher
         : UserRoleType.student;
 
-    return AssignmentListView(
-      filterType: AssignmentFilterType.all,
-      userRole: userRole,
-      classId: widget.offering.classId,
-      subjectId: widget.offering.subjectId,
-      searchQuery: null,
+    return Column(
+      children: [
+        // Header with refresh button
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Assignments',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              IconButton(
+                onPressed: () {
+                  // Refresh the statistics provider since assignments affect the counts
+                  ref.refresh(subjectOfferingStatsProvider((
+                    widget.offering.classId,
+                    widget.offering.subjectId,
+                  )));
+                },
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh assignments',
+              ),
+            ],
+          ),
+        ),
+        // Assignments list
+        Expanded(
+          child: AssignmentListView(
+            filterType: AssignmentFilterType.all,
+            userRole: userRole,
+            classId: widget.offering.classId,
+            subjectId: widget.offering.subjectId,
+            searchQuery: null,
+          ),
+        ),
+      ],
     );
   }
 
@@ -680,110 +774,143 @@ class _SubjectOfferingDetailsPageState
     final studentsAsync = ref
         .watch(studentsListWithSearchProvider((widget.offering.classId, null)));
 
-    return studentsAsync.when(
-      loading: () => const Center(
-        child: CircularProgressIndicator(),
-      ),
-      error: (error, stack) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            Text(
-              'Error loading students: ${error.toString()}',
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => ref.refresh(studentsListWithSearchProvider(
-                  (widget.offering.classId, null))),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-      data: (students) {
-        if (students.isEmpty) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.people_outline, size: 64, color: Colors.grey),
-                SizedBox(height: 16),
-                Text(
-                  'No students enrolled in this class yet',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.builder(
+    return Column(
+      children: [
+        // Header with refresh button
+        Padding(
           padding: const EdgeInsets.all(16),
-          itemCount: students.length,
-          itemBuilder: (context, index) {
-            final student = students[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                  backgroundImage: student.avatarUrl != null
-                      ? NetworkImage(student.avatarUrl!)
-                      : null,
-                  child: student.avatarUrl == null
-                      ? Text(
-                          _getInitials(student.displayName),
-                          style: const TextStyle(
-                            color: AppTheme.primaryColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      : null,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Enrolled Students',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
                 ),
-                title: Text(
-                  student.displayName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
+              ),
+              IconButton(
+                onPressed: () => ref.refresh(studentsListWithSearchProvider((
+                  widget.offering.classId,
+                  null,
+                ))),
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh students list',
+              ),
+            ],
+          ),
+        ),
+        // Students list
+        Expanded(
+          child: studentsAsync.when(
+            loading: () => const Center(
+              child: CircularProgressIndicator(),
+            ),
+            error: (error, stack) => Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading students: ${error.toString()}',
+                    style: const TextStyle(fontSize: 16, color: Colors.grey),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                subtitle: Text(student.email),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  // Create a minimal ClassModel for the student detail page
-                  final classModel = ClassModel(
-                    id: widget.offering.classId,
-                    schoolId: '', // Not available from offering
-                    name: widget.offering.className,
-                    gradeLevel: widget.offering.gradeLevel.isNotEmpty
-                        ? widget.offering.gradeLevel
-                        : null,
-                    academicYear: DateTime.now()
-                        .year
-                        .toString(), // Default to current year
-                    isActive: true,
-                    createdAt: DateTime.now(), // Placeholder
-                    updatedAt: DateTime.now(), // Placeholder
-                  );
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => StudentDetailPage(
-                        student: student,
-                        classModel: classModel,
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => ref.refresh(studentsListWithSearchProvider(
+                        (widget.offering.classId, null))),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+            data: (students) {
+              if (students.isEmpty) {
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text(
+                        'No students enrolled in this class yet',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
                       ),
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: students.length,
+                itemBuilder: (context, index) {
+                  final student = students[index];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor:
+                            AppTheme.primaryColor.withValues(alpha: 0.1),
+                        backgroundImage: student.avatarUrl != null
+                            ? NetworkImage(student.avatarUrl!)
+                            : null,
+                        child: student.avatarUrl == null
+                            ? Text(
+                                _getInitials(student.displayName),
+                                style: const TextStyle(
+                                  color: AppTheme.primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              )
+                            : null,
+                      ),
+                      title: Text(
+                        student.displayName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(student.email),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        // Create a minimal ClassModel for the student detail page
+                        final classModel = ClassModel(
+                          id: widget.offering.classId,
+                          schoolId: '', // Not available from offering
+                          name: widget.offering.className,
+                          gradeLevel: widget.offering.gradeLevel.isNotEmpty
+                              ? widget.offering.gradeLevel
+                              : null,
+                          academicYear: DateTime.now()
+                              .year
+                              .toString(), // Default to current year
+                          isActive: true,
+                          createdAt: DateTime.now(), // Placeholder
+                          updatedAt: DateTime.now(), // Placeholder
+                        );
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => StudentDetailPage(
+                              student: student,
+                              classModel: classModel,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   );
                 },
-              ),
-            );
-          },
-        );
-      },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 

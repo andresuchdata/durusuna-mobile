@@ -8,7 +8,10 @@ part 'assignment_detail.g.dart';
 List<Map<String, dynamic>> _submissionAttachmentsFromJson(dynamic json) {
   if (json == null) return [];
   if (json is List) {
-    return json.map((e) => e as Map<String, dynamic>).toList();
+    return json
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
   }
   if (json is Map) {
     // If it's a map, it might be empty or have a different structure
@@ -170,7 +173,10 @@ class AssignmentDetail {
   static List<Map<String, dynamic>> _attachmentsFromJson(dynamic json) {
     if (json == null) return [];
     if (json is List) {
-      return json.map((e) => e as Map<String, dynamic>).toList();
+      return json
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
     }
     if (json is Map) {
       // If it's a map, it might be empty or have a different structure
@@ -183,7 +189,9 @@ class AssignmentDetail {
     if (json == null) return [];
     if (json is List) {
       return json
-          .map((e) => StudentSubmission.fromJson(e as Map<String, dynamic>))
+          .whereType<Map>()
+          .map((item) =>
+              StudentSubmission.fromJson(Map<String, dynamic>.from(item)))
           .toList();
     }
     if (json is Map) {
