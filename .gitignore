@@ -12,6 +12,9 @@
 .swiftpm/
 migrate_working_dir/
 
+# Testing APKs directory
+testing_apks/
+
 # IntelliJ related
 *.iml
 *.ipr

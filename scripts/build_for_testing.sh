@@ -15,13 +15,22 @@ cd ..
 echo "📦 Getting dependencies..."
 flutter pub get
 
-# Build architecture-specific APKs (better device compatibility)
-echo "🏗️ Building architecture-specific APKs for better compatibility..."
-flutter build apk --release --split-per-abi
-
-# Build universal APK as backup
-echo "🌐 Building universal APK as backup..."
-flutter build apk --release
+# First try building universal APK (more reliable)
+echo "🌐 Building universal APK first..."
+if flutter build apk --release; then
+    echo "✅ Universal APK built successfully!"
+    
+    # Now try building architecture-specific APKs
+    echo "🏗️ Building architecture-specific APKs for better compatibility..."
+    if flutter build apk --release --split-per-abi; then
+        echo "✅ Split APKs built successfully!"
+    else
+        echo "⚠️ Split APKs failed, but universal APK is ready"
+    fi
+else
+    echo "❌ Universal APK build failed"
+    exit 1
+fi
 
 # Create distribution folder
 DIST_DIR="testing_apks"
@@ -31,8 +40,21 @@ mkdir -p $DIST_DIR
 # Copy APKs to distribution folder
 echo "📋 Organizing APKs for distribution..."
 cp build/app/outputs/apk/release/app-release.apk $DIST_DIR/durusuna-universal.apk
-cp build/app/outputs/apk/release/app-arm64-v8a-release.apk $DIST_DIR/durusuna-arm64-v8a.apk 2>/dev/null || echo "ARM64 APK not found"
-cp build/app/outputs/apk/release/app-armeabi-v7a-release.apk $DIST_DIR/durusuna-armeabi-v7a.apk 2>/dev/null || echo "ARM APK not found"
+
+# Try to copy split APKs if they exist
+if [ -f "build/app/outputs/apk/release/app-arm64-v8a-release.apk" ]; then
+    cp build/app/outputs/apk/release/app-arm64-v8a-release.apk $DIST_DIR/durusuna-arm64-v8a.apk
+    echo "✅ ARM64 APK copied"
+else
+    echo "⚠️ ARM64 APK not found"
+fi
+
+if [ -f "build/app/outputs/apk/release/app-armeabi-v7a-release.apk" ]; then
+    cp build/app/outputs/apk/release/app-armeabi-v7a-release.apk $DIST_DIR/durusuna-armeabi-v7a.apk
+    echo "✅ ARM APK copied"
+else
+    echo "⚠️ ARM APK not found"
+fi
 
 # Get APK info
 APK_SIZE=$(du -h $DIST_DIR/durusuna-universal.apk | cut -f1)
@@ -46,14 +68,18 @@ echo "   📊 Total APKs: $APK_COUNT"
 echo "   📏 Universal APK size: $APK_SIZE"
 echo ""
 echo "🎯 RECOMMENDED FOR MODERN ANDROID:"
-echo "   1. Try: durusuna-arm64-v8a.apk (most compatible)"
-echo "   2. Fallback: durusuna-universal.apk"
+if [ -f "$DIST_DIR/durusuna-arm64-v8a.apk" ]; then
+    echo "   1. Try: durusuna-arm64-v8a.apk (most compatible)"
+    echo "   2. Fallback: durusuna-universal.apk"
+else
+    echo "   📱 Use: durusuna-universal.apk (universal compatibility)"
+fi
 echo ""
 echo "📱 DISTRIBUTION OPTIONS:"
 echo "   • Email/WhatsApp: Send APK files directly"
 echo "   • Cloud storage: Upload to Google Drive/Dropbox"
 echo "   • USB transfer: Copy to device storage"
-echo "   • ADB install: adb install $DIST_DIR/durusuna-arm64-v8a.apk"
+echo "   • ADB install: adb install $DIST_DIR/durusuna-universal.apk"
 echo ""
 echo "🔧 ANDROID INSTALLATION GUIDE:"
 echo "   1. Settings > Security > Install from Unknown Sources (Enable)"
