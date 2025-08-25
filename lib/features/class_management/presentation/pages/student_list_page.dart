@@ -386,7 +386,7 @@ class _StudentListPageState extends ConsumerState<StudentListPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'ID: ${student.id.substring(0, 8)}',
+                      'ID: ${student.id.length > 8 ? '${student.id.substring(0, 8)}...' : student.id}',
                       style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w500,

@@ -53,10 +53,15 @@ class ApiService {
               final accessToken = StorageService.getToken();
               debugPrint(
                   '🔑 ApiService: Found refresh token, attempting refresh');
-              debugPrint(
-                  '🔑 ApiService: Access token: ${accessToken?.substring(0, 20)}...');
-              debugPrint(
-                  '🔑 ApiService: Refresh token: ${refreshToken.substring(0, 20)}...');
+              final accessTokenPreview =
+                  accessToken != null && accessToken!.length > 20
+                      ? '${accessToken!.substring(0, 20)}...'
+                      : accessToken ?? 'null';
+              debugPrint('🔑 ApiService: Access token: $accessTokenPreview');
+              final refreshTokenPreview = refreshToken.length > 20
+                  ? '${refreshToken.substring(0, 20)}...'
+                  : refreshToken;
+              debugPrint('🔑 ApiService: Refresh token: $refreshTokenPreview');
               debugPrint(
                   '🔑 ApiService: Tokens are same? ${accessToken == refreshToken}');
               try {
@@ -200,7 +205,7 @@ class ApiService {
         debugPrint(
             '🚨 ApiService: Refresh token is invalid (401), forcing logout');
         // Don't return null, throw to trigger immediate logout
-        throw e;
+        rethrow;
       }
 
       return null;

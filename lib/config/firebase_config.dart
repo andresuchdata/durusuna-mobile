@@ -88,14 +88,14 @@ class SecureFirebaseConfig {
     return false;
   }
 
-  static FirebaseOptions get _androidOptions => FirebaseOptions(
+  static FirebaseOptions get _androidOptions => const FirebaseOptions(
         apiKey: _androidApiKey,
         appId: _androidAppId,
         messagingSenderId: _messagingSenderId,
         projectId: _projectId,
       );
 
-  static FirebaseOptions get _iosOptions => FirebaseOptions(
+  static FirebaseOptions get _iosOptions => const FirebaseOptions(
         apiKey: _iosApiKey,
         appId: _iosAppId,
         messagingSenderId: _messagingSenderId,
@@ -106,10 +106,14 @@ class SecureFirebaseConfig {
   /// Get configuration summary for debugging (without sensitive data)
   static Map<String, dynamic> get debugInfo => {
         'projectId': _projectId.isNotEmpty
-            ? '${_projectId.substring(0, 8)}...'
+            ? (_projectId.length > 8
+                ? '${_projectId.substring(0, 8)}...'
+                : _projectId)
             : 'missing',
         'messagingSenderId': _messagingSenderId.isNotEmpty
-            ? '${_messagingSenderId.substring(0, 8)}...'
+            ? (_messagingSenderId.length > 8
+                ? '${_messagingSenderId.substring(0, 8)}...'
+                : _messagingSenderId)
             : 'missing',
         'platform': defaultTargetPlatform.name,
         'isConfigured': isConfigured,

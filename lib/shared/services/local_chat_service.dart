@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../database/chat_database.dart';
+import '../repositories/repository_factory.dart';
+import '../services/chat_repository_service.dart';
 import '../models/local_message.dart';
 import '../models/local_conversation.dart';
 import '../../core/storage/storage_service.dart';
@@ -29,7 +30,10 @@ class LocalChatService {
   }
 
   Future<void> _initialize() async {
-    await ChatDatabase.initialize();
+    // Initialize repository factory if not already done
+    if (!RepositoryFactory.isInitialized) {
+      await RepositoryFactory.initialize(preferSQLite: true);
+    }
     // Touch realtime service so the field is considered used and ensure it's ready
     try {
       if (_realtimeService.canConnect) {
@@ -45,7 +49,7 @@ class LocalChatService {
   Future<List<LocalConversation>> getConversations() async {
     try {
       // Get from local database instantly
-      final conversations = await ChatDatabase.getConversations();
+      final conversations = await ChatRepositoryService.getConversations();
 
       // Trigger background sync if needed
       if (!_isInitialSyncComplete) {
@@ -67,12 +71,12 @@ class LocalChatService {
     try {
       // If requesting the first page, pull latest N messages to ensure newest appear
       final messages = offset == 0
-          ? await ChatDatabase.getLatestMessages(
+          ? await ChatRepositoryService.getLatestMessages(
               conversationId,
               limit: limit,
               offsetFromLatest: 0,
             )
-          : await ChatDatabase.getMessages(
+          : await ChatRepositoryService.getMessages(
               conversationId,
               limit: limit,
               offset: offset,
@@ -96,17 +100,17 @@ class LocalChatService {
     Map<String, dynamic>? metadata,
   }) async {
     final serviceStartTime = DateTime.now();
-    print(
+    debugPrint(
         '🐛 [SERVICE] LocalChatService.sendMessage called at ${serviceStartTime.millisecondsSinceEpoch}');
 
     final currentUser = StorageService.getUser();
     if (currentUser == null) {
-      print('🐛 [SERVICE] No authenticated user found');
+      debugPrint('🐛 [SERVICE] No authenticated user found');
       throw LocalChatException('User not authenticated');
     }
 
     final userCheckTime = DateTime.now();
-    print(
+    debugPrint(
         '🐛 [SERVICE] User auth check took: ${userCheckTime.difference(serviceStartTime).inMilliseconds}ms');
 
     // Create local message instantly
@@ -128,16 +132,16 @@ class LocalChatService {
     );
 
     final messageCreateTime = DateTime.now();
-    print(
+    debugPrint(
         '🐛 [SERVICE] LocalMessage creation took: ${messageCreateTime.difference(userCheckTime).inMilliseconds}ms');
 
     // 🚀 Persist immediately to get a stable localId used for dedupe
     try {
-      await ChatDatabase.saveMessage(localMessage);
+      await ChatRepositoryService.saveMessage(localMessage);
     } catch (_) {}
 
     final returnTime = DateTime.now();
-    print(
+    debugPrint(
         '🐛 [SERVICE] ✅ Returning message instantly after: ${returnTime.difference(serviceStartTime).inMilliseconds}ms');
 
     // Return the persisted message (has local id)
@@ -153,10 +157,7 @@ class LocalChatService {
     String? conversationId,
   }) async {
     try {
-      return await ChatDatabase.searchMessages(
-        query,
-        conversationId: conversationId,
-      );
+      return await ChatRepositoryService.searchMessages(query);
     } catch (e) {
       throw LocalChatException('Failed to search messages: $e');
     }
@@ -165,20 +166,20 @@ class LocalChatService {
   /// Save message to local database only (for optimistic updates)
   Future<void> saveMessageLocally(LocalMessage message) async {
     try {
-      await ChatDatabase.saveMessage(message);
+      await ChatRepositoryService.saveMessage(message);
       // Update conversation's last message
-      await ChatDatabase.updateConversationLastMessage(
+      await ChatRepositoryService.updateConversationLastMessage(
         message.conversationId,
         message,
       );
     } catch (e) {
       if (e.toString().contains('Unique index violated')) {
         // Duplicate message, this is ok - just log and continue
-        print(
+        debugPrint(
             '🐛 [SERVICE] Duplicate message detected during local save: ${message.serverId}');
         return; // Don't rethrow for duplicates
       }
-      print('Failed to save message locally: $e');
+      debugPrint('Failed to save message locally: $e');
       rethrow;
     }
   }
@@ -220,10 +221,11 @@ class LocalChatService {
         isFromMe: serverMessage['sender_id'] == currentUserId,
       );
     } catch (e) {
-      print('Failed to sync message to server: $e');
+      debugPrint('Failed to sync message to server: $e');
       // Mark failed and rethrow to allow caller to decide UI handling
       try {
-        await ChatDatabase.markMessageFailed(localMessage.id.toString());
+        await ChatRepositoryService.markMessageFailed(
+            localMessage.id.toString());
       } catch (_) {}
       rethrow;
     }
@@ -233,13 +235,13 @@ class LocalChatService {
   Future<void> markConversationAsRead(String conversationId) async {
     try {
       // Update locally instantly
-      await ChatDatabase.markConversationAsRead(conversationId);
+      await ChatRepositoryService.markConversationAsRead(conversationId);
 
       // Sync to server in background
       _syncReadStatusToServer(conversationId);
     } catch (e) {
       // Just log the error instead of throwing to avoid crashes
-      print('Failed to mark conversation as read: $e');
+      debugPrint('Failed to mark conversation as read: $e');
       // Still try to sync to server even if local update failed
       _syncReadStatusToServer(conversationId);
     }
@@ -248,7 +250,7 @@ class LocalChatService {
   /// Clean up failed messages from database
   Future<void> cleanupFailedMessages(String conversationId) async {
     try {
-      // This would need to be implemented in ChatDatabase
+      // This would need to be implemented in the repository
       // For now, just log that we should clean up
       debugPrint(
           '🧹 TODO: Clean up failed messages for conversation: $conversationId');
@@ -271,7 +273,7 @@ class LocalChatService {
 
   void _startBackgroundSync() {
     // 🚫 DISABLED: Temporarily stop background sync to prevent message loops
-    print('⚠️ Background sync DISABLED to stop pending message loops');
+    debugPrint('⚠️ Background sync DISABLED to stop pending message loops');
     return;
   }
 
@@ -281,7 +283,7 @@ class LocalChatService {
       await _syncConversationsFromServer();
 
       // Sync recent messages for each conversation
-      final conversations = await ChatDatabase.getConversations();
+      final conversations = await ChatRepositoryService.getConversations();
       for (final conversation in conversations.take(10)) {
         // Sync top 10 conversations
         await _syncMessagesFromServer(conversation.serverId, limit: 50);
@@ -290,7 +292,7 @@ class LocalChatService {
       _isInitialSyncComplete = true;
     } catch (e) {
       // Log error but don't block app
-      print('Initial sync failed: $e');
+      debugPrint('Initial sync failed: $e');
     }
   }
 
@@ -306,7 +308,7 @@ class LocalChatService {
       // await _syncConversationUpdatesFromServer();
     } catch (e) {
       // Log error but don't block app
-      print('Background sync failed: $e');
+      debugPrint('Background sync failed: $e');
     }
   }
 
@@ -316,7 +318,7 @@ class LocalChatService {
       try {
         await _syncConversationsFromServer();
       } catch (e) {
-        print('Conversations sync failed: $e');
+        debugPrint('Conversations sync failed: $e');
       }
     });
   }
@@ -326,7 +328,7 @@ class LocalChatService {
     try {
       await _syncConversationsFromServer();
     } catch (e) {
-      print('Conversations sync failed: $e');
+      debugPrint('Conversations sync failed: $e');
     }
   }
 
@@ -336,7 +338,7 @@ class LocalChatService {
       try {
         await _syncMessagesFromServer(conversationId);
       } catch (e) {
-        print('Messages sync failed for $conversationId: $e');
+        debugPrint('Messages sync failed for $conversationId: $e');
       }
     });
   }
@@ -344,22 +346,22 @@ class LocalChatService {
   Future<void> _syncConversationsFromServer() async {
     try {
       // Get conversations from API
-      print('🌐 [CONVERSATIONS] Fetching conversations from server...');
+      debugPrint('🌐 [CONVERSATIONS] Fetching conversations from server...');
       final response = await _apiService.get('/conversations');
       final data = response.data as Map<String, dynamic>;
       final conversationsList = data['conversations'] as List;
-      print(
+      debugPrint(
           '🌐 [CONVERSATIONS] Server returned ${conversationsList.length} conversations');
 
       final currentUserId = StorageService.getUser()?['id'];
-      print('🌐 [CONVERSATIONS] Current user ID: $currentUserId');
+      debugPrint('🌐 [CONVERSATIONS] Current user ID: $currentUserId');
 
       // Convert and save to local database
       final localConversations = conversationsList
           .map((json) =>
               LocalConversationExtension.fromApiJson(json, currentUserId))
           .toList();
-      print(
+      debugPrint(
           '🌐 [CONVERSATIONS] Converted ${localConversations.length} conversations to local format');
 
       // Save all conversations with error handling
@@ -367,39 +369,40 @@ class LocalChatService {
       int skipped = 0;
       for (final conversation in localConversations) {
         try {
-          await ChatDatabase.saveConversation(conversation);
+          await ChatRepositoryService.saveConversation(conversation);
           saved++;
-          print(
+          debugPrint(
               '✅ [CONVERSATIONS] Saved: ${conversation.serverId} (${conversation.displayName})');
         } catch (e) {
           // Skip duplicate conversations instead of crashing
           skipped++;
-          print(
+          debugPrint(
               '⚠️ [CONVERSATIONS] Skipping duplicate conversation: ${conversation.serverId} - $e');
         }
       }
-      print('📊 [CONVERSATIONS] Sync complete: $saved saved, $skipped skipped');
+      debugPrint(
+          '📊 [CONVERSATIONS] Sync complete: $saved saved, $skipped skipped');
     } catch (e) {
-      print('❌ [CONVERSATIONS] Sync failed: $e');
+      debugPrint('❌ [CONVERSATIONS] Sync failed: $e');
       throw LocalChatException('Failed to sync conversations from server: $e');
     }
   }
 
   /// Force immediate sync of messages from server (for empty conversations)
   Future<void> forceSyncMessagesFromServer(String conversationId) async {
-    print(
+    debugPrint(
         '🔄 Force syncing messages from server for conversation: $conversationId');
 
     // Skip sync for new conversations that don't exist on server yet
     if (conversationId.startsWith('new_')) {
-      print('🔄 Skipping sync for new conversation: $conversationId');
+      debugPrint('🔄 Skipping sync for new conversation: $conversationId');
       return;
     }
 
     try {
       // Get last sync time for this conversation based on latest local message
       final lastLocalMessage =
-          await ChatDatabase.getLatestMessage(conversationId);
+          await ChatRepositoryService.getLatestMessage(conversationId);
       final lastSyncTime = lastLocalMessage?.createdAt;
 
       final queryParams = <String, dynamic>{
@@ -412,16 +415,16 @@ class LocalChatService {
         // Use cursor-based pagination if we have a last sync time
         queryParams['cursor'] = lastSyncTime.toIso8601String();
         queryParams['loadDirection'] = 'after';
-        print(
+        debugPrint(
             '🌐 [forceSyncMessagesFromServer] Using cursor: ${queryParams['cursor']}');
       } else {
         // If no local messages, fetch the first page
         queryParams['page'] = 1;
-        print('🌐 [forceSyncMessagesFromServer] Using page: 1');
+        debugPrint('🌐 [forceSyncMessagesFromServer] Using page: 1');
       }
 
       // Get messages from API
-      print(
+      debugPrint(
           '🌐 [forceSyncMessagesFromServer] GET $path with params: $queryParams');
       final response = await _apiService.get(
         path,
@@ -429,9 +432,10 @@ class LocalChatService {
       );
 
       final data = response.data as Map<String, dynamic>;
-      print('🌐 [forceSyncMessagesFromServer] response keys: ${data.keys}');
+      debugPrint(
+          '🌐 [forceSyncMessagesFromServer] response keys: ${data.keys}');
       final messagesList = data['messages'] as List;
-      print(
+      debugPrint(
           '🌐 [forceSyncMessagesFromServer] Got ${messagesList.length} messages');
 
       final currentUserId = StorageService.getUser()?['id'];
@@ -446,15 +450,15 @@ class LocalChatService {
 
       // Save all messages with error handling
       try {
-        await ChatDatabase.saveMessages(localMessages);
-        print(
+        await ChatRepositoryService.saveMessages(localMessages);
+        debugPrint(
             '✅ [forceSyncMessagesFromServer] Saved ${localMessages.length} messages from server for $conversationId');
       } catch (e) {
-        print(
+        debugPrint(
             '⚠️ [forceSyncMessagesFromServer] Error saving messages from server: $e');
       }
     } catch (e) {
-      print('❌ Force sync messages from server failed: $e');
+      debugPrint('❌ Force sync messages from server failed: $e');
       rethrow;
     }
   }
@@ -465,7 +469,7 @@ class LocalChatService {
       {int limit = 10}) async {
     // Skip sync for new conversations that don't exist on server yet
     if (conversationId.startsWith('new_')) {
-      print(
+      debugPrint(
           '🔄 Skipping fetchLatestFromServer for new conversation: $conversationId');
       return;
     }
@@ -492,10 +496,10 @@ class LocalChatService {
               ))
           .toList();
 
-      await ChatDatabase.saveMessages(localMessages);
+      await ChatRepositoryService.saveMessages(localMessages);
     } catch (e) {
       // Swallow errors; this is a best-effort helper
-      print('fetchLatestFromServer failed: $e');
+      debugPrint('fetchLatestFromServer failed: $e');
     }
   }
 
@@ -504,22 +508,23 @@ class LocalChatService {
       {Duration staleAfter = const Duration(seconds: 45)}) async {
     try {
       // DEBUG: Check what conversation IDs exist in database
-      final allMessages = await ChatDatabase.getAllMessages();
+      final allMessages = await ChatRepositoryService.getAllMessages();
       final uniqueConversationIds =
           allMessages.map((m) => m.conversationId).toSet();
-      print(
+      debugPrint(
           '🔍 [DEBUG] All conversation IDs in database: $uniqueConversationIds');
-      print('🔍 [DEBUG] Looking for conversationId: "$conversationId"');
+      debugPrint('🔍 [DEBUG] Looking for conversationId: "$conversationId"');
 
       // Only reconcile if we have pending messages to avoid unnecessary work
       final pending =
-          await ChatDatabase.getPendingMessagesForConversation(conversationId);
+          await ChatRepositoryService.getPendingMessagesForConversation(
+              conversationId);
       if (pending.isEmpty) {
-        print('🔄 No pending messages to reconcile for $conversationId');
+        debugPrint('🔄 No pending messages to reconcile for $conversationId');
         return;
       }
 
-      print(
+      debugPrint(
           '🔄 Reconciling ${pending.length} pending messages for $conversationId');
 
       // STEP 1: Clean up existing duplicates FIRST before syncing more
@@ -530,10 +535,11 @@ class LocalChatService {
 
       // STEP 2: Only sync if we still have pending messages after cleanup
       final remainingPending =
-          await ChatDatabase.getPendingMessagesForConversation(conversationId);
+          await ChatRepositoryService.getPendingMessagesForConversation(
+              conversationId);
 
       if (remainingPending.isNotEmpty) {
-        print(
+        debugPrint(
             '🔄 ${remainingPending.length} messages still pending after cleanup, syncing from server...');
 
         // Pull a recent window so we can adopt - but catch any unique violations
@@ -542,7 +548,7 @@ class LocalChatService {
               limit: 50); // Reduced limit
         } catch (e) {
           if (e.toString().contains('Unique index violated')) {
-            print(
+            debugPrint(
                 'ℹ️ Some messages already exist during reconcile sync - continuing');
           } else {
             rethrow;
@@ -550,18 +556,20 @@ class LocalChatService {
         }
 
         // Try adopting each recent server message into any optimistic row
-        final recent = await ChatDatabase.getLatestMessages(conversationId,
-            limit: 100, offsetFromLatest: 0); // Reduced limit
+        final recent = await ChatRepositoryService.getLatestMessages(
+            conversationId,
+            limit: 100,
+            offsetFromLatest: 0); // Reduced limit
         for (final m in recent) {
           if (m.serverId != null) {
             try {
-              await ChatDatabase.adoptServerMessage(m);
+              await ChatRepositoryService.adoptServerMessage(m);
             } catch (e) {
               if (e.toString().contains('Unique index violated')) {
                 // Skip if already exists
                 continue;
               }
-              print('⚠️ Failed to adopt message ${m.serverId}: $e');
+              debugPrint('⚠️ Failed to adopt message ${m.serverId}: $e');
             }
           }
         }
@@ -569,22 +577,24 @@ class LocalChatService {
         // STEP 3: Clean up again after sync in case new duplicates were created
         await _cleanupDuplicateMessages(conversationId);
       } else {
-        print('🔄 No pending messages after cleanup, skipping server sync');
+        debugPrint(
+            '🔄 No pending messages after cleanup, skipping server sync');
       }
 
       // Any remaining pending older than threshold become failed
       final stillPending =
-          await ChatDatabase.getPendingMessagesForConversation(conversationId);
+          await ChatRepositoryService.getPendingMessagesForConversation(
+              conversationId);
       final now = DateTime.now();
       for (final p in stillPending) {
         if (now.difference(p.createdAt) > staleAfter) {
-          await ChatDatabase.markMessageFailed(p.id.toString());
+          await ChatRepositoryService.markMessageFailed(p.id.toString());
         }
       }
 
-      print('🔄 Reconcile completed for $conversationId');
+      debugPrint('🔄 Reconcile completed for $conversationId');
     } catch (e) {
-      print('⚠️ reconcilePendingOnOpen failed: $e');
+      debugPrint('⚠️ reconcilePendingOnOpen failed: $e');
     }
   }
 
@@ -592,8 +602,9 @@ class LocalChatService {
   /// Keep only the best version: delivered > sent > failed > sending
   Future<void> _cleanupDuplicateMessages(String conversationId) async {
     try {
-      final allMessages =
-          await ChatDatabase.getLatestMessages(conversationId, limit: 200);
+      final allMessages = await ChatRepositoryService.getLatestMessages(
+          conversationId,
+          limit: 200);
 
       // Group messages by content and sender
       final Map<String, List<LocalMessage>> messageGroups = {};
@@ -609,7 +620,7 @@ class LocalChatService {
       // For each group with multiple messages, keep only the best one
       for (final group in messageGroups.values) {
         if (group.length > 1) {
-          print(
+          debugPrint(
               '🧹 Found ${group.length} duplicate messages with content: "${group.first.content}"');
 
           // Sort by priority: delivered > sent > failed > sending
@@ -627,18 +638,18 @@ class LocalChatService {
           final toKeep = group.first;
           final toDelete = group.skip(1).toList();
 
-          print(
+          debugPrint(
               '🧹 Keeping message: ${toKeep.serverId ?? toKeep.id} (${toKeep.readStatus}) at ${toKeep.createdAt}');
 
           for (final duplicate in toDelete) {
-            print(
+            debugPrint(
                 '🧹 Deleting duplicate: ${duplicate.serverId ?? duplicate.id} (${duplicate.readStatus}) at ${duplicate.createdAt}');
-            await ChatDatabase.deleteMessage(duplicate.id.toString());
+            await ChatRepositoryService.deleteMessage(duplicate.id);
           }
         }
       }
     } catch (e) {
-      print('⚠️ Failed to cleanup duplicate messages: $e');
+      debugPrint('⚠️ Failed to cleanup duplicate messages: $e');
     }
   }
 
@@ -685,8 +696,9 @@ class LocalChatService {
   /// Clean up orphaned messages without clientMessageId that are stuck in "sending"
   Future<void> _cleanupOrphanedMessages(String conversationId) async {
     try {
-      final allMessages =
-          await ChatDatabase.getLatestMessages(conversationId, limit: 200);
+      final allMessages = await ChatRepositoryService.getLatestMessages(
+          conversationId,
+          limit: 200);
 
       // Find old messages without clientMessageId that are stuck
       final orphaned = allMessages
@@ -700,23 +712,23 @@ class LocalChatService {
           .toList();
 
       if (orphaned.isNotEmpty) {
-        print(
+        debugPrint(
             '🧹 Found ${orphaned.length} orphaned messages without clientMessageId');
 
         for (final orphan in orphaned) {
-          print(
+          debugPrint(
               '🧹 Marking orphaned message as failed: "${orphan.content}" (age: ${DateTime.now().difference(orphan.createdAt).inMinutes}min)');
-          await ChatDatabase.markMessageFailed(orphan.id.toString());
+          await ChatRepositoryService.markMessageFailed(orphan.id.toString());
         }
       }
     } catch (e) {
-      print('⚠️ Failed to cleanup orphaned messages: $e');
+      debugPrint('⚠️ Failed to cleanup orphaned messages: $e');
     }
   }
 
   /// Manual cleanup for testing - can be called directly
   Future<void> manualCleanupDuplicates(String conversationId) async {
-    print('🧹 Manual cleanup requested for $conversationId');
+    debugPrint('🧹 Manual cleanup requested for $conversationId');
     await _cleanupDuplicateMessages(conversationId);
     await _cleanupOrphanedMessages(conversationId);
   }
@@ -727,9 +739,9 @@ class LocalChatService {
     try {
       await _apiService
           .delete('/conversations/$conversationId/messages/$messageId');
-      print('✅ Message deleted on server: $messageId');
+      debugPrint('✅ Message deleted on server: $messageId');
     } catch (e) {
-      print('❌ Failed to delete message on server: $e');
+      debugPrint('❌ Failed to delete message on server: $e');
       rethrow;
     }
   }
@@ -746,12 +758,12 @@ class LocalChatService {
       );
 
       final result = response.data as Map<String, dynamic>;
-      print(
+      debugPrint(
           '✅ Batch delete response: ${result['deleted_count']} deleted, ${result['failed_count']} failed');
 
       return result;
     } catch (e) {
-      print('❌ Failed to delete batch messages on server: $e');
+      debugPrint('❌ Failed to delete batch messages on server: $e');
       rethrow;
     }
   }
@@ -760,7 +772,8 @@ class LocalChatService {
       {int limit = 50}) async {
     // Skip sync for new conversations that don't exist on server yet
     if (conversationId.startsWith('new_')) {
-      print('🔄 Skipping message sync for new conversation: $conversationId');
+      debugPrint(
+          '🔄 Skipping message sync for new conversation: $conversationId');
       return;
     }
 
@@ -768,7 +781,7 @@ class LocalChatService {
       // Determine how many messages we currently have locally.
       // If we have very few (e.g., after a fresh install), avoid cursor mode
       // and fetch the first page explicitly to rebuild a baseline.
-      final recentLocal = await ChatDatabase.getLatestMessages(
+      final recentLocal = await ChatRepositoryService.getLatestMessages(
         conversationId,
         limit: 3,
         offsetFromLatest: 0,
@@ -793,23 +806,17 @@ class LocalChatService {
       } else {
         // Fallback baseline fetch: explicitly request page 1 to repopulate local cache
         // Useful when local DB is empty or nearly empty and cursor would return 0 items
-        print(
+        debugPrint(
             '🌐 [_syncMessagesFromServer] Using baseline page fetch (shallowLocal=$shallowLocal, lastSyncTime=${lastSyncTime?.toIso8601String()})');
       }
 
       // Get messages from API
-      print('🌐 [_syncMessagesFromServer] GET ' +
-          ApiConstants.getConversationMessages(conversationId) +
-          ' params=' +
-          queryParams.toString());
+      debugPrint(
+          '🌐 [_syncMessagesFromServer] GET ${ApiConstants.getConversationMessages(conversationId)} params=${queryParams.toString()}');
       final response = await _apiService.get(
         ApiConstants.getConversationMessages(conversationId),
         queryParameters: queryParams,
       );
-      print('🌐 [_syncMessagesFromServer] response keys: ' +
-          (response.data is Map<String, dynamic>
-              ? (response.data as Map<String, dynamic>).keys.join(',')
-              : 'not a map'));
 
       final data = response.data as Map<String, dynamic>;
       final messagesList =
@@ -830,17 +837,17 @@ class LocalChatService {
 
       // Save all messages with error handling
       try {
-        await ChatDatabase.saveMessages(localMessages);
+        await ChatRepositoryService.saveMessages(localMessages);
       } catch (e) {
         // Skip duplicate messages instead of crashing
-        print('Some messages already exist, skipping duplicates: $e');
+        debugPrint('Some messages already exist, skipping duplicates: $e');
         // Try saving individual messages to identify which ones are duplicates
         for (final message in localMessages) {
           try {
-            await ChatDatabase.saveMessage(message);
+            await ChatRepositoryService.saveMessage(message);
           } catch (duplicateError) {
             // Skip this specific message
-            print('Skipping duplicate message: ${message.serverId}');
+            debugPrint('Skipping duplicate message: ${message.serverId}');
           }
         }
       }
@@ -872,7 +879,7 @@ class LocalChatService {
         data.remove(
             'conversation_id'); // Remove conversation_id for direct messages
 
-        print(
+        debugPrint(
             '🔄 Sending message to new conversation via direct message endpoint');
       } else {
         // Use existing conversation endpoint
@@ -887,18 +894,18 @@ class LocalChatService {
       final serverMessage = response.data['message'] as Map<String, dynamic>;
 
       // Update local message with server ID and mark as synced
-      await ChatDatabase.markMessageSynced(
+      await ChatRepositoryService.markMessageSynced(
         message.id.toString(),
         serverMessage['id'],
       );
 
-      print('✅ Message synced successfully: ${serverMessage['id']}');
+      debugPrint('✅ Message synced successfully: ${serverMessage['id']}');
     } catch (e) {
-      print('❌ Failed to sync message to server: $e');
+      debugPrint('❌ Failed to sync message to server: $e');
 
       // 🔥 CRITICAL: Mark failed explicitly to stop infinite retries
-      await ChatDatabase.markMessageFailed(message.id.toString());
-      print('🚫 Message marked as failed - will not retry: ${message.id}');
+      await ChatRepositoryService.markMessageFailed(message.id.toString());
+      debugPrint('🚫 Message marked as failed - will not retry: ${message.id}');
       // Don't rethrow - we handled the failure by marking it as "failed"
     }
   }
@@ -909,17 +916,18 @@ class LocalChatService {
       final now = DateTime.now();
       if (_lastSyncTime != null &&
           now.difference(_lastSyncTime!) < _syncThrottleDelay) {
-        print(
+        debugPrint(
             '⏳ Sync throttled - last sync was ${now.difference(_lastSyncTime!).inSeconds}s ago');
         return;
       }
       _lastSyncTime = now;
 
-      final pendingMessages = await ChatDatabase.getPendingSyncMessages();
+      final pendingMessages =
+          await ChatRepositoryService.getPendingSyncMessages();
 
       // STOP: Don't sync if there are too many pending messages (indicates a loop)
       if (pendingMessages.length > 20) {
-        print(
+        debugPrint(
             '⚠️ Too many pending messages (${pendingMessages.length}) - stopping sync to prevent loops');
         return;
       }
@@ -927,7 +935,7 @@ class LocalChatService {
       // Limit to prevent infinite loops
       final messagesToSync =
           pendingMessages.take(5).toList(); // Reduced from 10 to 5
-      print('🔄 Syncing ${messagesToSync.length} pending messages');
+      debugPrint('🔄 Syncing ${messagesToSync.length} pending messages');
 
       if (messagesToSync.isEmpty) {
         return; // No messages to sync
@@ -938,7 +946,7 @@ class LocalChatService {
         await _syncMessageToServer(message);
       }
     } catch (e) {
-      print('Failed to sync pending messages: $e');
+      debugPrint('Failed to sync pending messages: $e');
     }
   }
 
@@ -946,27 +954,27 @@ class LocalChatService {
     try {
       // Skip sync for new conversations that don't exist on server yet
       if (conversationId.startsWith('new_')) {
-        print(
+        debugPrint(
             '🔄 Skipping read status sync for new conversation: $conversationId');
         return;
       }
 
       await _apiService.put('/conversations/$conversationId/mark-read');
     } catch (e) {
-      print('Failed to sync read status to server: $e');
+      debugPrint('Failed to sync read status to server: $e');
     }
   }
 
   Future<void> _syncNewMessagesFromServer() async {
     try {
-      final conversations = await ChatDatabase.getConversations();
+      final conversations = await ChatRepositoryService.getConversations();
 
       // Check for new messages in active conversations
       for (final conversation in conversations.take(5)) {
         await _syncMessagesFromServer(conversation.serverId, limit: 10);
       }
     } catch (e) {
-      print('Failed to sync new messages from server: $e');
+      debugPrint('Failed to sync new messages from server: $e');
     }
   }
 
@@ -1022,9 +1030,9 @@ class LocalChatService {
         if (reactions != null && reactions.isNotEmpty) {
           debugPrint(
               '🔄 [REACTION SYNC] Updating reactions for message $messageId');
-          await ChatDatabase.updateMessageReactions(
-            serverId: messageId,
-            reactionsJson: jsonEncode(reactions),
+          await ChatRepositoryService.updateMessageReactions(
+            messageId,
+            jsonEncode(reactions),
           );
         }
       }
@@ -1044,7 +1052,8 @@ class LocalChatService {
   Future<DateTime?> _getLastMessageSyncTime(String conversationId) async {
     try {
       // Use the latest local message timestamp as the watermark
-      final latest = await ChatDatabase.getLatestMessage(conversationId);
+      final latest =
+          await ChatRepositoryService.getLatestMessage(conversationId);
       return latest?.createdAt;
     } catch (_) {
       return null;
@@ -1068,13 +1077,14 @@ class LocalChatService {
         );
 
         // First try to adopt into an existing optimistic local row
-        final adopted = await ChatDatabase.adoptServerMessage(localMessage);
+        final adopted =
+            await ChatRepositoryService.adoptServerMessage(localMessage);
         if (!adopted) {
           // Fallback saved by adoptServerMessage already if not adopted
         }
 
         // Update conversation
-        await ChatDatabase.updateConversationLastMessage(
+        await ChatRepositoryService.updateConversationLastMessage(
           localMessage.conversationId,
           localMessage,
           unreadCount:
@@ -1088,7 +1098,7 @@ class LocalChatService {
           } catch (_) {}
         }
       } catch (e) {
-        print('Failed to handle real-time message: $e');
+        debugPrint('Failed to handle real-time message: $e');
       }
     });
   }

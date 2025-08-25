@@ -11,7 +11,8 @@ import '../../../../shared/models/conversation.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/providers/local_chat_providers.dart';
 import '../../../../shared/services/local_chat_service.dart';
-import '../../../../shared/database/chat_database.dart';
+import '../../../../shared/services/chat_repository_service.dart';
+import '../../../../shared/services/global_key_manager.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/chat_action_bar.dart';
 import '../widgets/local_message_bubble.dart';
@@ -51,12 +52,6 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   // Track typing status of the other user
   bool _isOtherUserTyping = false;
 
-  // Auto-scroll handling removed - not used
-
-  // Key map for locating message bubbles
-  final Map<String, GlobalKey> _messageKeys = {};
-  final Map<int, GlobalKey> _messageKeysByLocalId = {};
-
   // Selection mode state
   final Set<String> _selectedMessageIds = {};
   bool _isSelectionMode = false;
@@ -72,7 +67,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     final currentUserId = ref.read(authStateProvider).user?.id;
     final isMe = currentUserId != null && message.senderId == currentUserId;
     final screenSize = MediaQuery.of(context).size;
-    final estimatedBarWidth = 240.0;
+    const estimatedBarWidth = 240.0;
     final top = anchorRect.bottom - 56;
     double left = isMe
         ? (anchorRect.left - estimatedBarWidth)
@@ -111,17 +106,22 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                         .read(localChatServiceProvider)
                         .toggleReactionOnServer(message.serverId!, emoji);
                     debugPrint('[Reaction] server updated: $reactionsMap');
-                    await ChatDatabase.updateMessageReactions(
-                      serverId: message.serverId,
-                      reactionsJson: jsonEncode(reactionsMap),
+                    await ChatRepositoryService.updateMessageReactions(
+                      message.serverId!,
+                      jsonEncode(reactionsMap),
                     );
+                    // Refresh the messages to show updated reactions
+                    ref
+                        .read(localMessagesProvider(widget.conversation.id)
+                            .notifier)
+                        .refresh();
                   } catch (e) {
                     debugPrint('[Reaction] ERROR toggling reaction: $e');
                   }
                 },
                 onOpenPicker: () {
-                  debugPrint('[Reaction] open picker for msg=' +
-                      (message.serverId ?? message.id.toString()));
+                  debugPrint(
+                      '[Reaction] open picker for msg=${message.serverId ?? message.id}');
                   _hideReactionBar();
                   showDialog(
                     context: context,
@@ -140,10 +140,16 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                                     message.serverId!, emoji);
                             debugPrint(
                                 '[Reaction] server updated: $reactionsMap');
-                            await ChatDatabase.updateMessageReactions(
-                              serverId: message.serverId,
-                              reactionsJson: jsonEncode(reactionsMap),
+                            await ChatRepositoryService.updateMessageReactions(
+                              message.serverId!,
+                              jsonEncode(reactionsMap),
                             );
+                            // Refresh the messages to show updated reactions
+                            ref
+                                .read(localMessagesProvider(
+                                        widget.conversation.id)
+                                    .notifier)
+                                .refresh();
                           } catch (e) {
                             debugPrint(
                                 '[Reaction] ERROR toggling reaction from picker: $e');
@@ -275,7 +281,9 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     _scrollController.dispose();
     _messageController.dispose();
     _focusNode.dispose();
-    _messageKeys.clear(); // Clear message keys to prevent memory leaks
+
+    // Clean up GlobalKey management via service
+    GlobalKeyManager.instance.forceCleanup();
 
     // Leave conversation room and clear current conversation ID
     try {
@@ -463,7 +471,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           .toList();
 
       if (unreadFromOthers.isNotEmpty) {
-        print(
+        debugPrint(
             '📖 Sending read receipts for ${unreadFromOthers.length} unread messages');
         final realtimeService = ref.read(realtimeServiceProvider);
         realtimeService.markAsRead(unreadFromOthers, widget.conversation.id);
@@ -652,10 +660,11 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
     // Wait for messages to load, then scroll to the highlighted message
     Future.delayed(const Duration(milliseconds: 1000), () {
-      final messageKey = _messageKeys[widget.highlightMessageId];
-      if (messageKey?.currentContext != null) {
+      final messageKey = GlobalKeyManager.instance
+          .getMessageKey(widget.highlightMessageId!, widget.conversation.id);
+      if (messageKey.currentContext != null) {
         Scrollable.ensureVisible(
-          messageKey!.currentContext!,
+          messageKey.currentContext!,
           duration: const Duration(milliseconds: 500),
           curve: Curves.easeInOut,
         );
@@ -677,12 +686,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     );
   }
 
-  GlobalKey _getMessageKey(String messageId) {
-    return _messageKeys.putIfAbsent(messageId, () => GlobalKey());
-  }
-
+  /// Get GlobalKey for local message (delegated to GlobalKeyManager service)
   GlobalKey _getMessageKeyByLocalId(int localId) {
-    return _messageKeysByLocalId.putIfAbsent(localId, () => GlobalKey());
+    return GlobalKeyManager.instance
+        .getLocalMessageKey(localId, widget.conversation.id);
   }
 
   void _replyToMessage(LocalMessage message) {
@@ -868,12 +875,12 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   Future<void> _sendMessage({String? content}) async {
     final uiStartTime = DateTime.now();
-    print(
+    debugPrint(
         '🐛 [UI] _sendMessage called at ${uiStartTime.millisecondsSinceEpoch}');
-    print('🐛 [UI] Content: "$content"');
+    debugPrint('🐛 [UI] Content: "$content"');
 
     if (content?.trim().isEmpty ?? true) {
-      print('🐛 [UI] Empty content, returning early');
+      debugPrint('🐛 [UI] Empty content, returning early');
       return;
     }
 
@@ -881,7 +888,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       // Convert LocalMessageType to match the message type system
       LocalMessageType messageType = LocalMessageType.text;
 
-      print('🐛 [UI] Calling provider.sendMessage...');
+      debugPrint('🐛 [UI] Calling provider.sendMessage...');
       final providerCallStart = DateTime.now();
 
       // Send message through local provider (instant UI update)
@@ -894,10 +901,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           );
 
       final providerCallEnd = DateTime.now();
-      print(
+      debugPrint(
           '🐛 [UI] Provider.sendMessage took: ${providerCallEnd.difference(providerCallStart).inMilliseconds}ms');
 
-      print('🐛 [UI] Clearing message controller...');
+      debugPrint('🐛 [UI] Clearing message controller...');
       _messageController.clear();
 
       // Clear reply state after sending
@@ -907,7 +914,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         });
       }
 
-      print('🐛 [UI] Scrolling to bottom...');
+      debugPrint('🐛 [UI] Scrolling to bottom...');
       // Wait for UI to update then scroll to bottom
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -923,10 +930,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       });
 
       final uiEndTime = DateTime.now();
-      print(
+      debugPrint(
           '🐛 [UI] ✅ _sendMessage COMPLETED in: ${uiEndTime.difference(uiStartTime).inMilliseconds}ms');
     } catch (e) {
-      print('🐛 [UI] ❌ _sendMessage FAILED: $e');
+      debugPrint('🐛 [UI] ❌ _sendMessage FAILED: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -940,12 +947,12 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    print(
+    debugPrint(
         '🔍 [UI] LocalChatPage.build() called for conversationId: "${widget.conversation.id}"');
     final authState = ref.watch(authStateProvider);
     final messagesAsync =
         ref.watch(localMessagesProvider(widget.conversation.id));
-    print('🔍 [UI] messagesAsync state: ${messagesAsync.runtimeType}');
+    debugPrint('🔍 [UI] messagesAsync state: ${messagesAsync.runtimeType}');
 
     // Real-time messages are now handled by the centralized RealtimeDispatcher
     // This ensures no duplicate processing and better performance
@@ -1016,10 +1023,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
     // DEBUG: Log message count and conversation details
     messagesAsync.whenData((messages) {
-      print(
+      debugPrint(
           '🐛 [DEBUG] LocalChatPage: conversationId="${widget.conversation.id}" has ${messages.length} messages');
-      print('🐛 [DEBUG] Conversation type: ${widget.conversation.type}');
-      print(
+      debugPrint('🐛 [DEBUG] Conversation type: ${widget.conversation.type}');
+      debugPrint(
           '🐛 [DEBUG] Last message in conversation model: ${widget.conversation.lastMessage?.content ?? "null"}');
     });
 
@@ -1243,10 +1250,15 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                       final reactionsMap = await ref
                           .read(localChatServiceProvider)
                           .toggleReactionOnServer(message.serverId!, emoji);
-                      await ChatDatabase.updateMessageReactions(
-                        serverId: message.serverId,
-                        reactionsJson: jsonEncode(reactionsMap),
+                      await ChatRepositoryService.updateMessageReactions(
+                        message.serverId!,
+                        jsonEncode(reactionsMap),
                       );
+                      // Refresh the messages to show updated reactions
+                      ref
+                          .read(localMessagesProvider(widget.conversation.id)
+                              .notifier)
+                          .refresh();
                     } catch (_) {}
                   },
                   onTap: () {

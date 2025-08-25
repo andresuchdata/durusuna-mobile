@@ -16,7 +16,7 @@ import 'shared/services/chat_service.dart';
 import 'shared/services/auth_service.dart';
 import 'shared/services/notification_service.dart' as notification_service
     show unreadNotificationsCountProvider;
-import 'shared/database/chat_database.dart';
+import 'shared/repositories/repository_factory.dart';
 import 'shared/widgets/performance_optimized_list.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/auth/presentation/pages/login_page.dart';
@@ -40,8 +40,15 @@ void main() async {
   await Hive.initFlutter();
   await StorageService.init();
 
-  // Initialize Isar database for local-first chat
-  await ChatDatabase.initialize();
+  // Initialize repository factory (SQLite with Isar fallback)
+  await RepositoryFactory.initialize(preferSQLite: true);
+
+  // Log current repository type
+  final healthStatus = await RepositoryFactory.getHealthStatus();
+  debugPrint(
+      '✅ [RepositoryFactory] Using ${RepositoryFactory.repositoryTypeName} repository');
+  debugPrint(
+      '📊 [RepositoryFactory] Health: ${healthStatus['isHealthy'] ? 'Healthy' : 'Unhealthy'}');
 
   // Initialize platform-specific optimizations
   await PlatformOptimization.initialize();
@@ -101,9 +108,11 @@ class DurusunaMobileApp extends ConsumerWidget {
           ref.invalidate(notification_service.unreadNotificationsCountProvider);
 
           // Clear local chat database on logout for security
-          ChatDatabase.clearAllData();
-
-          debugPrint('✅ User providers and local data cleared on logout');
+          RepositoryFactory.repository.clearAllData().then((_) {
+            debugPrint('✅ User providers and local data cleared on logout');
+          }).catchError((e) {
+            debugPrint('❌ Error clearing database: $e');
+          });
         } catch (e) {
           debugPrint('❌ Error clearing providers: $e');
         }

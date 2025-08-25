@@ -130,7 +130,7 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
           updatedAt: DateTime.now(),
           participants: [user],
           otherUser: user,
-          unreadCount: 0,
+          unreadCount: 1, // New conversations should start as unread
           lastActivity: DateTime.now(),
           isOnline: false,
         );

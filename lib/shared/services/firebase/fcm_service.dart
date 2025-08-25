@@ -58,7 +58,10 @@ class FCMService {
       _fcmToken = await _messaging.getToken();
 
       if (_fcmToken != null) {
-        debugPrint('🔥 FCM Token obtained: ${_fcmToken!.substring(0, 20)}...');
+        final tokenPreview = _fcmToken!.length > 20
+            ? '${_fcmToken!.substring(0, 20)}...'
+            : _fcmToken;
+        debugPrint('🔥 FCM Token obtained: $tokenPreview');
         await _syncTokenWithBackend(_fcmToken!);
         await _saveTokenLocally(_fcmToken!);
       }

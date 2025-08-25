@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/local_message.dart';
-import '../../../../shared/database/chat_database.dart';
+import '../../../../shared/services/chat_repository_service.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/helpers/link_text.dart';
 import 'quote_preview.dart';
@@ -219,7 +219,8 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
 
     // Use a FutureBuilder to lazily fetch the quoted message content by id
     return FutureBuilder<LocalMessage?>(
-      future: ChatDatabase.getMessageByServerId(widget.message.replyToId!),
+      future:
+          ChatRepositoryService.getMessageByServerId(widget.message.replyToId!),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           final leftColor =

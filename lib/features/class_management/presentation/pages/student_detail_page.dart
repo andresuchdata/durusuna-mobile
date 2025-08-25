@@ -187,11 +187,12 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage>
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withOpacity(0.1),
+                              color:
+                                  AppTheme.primaryColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Text(
-                              'Student ID: ${widget.student.id.substring(0, 8)}',
+                              'Student ID: ${widget.student.id.length > 8 ? '${widget.student.id.substring(0, 8)}...' : widget.student.id}',
                               style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
@@ -270,7 +271,7 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.primaryColor.withOpacity(0.8),
+            AppTheme.primaryColor.withValues(alpha: 0.8),
             AppTheme.accentColor,
           ],
         ),
@@ -471,7 +472,7 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage>
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              Colors.orange.withOpacity(0.8),
+                              Colors.orange.withValues(alpha: 0.8),
                               Colors.orange[300]!,
                             ],
                           ),
@@ -728,7 +729,7 @@ class _StudentDetailPageState extends ConsumerState<StudentDetailPage>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
+                  color: statusColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(

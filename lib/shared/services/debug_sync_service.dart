@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../database/chat_database.dart';
+import '../services/chat_repository_service.dart';
 import 'local_chat_service.dart';
 import 'chat_service.dart';
 import '../models/local_conversation.dart';
@@ -21,7 +21,7 @@ class DebugSyncService {
 
       // Step 1: Clear local database
       print('1️⃣ Clearing local database...');
-      await ChatDatabase.clearAllData();
+      await ChatRepositoryService.clearAllData();
 
       // Step 2: Sync conversations from backend
       print('2️⃣ Syncing conversations from backend...');
@@ -51,7 +51,7 @@ class DebugSyncService {
           updatedAt: apiConv.updatedAt,
         );
 
-        await ChatDatabase.saveConversation(localConv);
+        await ChatRepositoryService.saveConversation(localConv);
       }
 
       // Step 3: Sync recent messages for each conversation
@@ -82,7 +82,7 @@ class DebugSyncService {
               readStatus: (apiMsg.readStatus as String?) ?? 'sent',
             );
 
-            await ChatDatabase.saveMessage(localMsg);
+            await ChatRepositoryService.saveMessage(localMsg);
           }
         } catch (e) {
           print('⚠️ Failed to sync messages for ${apiConv.id}: $e');

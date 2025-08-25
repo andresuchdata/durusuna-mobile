@@ -10,7 +10,7 @@ import '../../../../shared/services/local_chat_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/conversation.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
-import '../../../../shared/database/chat_database.dart';
+import '../../../../shared/services/chat_repository_service.dart';
 import 'local_chat_page.dart';
 import 'contacts_page.dart';
 
@@ -119,7 +119,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         const SnackBar(content: Text('🧹 Clearing local data...')),
       );
 
-      await ChatDatabase.clearAllData();
+      await ChatRepositoryService.clearAllData();
 
       // Refresh the conversations list
       ref.read(conversationsProvider.notifier).loadConversations();
@@ -144,7 +144,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         const SnackBar(content: Text('🔄 FORCE RECREATING database...')),
       );
 
-      await ChatDatabase.forceRecreateDatabase();
+      await ChatRepositoryService.forceRecreateDatabase();
 
       // Refresh the conversations list
       ref.read(conversationsProvider.notifier).loadConversations();
