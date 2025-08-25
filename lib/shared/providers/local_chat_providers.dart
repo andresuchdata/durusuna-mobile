@@ -10,11 +10,26 @@ import '../services/chat_repository_service.dart';
 import '../../core/storage/storage_service.dart';
 import '../services/realtime_service.dart';
 import '../services/realtime_dispatcher.dart';
+import '../repositories/repository_factory.dart';
+
+/// Provider to ensure repository is initialized before other services
+final repositoryInitializationProvider = FutureProvider<void>((ref) async {
+  if (!RepositoryFactory.isInitialized) {
+    debugPrint('🔄 [Provider] Initializing repository factory...');
+    await RepositoryFactory.initialize(preferSQLite: true);
+    debugPrint('✅ [Provider] Repository factory initialized successfully');
+  }
+  return;
+});
 
 /// Provider for local conversations (instant loading)
 final localConversationsProvider = StateNotifierProvider<
     LocalConversationsNotifier, AsyncValue<List<LocalConversation>>>(
-  (ref) => LocalConversationsNotifier(ref.read(localChatServiceProvider)),
+  (ref) {
+    // Ensure repository is initialized before creating the notifier
+    ref.watch(repositoryInitializationProvider);
+    return LocalConversationsNotifier(ref.read(localChatServiceProvider));
+  },
 );
 
 class LocalConversationsNotifier
@@ -362,24 +377,23 @@ class LocalMessagesNotifier
                   '🔄 [BACKGROUND] Provider state refreshed after message adoption');
             } else {
               // Fallback if adoption failed (e.g., optimistic message was deleted)
-              await ChatRepositoryService.markMessageSynced(
-                optimisticMessage.id.toString(),
-                serverMessage.serverId!,
-              );
               debugPrint(
-                  '⚠️ [BACKGROUND] Server message not adopted, marked as synced instead.');
+                  '⚠️ [BACKGROUND] Server message not adopted, will refresh state.');
 
               // Also refresh state for fallback case
               await _loadMessages(loadMore: false);
             }
           } catch (e) {
-            if (e.toString().contains('Unique index violated')) {
+            if (e.toString().contains('Unique index violated') ||
+                e.toString().contains('already exists')) {
               debugPrint(
                   '✅ [BACKGROUND] Message already adopted by real-time handler - skipping duplicate adoption.');
               // This is expected when real-time handler beats the background sync
               // The message is already properly synced, so we're done
             } else {
-              rethrow; // Re-throw other errors
+              debugPrint('❌ [BACKGROUND] Adoption error: $e');
+              // Refresh state anyway to show current data
+              await _loadMessages(loadMore: false);
             }
           }
         } else {
@@ -414,6 +428,37 @@ class LocalMessagesNotifier
     // Instead of manually loading, restart the stream watcher
     // to ensure it reflects the latest database state
     _watchMessages();
+  }
+
+  /// Force cleanup of duplicate messages
+  Future<void> forceCleanupDuplicates() async {
+    try {
+      debugPrint('🧹 [PROVIDER] Starting force cleanup of duplicates...');
+
+      // First fix negative ID issue
+      await ChatRepositoryService.fixNegativeIdIssue();
+
+      // Then force cleanup duplicates
+      await ChatRepositoryService.forceCleanupDuplicates();
+
+      // Refresh the messages after cleanup
+      await _loadMessages(loadMore: false);
+      debugPrint(
+          '🧹 [PROVIDER] Force cleanup completed and messages refreshed');
+    } catch (e) {
+      debugPrint('❌ [PROVIDER] Force cleanup failed: $e');
+    }
+  }
+
+  /// Manual cleanup trigger for testing/debugging
+  Future<void> manualCleanup() async {
+    try {
+      debugPrint('🧹 [PROVIDER] Manual cleanup triggered...');
+      await forceCleanupDuplicates();
+      debugPrint('🧹 [PROVIDER] Manual cleanup completed');
+    } catch (e) {
+      debugPrint('❌ [PROVIDER] Manual cleanup failed: $e');
+    }
   }
 
   void addMessage(LocalMessage message) {

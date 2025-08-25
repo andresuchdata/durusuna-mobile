@@ -10,6 +10,7 @@ import '../../core/storage/storage_service.dart';
 import 'api_service.dart';
 import '../../core/constants/api_constants.dart';
 import 'realtime_service.dart';
+import '../providers/local_chat_providers.dart';
 
 /// Local-first chat service that provides instant loading and background sync
 /// Similar to WhatsApp's architecture
@@ -32,7 +33,16 @@ class LocalChatService {
   Future<void> _initialize() async {
     // Initialize repository factory if not already done
     if (!RepositoryFactory.isInitialized) {
-      await RepositoryFactory.initialize(preferSQLite: true);
+      try {
+        await RepositoryFactory.initialize(preferSQLite: true);
+        debugPrint(
+            '✅ [LocalChatService] Repository factory initialized successfully');
+      } catch (e) {
+        debugPrint(
+            '❌ [LocalChatService] Failed to initialize repository factory: $e');
+        // Don't rethrow - let the service continue without repository for now
+        return;
+      }
     }
     // Touch realtime service so the field is considered used and ensure it's ready
     try {
@@ -58,6 +68,7 @@ class LocalChatService {
 
       return conversations;
     } catch (e) {
+      debugPrint('❌ [LocalChatService] Failed to get conversations: $e');
       throw LocalChatException('Failed to load conversations locally: $e');
     }
   }
@@ -87,6 +98,7 @@ class LocalChatService {
 
       return messages;
     } catch (e) {
+      debugPrint('❌ [LocalChatService] Failed to get messages: $e');
       throw LocalChatException('Failed to load messages locally: $e');
     }
   }
@@ -1120,6 +1132,8 @@ class LocalChatException implements Exception {
 
 // Provider for LocalChatService
 final localChatServiceProvider = Provider<LocalChatService>((ref) {
+  // Ensure repository is initialized before creating the service
+  ref.watch(repositoryInitializationProvider);
   final apiService = ref.read(apiServiceProvider);
   final realtimeService = ref.read(realtimeServiceProvider);
   return LocalChatService(apiService, realtimeService);

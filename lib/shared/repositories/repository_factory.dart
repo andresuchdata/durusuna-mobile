@@ -1,6 +1,6 @@
 import 'chat_repository.dart';
 import 'sqlite_chat_repository.dart';
-import 'isar_chat_repository.dart';
+import 'package:flutter/foundation.dart';
 
 /// Factory for creating and managing chat repositories
 /// This allows easy switching between different database implementations
@@ -19,47 +19,23 @@ class RepositoryFactory {
         final sqliteRepo = SQLiteChatRepository();
         await sqliteRepo.initialize();
         _currentRepository = sqliteRepo;
-        print('✅ [RepositoryFactory] Using SQLite repository');
-      } else {
-        // Try Isar first
-        final isarRepo = IsarChatRepository();
-        await isarRepo.initialize();
-        _currentRepository = isarRepo;
-        print('✅ [RepositoryFactory] Using Isar repository');
-      }
-
-      _initialized = true;
-    } catch (e) {
-      print(
-          '⚠️ [RepositoryFactory] Primary repository failed, trying fallback: $e');
-
-      try {
-        if (preferSQLite) {
-          // Fallback to Isar
-          final isarRepo = IsarChatRepository();
-          await isarRepo.initialize();
-          _currentRepository = isarRepo;
-          print('✅ [RepositoryFactory] Fallback to Isar repository successful');
-        } else {
-          // Fallback to SQLite
-          final sqliteRepo = SQLiteChatRepository();
-          await sqliteRepo.initialize();
-          _currentRepository = sqliteRepo;
-          print(
-              '✅ [RepositoryFactory] Fallback to SQLite repository successful');
-        }
-
         _initialized = true;
-      } catch (fallbackError) {
-        print('❌ [RepositoryFactory] Both repositories failed: $fallbackError');
-        rethrow;
+        debugPrint('✅ [RepositoryFactory] Using SQLite repository');
+      } else {
+        debugPrint('✅ [RepositoryFactory] Please try again with SQLite');
       }
+    } catch (e) {
+      debugPrint('⚠️ [RepositoryFactory] Primary repository failed: $e');
+      rethrow;
     }
   }
 
   /// Get the current repository instance
   static ChatRepository get repository {
     if (!_initialized || _currentRepository == null) {
+      // Try to initialize automatically if not already done
+      debugPrint(
+          '⚠️ [RepositoryFactory] Repository not initialized, attempting auto-initialization...');
       throw StateError('Repository not initialized. Call initialize() first.');
     }
     return _currentRepository!;
@@ -83,19 +59,13 @@ class RepositoryFactory {
           final sqliteRepo = SQLiteChatRepository();
           await sqliteRepo.initialize();
           _currentRepository = sqliteRepo;
-          print('✅ [RepositoryFactory] Switched to SQLite repository');
+          debugPrint('✅ [RepositoryFactory] Switched to SQLite repository');
           break;
-        case RepositoryType.isar:
-          final isarRepo = IsarChatRepository();
-          await isarRepo.initialize();
-          _currentRepository = isarRepo;
-          print('✅ [RepositoryFactory] Switched to Isar repository');
-          break;
-        case RepositoryType.unknown:
+        default:
           throw ArgumentError('Cannot switch to unknown repository type');
       }
     } catch (e) {
-      print('❌ [RepositoryFactory] Error switching repository: $e');
+      debugPrint('❌ [RepositoryFactory] Error switching repository: $e');
       rethrow;
     }
   }
@@ -104,9 +74,8 @@ class RepositoryFactory {
   static RepositoryType get currentType {
     if (_currentRepository is SQLiteChatRepository) {
       return RepositoryType.sqlite;
-    } else if (_currentRepository is IsarChatRepository) {
-      return RepositoryType.isar;
     }
+
     return RepositoryType.unknown;
   }
 
@@ -141,7 +110,7 @@ class RepositoryFactory {
       await _currentRepository!.close();
       _currentRepository = null;
       _initialized = false;
-      print('✅ [RepositoryFactory] Repository closed');
+      debugPrint('✅ [RepositoryFactory] Repository closed');
     }
   }
 
@@ -153,9 +122,7 @@ class RepositoryFactory {
     switch (currentType) {
       case RepositoryType.sqlite:
         return 'SQLite';
-      case RepositoryType.isar:
-        return 'Isar';
-      case RepositoryType.unknown:
+      default:
         return 'Unknown';
     }
   }

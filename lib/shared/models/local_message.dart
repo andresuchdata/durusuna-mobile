@@ -1,35 +1,26 @@
 import 'dart:convert';
-import 'package:isar/isar.dart';
 
-part 'local_message.g.dart';
-
-@collection
+/// Local message model for SQLite storage
+/// Note: ID field is managed by SQLite AUTO_INCREMENT, not Isar
 class LocalMessage {
-  Id id = Isar.autoIncrement; // Local auto-increment ID
+  int id; // Local auto-increment ID (SQLite PRIMARY KEY)
 
-  @Index(unique: true)
   String? serverId; // Server-side UUID
 
   /// Client-generated id to dedupe optimistic vs server messages
-  @Index(unique: true, caseSensitive: false)
   String? clientMessageId;
 
-  @Index()
   String conversationId;
 
-  @Index()
   String senderId;
 
-  @Index(caseSensitive: false)
   String? content;
 
-  @Enumerated(EnumType.name)
   LocalMessageType messageType;
 
   String? replyToId;
   String? replyToContent; // Denormalized for quick display
 
-  @Index()
   DateTime createdAt;
 
   DateTime? updatedAt;
@@ -38,11 +29,9 @@ class LocalMessage {
 
   bool isFromMe;
 
-  @Index()
   String? readStatus; // 'sent', 'delivered', 'read'
 
   // Sync status
-  @Index()
   bool isSynced;
 
   bool needsUpload; // For media files
@@ -60,6 +49,7 @@ class LocalMessage {
   String? reactions;
 
   LocalMessage({
+    this.id = 0, // Default to 0, SQLite will auto-assign
     this.serverId,
     this.clientMessageId,
     required this.conversationId,
@@ -85,7 +75,7 @@ class LocalMessage {
   });
 
   LocalMessage copyWith({
-    Id? id,
+    int? id,
     String? serverId,
     String? clientMessageId,
     String? conversationId,
@@ -109,7 +99,8 @@ class LocalMessage {
     String? metadataJson,
     String? reactions,
   }) {
-    final updated = LocalMessage(
+    return LocalMessage(
+      id: id ?? this.id,
       serverId: serverId ?? this.serverId,
       clientMessageId: clientMessageId ?? this.clientMessageId,
       conversationId: conversationId ?? this.conversationId,
@@ -133,9 +124,6 @@ class LocalMessage {
       metadataJson: metadataJson ?? this.metadataJson,
       reactions: reactions ?? this.reactions,
     );
-    // Preserve existing Isar primary key unless explicitly overridden
-    updated.id = id ?? this.id;
-    return updated;
   }
 }
 

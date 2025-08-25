@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 
 /// Production-grade GlobalKey management service
@@ -14,9 +13,6 @@ class GlobalKeyManager {
   // Cleanup timer
   Timer? _cleanupTimer;
 
-  // Random generator for UUID4
-  final Random _random = Random.secure();
-
   // Private constructor for singleton
   GlobalKeyManager._internal() {
     _startPeriodicCleanup();
@@ -28,59 +24,53 @@ class GlobalKeyManager {
     return _instance!;
   }
 
-  /// Generate a unique key for a message in a conversation
-  /// Uses UUID4 for guaranteed uniqueness
+  /// Generate a stable key for a message in a conversation
+  /// Uses stable identifiers without UUID for consistent keys
   GlobalKey getMessageKey(String messageId, String conversationId) {
-    final uniqueKey = 'msg_${messageId}_${conversationId}_${_generateUuid4()}';
+    final uniqueKey = 'msg_${messageId}_${conversationId}';
     return _getOrCreateKey(uniqueKey);
   }
 
-  /// Generate a unique key for a local message
-  /// Uses UUID4 for guaranteed uniqueness
+  /// Generate a stable key for a local message
+  /// Uses stable identifiers without UUID for consistent keys
   GlobalKey getLocalMessageKey(int localId, String conversationId) {
-    final uniqueKey = 'local_${localId}_${conversationId}_${_generateUuid4()}';
+    final uniqueKey = 'local_${localId}_${conversationId}';
     return _getOrCreateKey(uniqueKey);
   }
 
-  /// Generate a unique key for any widget with custom prefix
+  /// Generate a safer key for local messages with additional content hash
+  /// This prevents conflicts when the same local ID might appear multiple times
+  GlobalKey getLocalMessageKeyWithContent(
+      int localId, String conversationId, String? content) {
+    final contentHash = content?.hashCode ?? 0;
+    final uniqueKey = 'local_${localId}_${conversationId}_${contentHash.abs()}';
+    return _getOrCreateKey(uniqueKey);
+  }
+
+  /// Generate a stable key for any widget with custom prefix
   /// Useful for other features beyond chat
   GlobalKey getCustomKey(String prefix, String identifier, String context) {
-    final uniqueKey = '${prefix}_${identifier}_${context}_${_generateUuid4()}';
+    final uniqueKey = '${prefix}_${identifier}_${context}';
     return _getOrCreateKey(uniqueKey);
   }
 
-  /// Generate a unique key for new/optimistic messages
-  /// Ensures uniqueness even when message IDs might change
-  GlobalKey getOptimisticMessageKey(String conversationId) {
-    final uniqueKey = 'optimistic_${conversationId}_${_generateUuid4()}';
+  /// Generate a stable key for new/optimistic messages
+  /// Uses clientMessageId for stability when available
+  GlobalKey getOptimisticMessageKey(String conversationId,
+      {String? clientMessageId}) {
+    final uniqueKey = clientMessageId != null
+        ? 'optimistic_${clientMessageId}_${conversationId}'
+        : 'optimistic_${conversationId}_${DateTime.now().millisecondsSinceEpoch}';
     return _getOrCreateKey(uniqueKey);
   }
 
-  /// Generate a unique key for pending messages
-  /// Used when message ID is not yet available
+  /// Generate a stable key for pending messages
+  /// Uses clientId for stability when available
   GlobalKey getPendingMessageKey(String conversationId, String? clientId) {
-    if (clientId != null) {
-      final uniqueKey =
-          'pending_${clientId}_${conversationId}_${_generateUuid4()}';
-      return _getOrCreateKey(uniqueKey);
-    } else {
-      final uniqueKey = 'pending_${conversationId}_${_generateUuid4()}';
-      return _getOrCreateKey(uniqueKey);
-    }
-  }
-
-  /// Generate a UUID4 string for guaranteed uniqueness
-  /// Uses cryptographically secure random numbers
-  String _generateUuid4() {
-    final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
-
-    // Set version (4) and variant bits
-    bytes[6] = (bytes[6] & 0x0f) | 0x40; // Version 4
-    bytes[8] = (bytes[8] & 0x3f) | 0x80; // Variant 1
-
-    // Convert to hex string with dashes
-    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}';
+    final uniqueKey = clientId != null
+        ? 'pending_${clientId}_${conversationId}'
+        : 'pending_${conversationId}_${DateTime.now().millisecondsSinceEpoch}';
+    return _getOrCreateKey(uniqueKey);
   }
 
   /// Get or create a GlobalKey with usage tracking

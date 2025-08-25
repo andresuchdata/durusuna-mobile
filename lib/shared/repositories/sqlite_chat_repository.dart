@@ -214,13 +214,19 @@ class SQLiteChatRepository implements ChatRepository {
         }
       }
 
-      // Insert new message
-      await _db.insert(_messagesTable, _messageToMap(message));
+      // Insert new message (exclude ID to let SQLite auto-assign)
+      final insertId = await _db.insert(
+          _messagesTable, _messageToMap(message, excludeId: true));
+
+      // Update the message object with the assigned ID
+      message.id = insertId;
+
       final contentPreview =
           message.content != null && message.content!.length > 20
               ? '${message.content!.substring(0, 20)}...'
               : message.content ?? 'No content';
-      debugPrint('✅ [SQLite] New message saved: $contentPreview');
+      debugPrint(
+          '✅ [SQLite] New message saved with ID $insertId: $contentPreview');
     } catch (e) {
       debugPrint('❌ [SQLite] Error saving message: $e');
       rethrow;
@@ -422,6 +428,16 @@ class SQLiteChatRepository implements ChatRepository {
   @override
   Future<void> deleteDuplicateMessages() async {
     try {
+      // First, delete any messages with negative IDs (invalid Isar artifacts)
+      final negativeIdCount = await _db.delete(
+        _messagesTable,
+        where: 'id < 0',
+      );
+      if (negativeIdCount > 0) {
+        debugPrint(
+            '🧹 [SQLite] Removed $negativeIdCount messages with negative IDs');
+      }
+
       // Delete duplicates based on server_id
       await _db.execute('''
         DELETE FROM $_messagesTable 
@@ -630,8 +646,9 @@ class SQLiteChatRepository implements ChatRepository {
   // ========== DATA CONVERSION METHODS ==========
 
   /// Convert LocalMessage to Map for database
-  Map<String, dynamic> _messageToMap(LocalMessage message) {
-    return {
+  Map<String, dynamic> _messageToMap(LocalMessage message,
+      {bool excludeId = false}) {
+    final map = <String, dynamic>{
       'server_id': message.serverId,
       'client_message_id': message.clientMessageId,
       'conversation_id': message.conversationId,
@@ -659,11 +676,19 @@ class SQLiteChatRepository implements ChatRepository {
       'read_at_timestamp': message.readAt?.millisecondsSinceEpoch,
       'delivered_at_timestamp': message.deliveredAt?.millisecondsSinceEpoch,
     };
+
+    // Include ID only if not excluding it (for updates)
+    if (!excludeId && message.id > 0) {
+      map['id'] = message.id;
+    }
+
+    return map;
   }
 
   /// Convert Map from database to LocalMessage
   LocalMessage _mapToMessage(Map<String, dynamic> row) {
     return LocalMessage(
+      id: row['id'] ?? 0,
       serverId: row['server_id'],
       clientMessageId: row['client_message_id'],
       conversationId: row['conversation_id'],

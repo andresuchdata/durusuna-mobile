@@ -215,6 +215,15 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       _markOnChatPageEnter();
       // Connection state listening moved to build method to avoid assertion error
 
+      // CRITICAL: Fix negative ID issue first
+      Future.delayed(const Duration(milliseconds: 100), () async {
+        try {
+          await ChatRepositoryService.fixNegativeIdIssue();
+        } catch (_) {
+          // Silent fail - don't block chat loading
+        }
+      });
+
       // Reconcile any leftover pending messages on initial open
       Future.delayed(const Duration(milliseconds: 250), () async {
         try {
@@ -687,9 +696,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   /// Get GlobalKey for local message (delegated to GlobalKeyManager service)
-  GlobalKey _getMessageKeyByLocalId(int localId) {
-    return GlobalKeyManager.instance
-        .getLocalMessageKey(localId, widget.conversation.id);
+  /// Uses content hash for additional uniqueness to prevent conflicts
+  GlobalKey _getMessageKeyByLocalId(int localId, {String? content}) {
+    return GlobalKeyManager.instance.getLocalMessageKeyWithContent(
+        localId, widget.conversation.id, content);
   }
 
   void _replyToMessage(LocalMessage message) {
@@ -1134,10 +1144,47 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   Widget _buildMessagesList(List<LocalMessage> messages, dynamic authState) {
+    // CRITICAL: Deduplicate messages at UI level to prevent GlobalKey conflicts
+    // This prevents crashes when duplicate messages exist in the database
+    final deduplicatedMessages = <LocalMessage>[];
+    final seenLocalIds = <int>{};
+    final seenServerIds = <String>{};
+
+    for (final message in messages) {
+      bool shouldAdd = true;
+
+      // Check for duplicate local IDs
+      if (seenLocalIds.contains(message.id)) {
+        debugPrint('🚨 UI: Skipping duplicate local ID: ${message.id}');
+        shouldAdd = false;
+      }
+
+      // Check for duplicate server IDs
+      if (message.serverId != null &&
+          seenServerIds.contains(message.serverId)) {
+        debugPrint('🚨 UI: Skipping duplicate server ID: ${message.serverId}');
+        shouldAdd = false;
+      }
+
+      if (shouldAdd) {
+        deduplicatedMessages.add(message);
+        seenLocalIds.add(message.id);
+        if (message.serverId != null) {
+          seenServerIds.add(message.serverId!);
+        }
+      }
+    }
+
+    if (deduplicatedMessages.length != messages.length) {
+      debugPrint(
+          '🧹 UI: Filtered ${messages.length - deduplicatedMessages.length} duplicate messages from UI');
+    }
+
     // AlwaysScrollable so RefreshIndicator can trigger even with few/no items
     // Calculate item count including typing indicator
     final itemCount =
-        (messages.isEmpty ? 0 : messages.length) + (_isOtherUserTyping ? 1 : 0);
+        (deduplicatedMessages.isEmpty ? 0 : deduplicatedMessages.length) +
+            (_isOtherUserTyping ? 1 : 0);
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
@@ -1193,7 +1240,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
               ),
             );
           }
-          if (messages.isEmpty) {
+          if (deduplicatedMessages.isEmpty) {
             // Render a spacer so the list still lays out and allows pull-to-refresh
             return SizedBox(
               height: MediaQuery.of(context).size.height * 0.5,
@@ -1201,18 +1248,18 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             );
           }
           // Show typing indicator at the end of the list
-          if (index == messages.length && _isOtherUserTyping) {
+          if (index == deduplicatedMessages.length && _isOtherUserTyping) {
             return _buildTypingIndicator();
           }
 
-          if (index >= messages.length) {
+          if (index >= deduplicatedMessages.length) {
             return const SizedBox.shrink();
           }
-          final message = messages[index];
+          final message = deduplicatedMessages[index];
           final isMe = message.isFromMe;
           final showTimestamp = _shouldShowTimestamp(
             message,
-            index > 0 ? messages[index - 1] : null,
+            index > 0 ? deduplicatedMessages[index - 1] : null,
           );
 
           return Column(
@@ -1232,7 +1279,8 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
               RepaintBoundary(
                 child: LocalMessageBubble(
                   // Use localId-based key to avoid duplicate GlobalKey errors when serverId/clientId change
-                  key: _getMessageKeyByLocalId(message.id),
+                  key: _getMessageKeyByLocalId(message.id,
+                      content: message.content),
                   message: message,
                   isMe: isMe,
                   isGroup: widget.conversation.type == 'group',
@@ -1275,7 +1323,8 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                   },
                   onDoubleTap: () {
                     // Quick react: show bar centered over bubble for now
-                    final key = _getMessageKeyByLocalId(message.id);
+                    final key = _getMessageKeyByLocalId(message.id,
+                        content: message.content);
                     final ctx = key.currentContext;
                     if (ctx != null) {
                       final box = ctx.findRenderObject() as RenderBox?;
@@ -1286,7 +1335,8 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                     }
                   },
                   onAddReaction: () {
-                    final key = _getMessageKeyByLocalId(message.id);
+                    final key = _getMessageKeyByLocalId(message.id,
+                        content: message.content);
                     final ctx = key.currentContext;
                     if (ctx != null) {
                       final box = ctx.findRenderObject() as RenderBox?;
