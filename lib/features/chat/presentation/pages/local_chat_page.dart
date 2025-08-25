@@ -273,14 +273,15 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       // Handle message highlighting and scrolling if requested
       if (widget.highlightMessageId != null && widget.scrollToMessage) {
         _scrollToHighlightedMessage();
-      } else {
-        // Use delayed scroll method for better reliability
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            _ensureScrollToBottom();
-          }
-        });
       }
+
+      // Ensure scroll to bottom after initial load
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          debugPrint('🔄 [UI] Initial scroll to bottom after page load...');
+          _scrollToBottom(animated: false);
+        }
+      });
     });
   }
 
@@ -359,8 +360,13 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   void _onScroll() {
+    // Since ListView is reversed:
+    // - pixels = 0 means we're at the bottom (latest messages)
+    // - pixels = maxScrollExtent means we're at the top (oldest messages)
+
     // Load more messages when scrolling to the top (older messages)
-    if (_scrollController.position.pixels <= 200) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
       final messagesNotifier =
           ref.read(localMessagesProvider(widget.conversation.id).notifier);
       if (messagesNotifier.hasMore) {
@@ -368,9 +374,8 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       }
     }
 
-    // Mark conversation as read when user scrolls to bottom
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 100) {
+    // Mark conversation as read when user scrolls to bottom (latest messages)
+    if (_scrollController.position.pixels <= 100) {
       _markAsReadWhenAtBottom();
     }
   }
@@ -833,17 +838,19 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   void _scrollToBottom({bool animated = true}) {
     if (!mounted || !_scrollController.hasClients) {
-      return;
-    }
-
-    final position = _scrollController.position;
-    final targetPosition = position.maxScrollExtent;
-
-    if (targetPosition <= 0) {
+      debugPrint(
+          '⚠️ [UI] Cannot scroll to bottom: mounted=$mounted, hasClients=${_scrollController.hasClients}');
       return;
     }
 
     try {
+      final position = _scrollController.position;
+      // Since ListView is reversed, scroll to 0 to show latest messages (bottom)
+      final targetPosition = 0.0;
+
+      debugPrint(
+          '🔄 [UI] Scrolling to bottom: targetPosition=$targetPosition, animated=$animated, currentPosition=${position.pixels}');
+
       if (animated) {
         _scrollController.animateTo(
           targetPosition,
@@ -854,7 +861,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         _scrollController.jumpTo(targetPosition);
       }
     } catch (e) {
-      // Error in scrollToBottom
+      debugPrint('❌ [UI] Error in _scrollToBottom: $e');
     }
   }
 
@@ -863,11 +870,17 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+        try {
+          final position = _scrollController.position;
+          // Since ListView is reversed, scroll to 0 to show latest messages (bottom)
+          _scrollController.animateTo(
+            0.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        } catch (e) {
+          debugPrint('❌ [UI] Error in _ensureScrollToBottom: $e');
+        }
       }
     });
   }
@@ -1040,6 +1053,44 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           '🐛 [DEBUG] Last message in conversation model: ${widget.conversation.lastMessage?.content ?? "null"}');
     });
 
+    // CRITICAL: Listen for messages to be loaded and scroll to bottom
+    ref.listen(localMessagesProvider(widget.conversation.id), (previous, next) {
+      next.whenData((messages) {
+        // Scroll to bottom on first load or when messages are added
+        if (messages.isNotEmpty) {
+          final shouldScroll = previous?.isLoading == true ||
+              (previous?.value != null &&
+                  messages.length > previous!.value!.length);
+
+          if (shouldScroll) {
+            debugPrint(
+                '🔄 [UI] Messages loaded/updated, scrolling to bottom... (${messages.length} messages)');
+
+            // Immediate scroll
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _scrollToBottom(animated: false);
+              }
+            });
+
+            // Backup scroll after a short delay
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                _scrollToBottom(animated: false);
+              }
+            });
+
+            // Final backup scroll after layout is complete
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (mounted) {
+                _scrollToBottom(animated: false);
+              }
+            });
+          }
+        }
+      });
+    });
+
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.dark
           ? AppTheme.chatBackgroundDark
@@ -1189,10 +1240,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         final position = _scrollController.position;
-        // Detect pull-up gesture near bottom to sync latest
+        // Since ListView is reversed, detect pull-up gesture near top (pixels = 0) to sync latest
         if (notification is OverscrollNotification &&
             notification.overscroll > 8 &&
-            position.pixels >= position.maxScrollExtent - 8 &&
+            position.pixels <= 8 &&
             !_isPullUpRefreshing) {
           _startPullUpRefresh();
         }
