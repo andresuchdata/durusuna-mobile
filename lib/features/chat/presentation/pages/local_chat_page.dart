@@ -1153,7 +1153,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       },
       child: ListView.builder(
         controller: _scrollController,
-        reverse: false,
+        reverse: true, // Show latest messages at bottom
         physics: const AlwaysScrollableScrollPhysics(
             parent: HighRefreshScrollPhysics()),
         padding: const EdgeInsets.fromLTRB(4, 2, 4, 32),

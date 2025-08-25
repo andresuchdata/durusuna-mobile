@@ -308,7 +308,21 @@ class RealtimeDispatcher {
                 converted,
               );
         } catch (_) {}
-        return; // Don't refresh - the stream will update automatically
+
+        // CRITICAL: Refresh the messages provider to show updated message status
+        try {
+          _ref!
+              .read(localMessagesProvider(realtimeMessage.conversationId)
+                  .notifier)
+              .refresh();
+          debugPrint(
+              '🔄 RealtimeDispatcher: Refreshed messages provider after own message adoption');
+        } catch (e) {
+          debugPrint(
+              '⚠️ RealtimeDispatcher: Failed to refresh messages provider: $e');
+        }
+
+        return; // Message adopted and UI refreshed
       }
 
       debugPrint(

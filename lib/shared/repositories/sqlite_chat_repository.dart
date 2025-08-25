@@ -378,7 +378,7 @@ class SQLiteChatRepository implements ChatRepository {
         _messagesTable,
         where: 'is_synced = ?',
         whereArgs: [0],
-        orderBy: 'created_at_timestamp ASC',
+        orderBy: 'created_at_timestamp DESC',
       );
 
       return results.map((row) => _mapToMessage(row)).toList();

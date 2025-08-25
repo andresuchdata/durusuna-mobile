@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../models/local_message.dart';
 import '../models/local_conversation.dart';
 import '../models/local_user.dart';
@@ -279,11 +280,102 @@ class ChatRepositoryService {
   }
 
   /// Adopt server message (for optimistic updates)
+  /// This method should find and update the existing optimistic message with server data
   static Future<bool> adoptServerMessage(LocalMessage serverMessage) async {
-    // This would need to be implemented in the repository
-    // For now, just save the message
-    await saveMessage(serverMessage);
-    return true;
+    try {
+      debugPrint(
+          '🔄 [ChatRepositoryService] Starting adoption for server message: ${serverMessage.serverId}');
+      debugPrint(
+          '🔄 [ChatRepositoryService] Server message content: "${serverMessage.content}"');
+      debugPrint(
+          '🔄 [ChatRepositoryService] Server message timestamp: ${serverMessage.createdAt}');
+
+      // First, try to find an existing optimistic message by content and timestamp
+      // This handles the case where the optimistic message was created locally
+      final existingMessages = await getAllMessages();
+      debugPrint(
+          '🔄 [ChatRepositoryService] Found ${existingMessages.length} total messages in database');
+
+      // Find optimistic messages for this conversation
+      final optimisticMessages = existingMessages
+          .where((msg) =>
+              msg.serverId == null &&
+              msg.conversationId == serverMessage.conversationId &&
+              msg.isFromMe == serverMessage.isFromMe)
+          .toList();
+      debugPrint(
+          '🔄 [ChatRepositoryService] Found ${optimisticMessages.length} optimistic messages for conversation ${serverMessage.conversationId}');
+
+      for (final msg in optimisticMessages) {
+        debugPrint(
+            '🔄 [ChatRepositoryService] Optimistic message: id=${msg.id}, content="${msg.content}", timestamp=${msg.createdAt}');
+      }
+
+      // Find optimistic message that matches this server message
+      // Use more flexible matching to handle timezone differences and recent messages
+      final optimisticMessage = existingMessages.firstWhere(
+        (msg) {
+          final isMatch = msg.serverId == null && // Not yet synced
+              msg.content == serverMessage.content && // Same content
+              msg.isFromMe == serverMessage.isFromMe && // Same sender
+              msg.conversationId ==
+                  serverMessage.conversationId && // Same conversation
+              // More flexible time matching - any optimistic message from last 30 minutes
+              (msg.createdAt.isAfter(DateTime.now().subtract(
+                  const Duration(minutes: 30)))); // Recent optimistic message
+
+          if (isMatch) {
+            debugPrint(
+                '✅ [ChatRepositoryService] Found matching optimistic message: id=${msg.id}, content="${msg.content}"');
+          }
+          return isMatch;
+        },
+        orElse: () {
+          debugPrint(
+              '❌ [ChatRepositoryService] No matching optimistic message found, will save as new message');
+          return serverMessage; // Fallback to server message
+        },
+      );
+
+      if (optimisticMessage.id != serverMessage.id) {
+        // Update the existing optimistic message with server data
+        debugPrint(
+            '🔄 [ChatRepositoryService] Adopting server message into optimistic message ${optimisticMessage.id}');
+
+        final updatedMessage = optimisticMessage.copyWith(
+          serverId: serverMessage.serverId,
+          isSynced: true,
+          readStatus: serverMessage.readStatus,
+          createdAt: serverMessage.createdAt, // Use server timestamp
+          reactions: serverMessage.reactions,
+        );
+
+        await saveMessage(updatedMessage);
+        debugPrint(
+            '✅ [ChatRepositoryService] Successfully adopted server message ${serverMessage.serverId} into optimistic message ${optimisticMessage.id}');
+        debugPrint(
+            '✅ [ChatRepositoryService] Updated message now has serverId: ${updatedMessage.serverId}, readStatus: ${updatedMessage.readStatus}');
+
+        // Clean up any remaining duplicates
+        await cleanupDuplicateMessages();
+
+        return true;
+      } else {
+        // No optimistic message found, just save the server message
+        debugPrint(
+            '⚠️ [ChatRepositoryService] No optimistic message to adopt, saving server message as new');
+        await saveMessage(serverMessage);
+        debugPrint(
+            '✅ [ChatRepositoryService] Saved server message ${serverMessage.serverId} (no optimistic message to adopt)');
+        return true;
+      }
+    } catch (e) {
+      debugPrint(
+          '❌ [ChatRepositoryService] Failed to adopt server message: $e');
+      // Fallback: just save the server message
+      await saveMessage(serverMessage);
+      return false;
+    }
   }
 
   /// Remove pending message
@@ -296,5 +388,49 @@ class ChatRepositoryService {
   /// Force recreate database (for debug)
   static Future<void> forceRecreateDatabase() async {
     await clearAllData();
+  }
+
+  /// Clean up duplicate messages (optimistic + server versions)
+  static Future<void> cleanupDuplicateMessages() async {
+    try {
+      final allMessages = await getAllMessages();
+      final duplicates = <String, List<LocalMessage>>{};
+
+      // Group messages by content and conversation
+      for (final message in allMessages) {
+        final key =
+            '${message.content}_${message.conversationId}_${message.isFromMe}';
+        duplicates.putIfAbsent(key, () => []).add(message);
+      }
+
+      // Find and remove duplicates
+      int removedCount = 0;
+      for (final entry in duplicates.entries) {
+        final messages = entry.value;
+        if (messages.length > 1) {
+          // Keep the one with serverId, remove optimistic ones
+          final serverMessage = messages.firstWhere(
+            (msg) => msg.serverId != null,
+            orElse: () => messages.first,
+          );
+
+          for (final msg in messages) {
+            if (msg.id != serverMessage.id) {
+              await deleteMessage(msg.id);
+              removedCount++;
+              debugPrint(
+                  '🧹 [ChatRepositoryService] Removed duplicate message: ${msg.id} (${msg.content})');
+            }
+          }
+        }
+      }
+
+      if (removedCount > 0) {
+        debugPrint(
+            '🧹 [ChatRepositoryService] Cleaned up $removedCount duplicate messages');
+      }
+    } catch (e) {
+      debugPrint('❌ [ChatRepositoryService] Failed to cleanup duplicates: $e');
+    }
   }
 }

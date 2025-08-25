@@ -355,6 +355,11 @@ class LocalMessagesNotifier
             if (adopted) {
               debugPrint(
                   '🔄 [BACKGROUND] Server message adopted into existing optimistic message.');
+
+              // CRITICAL: Refresh the provider state to reflect the adoption
+              await _loadMessages(loadMore: false);
+              debugPrint(
+                  '🔄 [BACKGROUND] Provider state refreshed after message adoption');
             } else {
               // Fallback if adoption failed (e.g., optimistic message was deleted)
               await ChatRepositoryService.markMessageSynced(
@@ -363,6 +368,9 @@ class LocalMessagesNotifier
               );
               debugPrint(
                   '⚠️ [BACKGROUND] Server message not adopted, marked as synced instead.');
+
+              // Also refresh state for fallback case
+              await _loadMessages(loadMore: false);
             }
           } catch (e) {
             if (e.toString().contains('Unique index violated')) {

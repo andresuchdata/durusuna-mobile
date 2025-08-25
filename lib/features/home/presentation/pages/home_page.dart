@@ -133,13 +133,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     super.initState();
     // Add debug logging to understand authentication state
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      debugPrint('🏠 EnhancedHomePage: PostFrame callback triggered');
       final authState = ref.read(authStateProvider);
-      debugPrint(
-          '🔐 Auth State - isAuthenticated: ${authState.isAuthenticated}');
-      debugPrint('👤 Auth State - user: ${authState.user?.email ?? 'null'}');
-      debugPrint('🔄 Auth State - isLoading: ${authState.isLoading}');
-      debugPrint('❌ Auth State - error: ${authState.error ?? 'null'}');
 
       // If user is null but we might have stored data, try to reinitialize
       if (authState.user == null && !authState.isLoading) {
@@ -170,13 +164,7 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
     final user = authState.user;
     final currentIndex = ref.watch(globalBottomNavigationProvider);
 
-    debugPrint(
-        '🏠 EnhancedHomePage: Building with user: ${user?.email ?? 'null'}');
-    debugPrint(
-        '🔐 EnhancedHomePage: isAuthenticated: ${authState.isAuthenticated}');
-
     if (user == null) {
-      debugPrint('⚠️ EnhancedHomePage: User is null, showing loading');
       return Scaffold(
         backgroundColor: AppTheme.backgroundColor,
         body: Center(
@@ -205,9 +193,6 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
         ),
       );
     }
-
-    debugPrint(
-        '✅ EnhancedHomePage: Rendering main content for user: ${user.email}');
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
