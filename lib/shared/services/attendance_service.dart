@@ -553,6 +553,97 @@ class AttendanceService {
     }
   }
 
+  // Teacher attendance methods
+  Future<TeacherAttendanceOverview> getTeacherAttendanceOverview(
+      DateTime date) async {
+    try {
+      final headers = await _getHeaders();
+      final dateString = _formatDateToString(date);
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/attendance/teacher/overview?date=$dateString'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        return TeacherAttendanceOverview.fromJson(data['overview']);
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied - teacher access required');
+      } else {
+        throw Exception(
+            'Failed to fetch teacher attendance overview: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching teacher attendance overview: $e');
+    }
+  }
+
+  Future<AttendanceRecord?> getTeacherAttendanceStatus(DateTime date) async {
+    try {
+      final headers = await _getHeaders();
+      final dateString = _formatDateToString(date);
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/attendance/teacher/status?date=$dateString'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        if (data['attendance'] != null) {
+          return AttendanceRecord.fromJson(data['attendance']);
+        }
+        return null;
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied - teacher access required');
+      } else {
+        throw Exception(
+            'Failed to fetch teacher attendance status: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching teacher attendance status: $e');
+    }
+  }
+
+  Future<AttendanceRecord> submitTeacherAttendance(
+      AttendanceStatus status, String? notes) async {
+    try {
+      final headers = await _getHeaders();
+      final body = json.encode({
+        'status': status.name,
+        'notes': notes,
+      });
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/attendance/teacher/submit'),
+        headers: headers,
+        body: body,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        return AttendanceRecord.fromJson(data['record']);
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied - teacher access required');
+      } else if (response.statusCode == 409) {
+        throw Exception('Attendance already submitted for this date');
+      } else {
+        final Map<String, dynamic> errorData = json.decode(response.body);
+        throw Exception(
+            errorData['error'] ?? 'Failed to submit teacher attendance');
+      }
+    } catch (e) {
+      throw Exception('Error submitting teacher attendance: $e');
+    }
+  }
+
   // Helper methods for quick actions
   Future<bool> canMarkAttendanceForClass(String classId) async {
     try {

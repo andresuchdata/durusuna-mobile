@@ -1009,25 +1009,49 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
     // CRITICAL: Listen for real-time typing indicators
     ref.listen(realtimeTypingProvider, (previous, next) {
+      debugPrint('🔍 [TYPING] Received typing event: $next');
       next.whenData((typingEvent) {
+        debugPrint(
+            '🔍 [TYPING] Processing typing event: conversationId=${typingEvent.conversationId}, userId=${typingEvent.userId}, isTyping=${typingEvent.isTyping}');
+        debugPrint(
+            '🔍 [TYPING] Current conversation ID: ${widget.conversation.id}');
+        debugPrint(
+            '🔍 [TYPING] Other user ID: ${widget.conversation.otherUser?.id}');
+
         if (typingEvent.conversationId == widget.conversation.id) {
           final otherUserId = widget.conversation.otherUser?.id;
+          debugPrint(
+              '🔍 [TYPING] Conversation ID matches, checking user ID...');
           if (otherUserId != null && typingEvent.userId == otherUserId) {
+            debugPrint(
+                '🔍 [TYPING] User ID matches! Setting typing state to: ${typingEvent.isTyping}');
             setState(() {
               _isOtherUserTyping = typingEvent.isTyping;
+              debugPrint(
+                  '🔍 [TYPING] State updated: _isOtherUserTyping = $_isOtherUserTyping');
             });
 
             // Auto-hide typing indicator after 3 seconds of no updates
             if (typingEvent.isTyping) {
+              debugPrint('🔍 [TYPING] Setting auto-hide timer for 3 seconds');
               Future.delayed(const Duration(seconds: 3), () {
                 if (mounted) {
+                  debugPrint('🔍 [TYPING] Auto-hiding typing indicator');
                   setState(() {
                     _isOtherUserTyping = false;
+                    debugPrint(
+                        '🔍 [TYPING] Auto-hide: _isOtherUserTyping = $_isOtherUserTyping');
                   });
                 }
               });
             }
+          } else {
+            debugPrint(
+                '🔍 [TYPING] User ID mismatch: expected $otherUserId, got ${typingEvent.userId}');
           }
+        } else {
+          debugPrint(
+              '🔍 [TYPING] Conversation ID mismatch: expected ${widget.conversation.id}, got ${typingEvent.conversationId}');
         }
       });
     });
@@ -1300,6 +1324,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           }
           // Show typing indicator at the end of the list
           if (index == deduplicatedMessages.length && _isOtherUserTyping) {
+            debugPrint('🔍 [TYPING] Building typing indicator widget');
             return _buildTypingIndicator();
           }
 
@@ -1408,6 +1433,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   Widget _buildTypingIndicator() {
+    debugPrint('🔍 [TYPING] _buildTypingIndicator() called');
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
       child: Align(

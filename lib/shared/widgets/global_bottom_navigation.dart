@@ -121,9 +121,10 @@ class GlobalBottomNavigation extends ConsumerWidget {
       ),
     ];
 
-    // Only add attendance tab for students and parents
+    // Add attendance tab for students, parents, and teachers
     if (user?.userType == UserType.student ||
-        user?.userType == UserType.parent) {
+        user?.userType == UserType.parent ||
+        user?.userType == UserType.teacher) {
       items.add(
         const BottomNavigationBarItem(
           icon: Icon(Icons.how_to_reg),
@@ -145,8 +146,9 @@ class GlobalBottomNavigation extends ConsumerWidget {
 
   void _handleNavigation(BuildContext context, WidgetRef ref, int index) {
     final user = ref.read(authStateProvider).user;
-    final hasAttendanceTab =
-        user?.userType == UserType.student || user?.userType == UserType.parent;
+    final hasAttendanceTab = user?.userType == UserType.student ||
+        user?.userType == UserType.parent ||
+        user?.userType == UserType.teacher;
 
     // If a custom onTap handler is provided, use it
     if (onTap != null) {

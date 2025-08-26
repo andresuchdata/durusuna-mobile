@@ -535,3 +535,31 @@ class StudentWithAttendance {
     return '$f$l';
   }
 }
+
+@JsonSerializable()
+class TeacherAttendanceOverview {
+  @JsonKey(name: 'teacher_id')
+  final String teacherId;
+  @JsonKey(name: 'teacher_name')
+  final String teacherName;
+  @JsonKey(name: 'total_classes')
+  final int totalClasses;
+  @JsonKey(name: 'classes_with_attendance')
+  final int classesWithAttendance;
+  @JsonKey(name: 'classes_without_attendance')
+  final int classesWithoutAttendance;
+  final List<Map<String, dynamic>> classes;
+
+  TeacherAttendanceOverview({
+    required this.teacherId,
+    required this.teacherName,
+    required this.totalClasses,
+    required this.classesWithAttendance,
+    required this.classesWithoutAttendance,
+    required this.classes,
+  });
+
+  factory TeacherAttendanceOverview.fromJson(Map<String, dynamic> json) =>
+      _$TeacherAttendanceOverviewFromJson(json);
+  Map<String, dynamic> toJson() => _$TeacherAttendanceOverviewToJson(this);
+}

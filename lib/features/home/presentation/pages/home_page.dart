@@ -25,6 +25,7 @@ import '../../../class_management/presentation/widgets/create_class_dialog.dart'
 import '../../../../shared/services/assignments_service.dart';
 import '../../../class_updates/presentation/pages/class_updates_page.dart';
 import '../../../attendance/presentation/pages/student_attendance_page.dart';
+import '../../../attendance/presentation/pages/teacher_attendance_page.dart';
 
 import '../../../subjects/presentation/pages/subjects_main_page.dart';
 import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
@@ -204,7 +205,9 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
             _buildEnhancedHomeTab(user),
             _buildConversationsTab(),
             _buildAllClassesTab(user),
-            const StudentAttendancePage(),
+            user.userType == UserType.teacher
+                ? const TeacherAttendancePage()
+                : const StudentAttendancePage(),
             _buildProfileTab(user),
           ],
         ),
