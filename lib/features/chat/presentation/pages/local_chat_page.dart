@@ -1231,14 +1231,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           ? AppTheme.chatBackgroundDark
           : AppTheme.chatBackgroundLight,
       appBar: _buildAppBar(),
-      floatingActionButton: FloatingActionButton.small(
-        onPressed: () async {
-          debugPrint('🧪 [TEST] Testing typing indicator via realtime service');
-          final debugService = ref.read(debugSyncServiceProvider);
-          await debugService.testTypingIndicator(widget.conversation.id);
-        },
-        child: const Icon(Icons.keyboard),
-      ),
+      // Removed floating action button with keyboard icon
       body: Column(
         children: [
           // Messages list

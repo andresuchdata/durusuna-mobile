@@ -660,10 +660,11 @@ class RealtimeService with WidgetsBindingObserver {
   }
 
   /// Mark messages as delivered
-  void markAsDelivered(List<String> messageIds) {
+  void markAsDelivered(List<String> messageIds, [String? conversationId]) {
     if (!_isConnected) return;
     _socket!.emit('message:delivered', {
       'messageIds': messageIds,
+      'conversationId': conversationId,
       'userId': _currentUserId,
       'deliveredAt': DateTime.now().toIso8601String(),
     });

@@ -514,6 +514,31 @@ class RealtimeDispatcher {
             '📝 [DEBUG] Skipping auto-mark-read - app not in foreground');
       }
     }
+
+    // CRITICAL: Always send delivered status for incoming messages from other users
+    // This ensures the sender sees 2 gray ticks (delivered) even if not read
+    if (!isFromCurrentUser && localMessage.serverId != null) {
+      try {
+        final realtimeService = _ref!.read(realtimeServiceProvider);
+        debugPrint(
+          '📦 [DISPATCHER] Sending delivered status for message ${localMessage.serverId}',
+        );
+        realtimeService.markAsDelivered(
+            [localMessage.serverId!], localMessage.conversationId);
+        debugPrint(
+          '✅ [DISPATCHER] Delivered status sent via WebSocket for message ${localMessage.serverId}',
+        );
+      } catch (e) {
+        debugPrint(
+          '❌ [DISPATCHER] Failed to send delivered status: $e',
+        );
+      }
+    } else if (isFromCurrentUser) {
+      debugPrint('📝 [DEBUG] Skipping delivered status for own message');
+    } else if (localMessage.serverId == null) {
+      debugPrint(
+          '⚠️ [DISPATCHER] Cannot send delivered status - message has no serverId');
+    }
   }
 
   // Convert LocalMessage to remote.Message for conversationsProvider updates

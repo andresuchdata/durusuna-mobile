@@ -1106,7 +1106,8 @@ class LocalChatService {
         // Immediately acknowledge delivery so sender status updates
         if (!localMessage.isFromMe && localMessage.serverId != null) {
           try {
-            _realtimeService.markAsDelivered([localMessage.serverId!]);
+            _realtimeService.markAsDelivered(
+                [localMessage.serverId!], localMessage.conversationId);
           } catch (_) {}
         }
       } catch (e) {
