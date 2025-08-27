@@ -59,7 +59,7 @@ class LocalMessageBubble extends StatefulWidget {
 class _LocalMessageBubbleState extends State<LocalMessageBubble> {
   bool _showReactionTrigger = false;
   Timer? _triggerHideTimer;
-  static const double _reactionTriggerSize = 22.0;
+  static const double _reactionTriggerSize = 32.0;
 
   /// Get the bubble color based on theme and customization
   Color _getBubbleColor(BuildContext context) {
@@ -550,7 +550,7 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
         ),
         child: Icon(
           Icons.add_reaction_outlined,
-          size: 14,
+          size: 18,
           color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
         ),
       ),

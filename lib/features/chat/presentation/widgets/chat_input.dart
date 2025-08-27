@@ -27,6 +27,7 @@ class _ChatInputState extends State<ChatInput> {
   bool _isTyping = false;
   bool _showEmojiPicker = false;
   Timer? _typingTimer;
+  Timer? _periodicTypingTimer;
 
   @override
   void initState() {
@@ -40,6 +41,7 @@ class _ChatInputState extends State<ChatInput> {
     widget.controller.removeListener(_onTextChanged);
     widget.focusNode.removeListener(_onFocusChanged);
     _typingTimer?.cancel();
+    _stopPeriodicTyping();
     super.dispose();
   }
 
@@ -58,17 +60,38 @@ class _ChatInputState extends State<ChatInput> {
       setState(() => _isTyping = true);
       debugPrint('⌨️ [CHAT_INPUT] Starting typing indicator');
       widget.onTyping(true);
+
+      // Start periodic typing events
+      _startPeriodicTyping();
     }
 
-    // Reset typing timer
+    // Reset stop typing timer
     _typingTimer?.cancel();
-    _typingTimer = Timer(const Duration(seconds: 2), () {
+    _typingTimer = Timer(const Duration(seconds: 5), () {
       if (_isTyping) {
         setState(() => _isTyping = false);
         debugPrint('⌨️ [CHAT_INPUT] Stopping typing indicator (timeout)');
         widget.onTyping(false);
+        _stopPeriodicTyping();
       }
     });
+  }
+
+  void _startPeriodicTyping() {
+    _stopPeriodicTyping();
+    _periodicTypingTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (_isTyping) {
+        debugPrint('⌨️ [CHAT_INPUT] Sending periodic typing event');
+        widget.onTyping(true);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  void _stopPeriodicTyping() {
+    _periodicTypingTimer?.cancel();
+    _periodicTypingTimer = null;
   }
 
   void _handleSend() {
@@ -81,6 +104,7 @@ class _ChatInputState extends State<ChatInput> {
         setState(() => _isTyping = false);
         widget.onTyping(false);
         _typingTimer?.cancel();
+        _stopPeriodicTyping();
       }
     }
   }

@@ -11,6 +11,7 @@ import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/conversation.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
 import '../../../../shared/services/chat_repository_service.dart';
+import '../../../../shared/providers/typing_status_provider.dart';
 import 'local_chat_page.dart';
 import 'contacts_page.dart';
 
@@ -448,7 +449,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   }
 }
 
-class ConversationTile extends StatelessWidget {
+class ConversationTile extends ConsumerWidget {
   final Conversation conversation;
   final VoidCallback onTap;
 
@@ -492,8 +493,42 @@ class ConversationTile extends StatelessWidget {
     return 'U';
   }
 
+  String _getTypingText(List<String> typingUsers) {
+    if (typingUsers.isEmpty) return '';
+
+    if (conversation.type == 'direct') {
+      // For direct conversations, just show "typing..."
+      return 'typing...';
+    } else {
+      // For group conversations, show who is typing
+      if (typingUsers.length == 1) {
+        // Find the typing user's name
+        final typingUserId = typingUsers.first;
+        final typingUser = conversation.participants.firstWhere(
+            (user) => user.id == typingUserId,
+            orElse: () => conversation.participants.first);
+        return '${typingUser.firstName} is typing...';
+      } else if (typingUsers.length == 2) {
+        final user1 = conversation.participants.firstWhere(
+            (user) => user.id == typingUsers[0],
+            orElse: () => conversation.participants.first);
+        final user2 = conversation.participants.firstWhere(
+            (user) => user.id == typingUsers[1],
+            orElse: () => conversation.participants.first);
+        return '${user1.firstName} and ${user2.firstName} are typing...';
+      } else {
+        return '${typingUsers.length} people are typing...';
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Get typing status for this conversation
+    final isTyping = ref.watch(conversationIsTypingProvider(conversation.id));
+    final typingUsers =
+        ref.watch(conversationTypingUsersProvider(conversation.id));
+
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(
           horizontal: 16, vertical: 4), // Reduced vertical padding from 8 to 4
@@ -570,20 +605,26 @@ class ConversationTile extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              conversation.lastMessage?.displayContent ?? 'No messages yet',
+              isTyping
+                  ? _getTypingText(typingUsers)
+                  : (conversation.lastMessage?.displayContent ??
+                      'No messages yet'),
               style: TextStyle(
-                color: conversation.unreadCount > 0
-                    ? AppTheme.textPrimary
-                    : AppTheme.textSecondary,
-                fontWeight: conversation.unreadCount > 0
+                color: isTyping
+                    ? Colors.green[600] // Green color for typing indicator
+                    : (conversation.unreadCount > 0
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary),
+                fontWeight: isTyping || conversation.unreadCount > 0
                     ? FontWeight.w500
                     : FontWeight.normal,
+                fontStyle: isTyping ? FontStyle.italic : FontStyle.normal,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (conversation.unreadCount > 0)
+          if (conversation.unreadCount > 0 && !isTyping)
             Container(
               margin: const EdgeInsets.only(left: 8),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

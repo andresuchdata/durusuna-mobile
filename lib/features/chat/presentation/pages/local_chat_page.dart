@@ -22,6 +22,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:math' as math;
 import '../../../../shared/widgets/reactions_widget.dart';
+import '../../../../shared/widgets/typing_indicator.dart';
 import '../widgets/chat_top_user_panel.dart';
 
 /// Local-first chat page with instant loading and offline support
@@ -53,6 +54,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   // Track typing status of the other user
   bool _isOtherUserTyping = false;
+  Timer? _typingAutoHideTimer;
 
   // Selection mode state
   final Set<String> _selectedMessageIds = {};
@@ -294,6 +296,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     _scrollController.dispose();
     _messageController.dispose();
     _focusNode.dispose();
+    _typingAutoHideTimer?.cancel();
 
     // Clean up GlobalKey management via service
     GlobalKeyManager.instance.forceCleanup();
@@ -303,7 +306,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     try {
       ref.read(currentConversationProvider.notifier).state = null;
     } catch (e) {
-      // Error clearing provider
+      // Error clearing providerx
     }
 
     // Leave conversation room
@@ -1103,6 +1106,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           final otherUserId = widget.conversation.otherUser?.id;
           debugPrint(
               '🔍 [TYPING] Conversation ID matches, checking user ID...');
+
           if (otherUserId != null && typingEvent.userId == otherUserId) {
             debugPrint(
                 '🔍 [TYPING] User ID matches! Setting typing state to: ${typingEvent.isTyping}');
@@ -1114,8 +1118,11 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
             // Auto-hide typing indicator after 3 seconds of no updates
             if (typingEvent.isTyping) {
-              debugPrint('🔍 [TYPING] Setting auto-hide timer for 3 seconds');
-              Future.delayed(const Duration(seconds: 3), () {
+              // Cancel any existing timer
+              _typingAutoHideTimer?.cancel();
+              debugPrint(
+                  '🔍 [TYPING] Cancelled previous timer and setting new auto-hide timer for 3 seconds');
+              _typingAutoHideTimer = Timer(const Duration(seconds: 3), () {
                 if (mounted) {
                   debugPrint('🔍 [TYPING] Auto-hiding typing indicator');
                   setState(() {
@@ -1125,6 +1132,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                   });
                 }
               });
+            } else {
+              // Cancel timer when typing stops
+              _typingAutoHideTimer?.cancel();
+              debugPrint('🔍 [TYPING] Cancelled timer because typing stopped');
             }
           } else {
             debugPrint(
@@ -1552,102 +1563,9 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   Widget _buildTypingIndicator() {
     debugPrint('🔍 [TYPING] _buildTypingIndicator() called');
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
-      margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.0, end: 2 * 3.14159), // Full sine wave cycle
-          duration: const Duration(milliseconds: 2000),
-          builder: (context, value, child) {
-            // Create a ripple-like up and down movement using sine wave
-            final sineValue = (math.sin(value) + 1) / 2; // Convert to 0-1 range
-            final verticalOffset = (sineValue - 0.5) *
-                12.0; // Move up and down by 12px (increased)
-            final scale =
-                0.96 + (sineValue * 0.08); // More noticeable scale variation
-
-            return Transform.translate(
-              offset: Offset(0, verticalOffset),
-              child: Transform.scale(
-                scale: scale,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Animated typing dots with realistic movement
-                      SizedBox(
-                        width: 32,
-                        height: 16,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _buildAnimatedTypingDot(0),
-                            _buildAnimatedTypingDot(1),
-                            _buildAnimatedTypingDot(2),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-          onEnd: () {
-            // Restart the ripple animation continuously
-            if (mounted && _isOtherUserTyping) {
-              setState(() {});
-            }
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAnimatedTypingDot(int index) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: Duration(milliseconds: 600 + (index * 200)),
-      builder: (context, value, child) {
-        // Create a bouncing effect with easing
-        final bounceValue = Curves.easeInOut.transform(value);
-        final scale = 0.5 + (bounceValue * 0.5); // Scale from 0.5 to 1.0
-        final opacity = 0.3 + (bounceValue * 0.7); // Opacity from 0.3 to 1.0
-
-        return Transform.scale(
-          scale: scale,
-          child: Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: AppTheme.textSecondary.withValues(alpha: opacity),
-              shape: BoxShape.circle,
-            ),
-          ),
-        );
-      },
-      onEnd: () {
-        // Restart animation continuously
-        if (mounted && _isOtherUserTyping) {
-          setState(() {});
-        }
-      },
+    return TypingIndicator(
+      key: ValueKey('typing_$_isOtherUserTyping'),
+      isTyping: _isOtherUserTyping,
     );
   }
 
