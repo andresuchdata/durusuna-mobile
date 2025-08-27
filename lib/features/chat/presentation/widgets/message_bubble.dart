@@ -166,7 +166,7 @@ class MessageBubble extends StatelessWidget {
                           message.replyTo!.senderId == currentUserId
                               ? 'You'
                               : (message.replyTo!.sender?.displayName ??
-                                  'Unknown'),
+                                  'Unknown (no sender)'),
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,

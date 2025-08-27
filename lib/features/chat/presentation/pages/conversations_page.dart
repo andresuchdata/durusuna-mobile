@@ -167,9 +167,83 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     }
   }
 
+  /// Force sync conversations from server
+  Future<void> _forceSyncConversations() async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('🔄 Force syncing conversations from server...')),
+      );
+
+      await ref.read(localChatServiceProvider).syncConversationsNow();
+
+      // Refresh the conversations list
+      ref.read(localConversationsProvider.notifier).refresh();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Conversations synced from server!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Force sync failed: $e')),
+      );
+    }
+  }
+
+  /// Test typing indicator functionality
+  Future<void> _testTypingIndicator() async {
+    try {
+      final conversationsAsync = ref.read(localConversationsProvider);
+      conversationsAsync.whenData((conversations) {
+        if (conversations.isNotEmpty) {
+          final firstConversation = conversations.first;
+          final realtimeService = ref.read(realtimeServiceProvider);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content:
+                    Text('🧪 Testing typing for: ${firstConversation.name}')),
+          );
+
+          // Send typing start
+          realtimeService.startTyping(firstConversation.serverId);
+
+          // Stop after 3 seconds
+          Future.delayed(const Duration(seconds: 3), () {
+            realtimeService.stopTyping(firstConversation.serverId);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('✅ Typing test completed')),
+            );
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('❌ No conversations to test with')),
+          );
+        }
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Typing test failed: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final conversationsState = ref.watch(localConversationsProvider);
+
+    // Debug logging to see what's happening
+    conversationsState.when(
+      loading: () =>
+          debugPrint('🔄 [ConversationsPage] Loading conversations...'),
+      error: (error, stack) => debugPrint(
+          '❌ [ConversationsPage] Error loading conversations: $error'),
+      data: (conversations) => debugPrint(
+          '✅ [ConversationsPage] Loaded ${conversations.length} conversations'),
+    );
 
     // Join conversation rooms when conversations are loaded
     ref.listen(localConversationsProvider, (previous, next) {
@@ -245,6 +319,12 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                       case 'recreate_db':
                         _recreateDatabase();
                         break;
+                      case 'force_sync':
+                        _forceSyncConversations();
+                        break;
+                      case 'test_typing':
+                        _testTypingIndicator();
+                        break;
                     }
                   },
                   itemBuilder: (context) => [
@@ -265,6 +345,26 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                           Icon(Icons.refresh, color: Colors.red),
                           SizedBox(width: 8),
                           Text('Recreate Database'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'force_sync',
+                      child: Row(
+                        children: [
+                          Icon(Icons.sync, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Text('Force Sync Conversations'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'test_typing',
+                      child: Row(
+                        children: [
+                          Icon(Icons.keyboard, color: Colors.green),
+                          SizedBox(width: 8),
+                          Text('Test Typing Indicator'),
                         ],
                       ),
                     ),
@@ -313,29 +413,79 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       AsyncValue<List<LocalConversation>> conversationsAsync) {
     return RefreshIndicator(
       onRefresh: () async {
+        // Try to sync from server first, then refresh local data
+        try {
+          await ref.read(localChatServiceProvider).syncConversationsNow();
+        } catch (e) {
+          debugPrint('⚠️ [ConversationsPage] Sync failed: $e');
+        }
         await ref.read(localConversationsProvider.notifier).refresh();
       },
       child: conversationsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => _buildErrorState(error.toString()),
-        data: (conversations) => conversations.isEmpty
-            ? _buildEmptyState()
-            : PerformanceOptimizedList(
-                itemCount: conversations.length,
-                itemBuilder: (context, index) {
-                  if (index < conversations.length - 1) {
-                    // Add separator for all items except the last
-                    return Column(
-                      children: [
-                        _buildConversationTile(conversations[index]),
-                        const Divider(height: 0.5, indent: 64),
-                      ],
-                    );
-                  }
-                  return _buildConversationTile(conversations[index]);
-                },
-              ),
+        error: (error, stack) {
+          debugPrint(
+              '❌ [ConversationsPage] Local conversations failed: $error');
+          // Fallback to legacy provider if local fails
+          return _buildFallbackConversationsList();
+        },
+        data: (conversations) {
+          if (conversations.isEmpty) {
+            debugPrint(
+                '⚠️ [ConversationsPage] No local conversations found, trying fallback');
+            return _buildFallbackConversationsList();
+          }
+          return PerformanceOptimizedList(
+            itemCount: conversations.length,
+            itemBuilder: (context, index) {
+              if (index < conversations.length - 1) {
+                // Add separator for all items except the last
+                return Column(
+                  children: [
+                    _buildConversationTile(conversations[index]),
+                    const Divider(height: 0.5, indent: 64),
+                  ],
+                );
+              }
+              return _buildConversationTile(conversations[index]);
+            },
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildFallbackConversationsList() {
+    final legacyConversationsState = ref.watch(conversationsProvider);
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await ref.read(conversationsProvider.notifier).loadConversations();
+      },
+      child: legacyConversationsState.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : legacyConversationsState.error != null
+              ? _buildErrorState(legacyConversationsState.error!)
+              : legacyConversationsState.conversations.isEmpty
+                  ? _buildEmptyState()
+                  : PerformanceOptimizedList(
+                      itemCount: legacyConversationsState.conversations.length,
+                      itemBuilder: (context, index) {
+                        if (index <
+                            legacyConversationsState.conversations.length - 1) {
+                          return Column(
+                            children: [
+                              _buildLegacyConversationTile(
+                                  legacyConversationsState
+                                      .conversations[index]),
+                              const Divider(height: 0.5, indent: 64),
+                            ],
+                          );
+                        }
+                        return _buildLegacyConversationTile(
+                            legacyConversationsState.conversations[index]);
+                      },
+                    ),
     );
   }
 
@@ -376,6 +526,182 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
 
               // Refresh conversations to get latest unread counts
               // Use localConversationsProvider instead of legacy conversationsProvider
+              ref.read(localConversationsProvider.notifier).refresh();
+            });
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildLegacyConversationTile(Conversation conversation) {
+    // Get the display name - for direct chats, use other user's name
+    String getDisplayName() {
+      if (conversation.type == 'direct' && conversation.otherUser != null) {
+        final otherUser = conversation.otherUser!;
+        if (otherUser.firstName.isNotEmpty || otherUser.lastName.isNotEmpty) {
+          return '${otherUser.firstName} ${otherUser.lastName}'.trim();
+        }
+        return otherUser.email;
+      }
+      return conversation.name ?? 'Unknown conversation';
+    }
+
+    // Get the avatar URL - for direct chats, use other user's avatar
+    String? getAvatarUrl() {
+      if (conversation.type == 'direct' && conversation.otherUser != null) {
+        return conversation.otherUser!.avatarUrl;
+      }
+      return conversation.avatarUrl;
+    }
+
+    // Get initials for avatar
+    String getInitials() {
+      if (conversation.type == 'direct' && conversation.otherUser != null) {
+        final otherUser = conversation.otherUser!;
+        if (otherUser.firstName.isNotEmpty) {
+          return otherUser.firstName[0].toUpperCase();
+        }
+        if (otherUser.lastName.isNotEmpty) {
+          return otherUser.lastName[0].toUpperCase();
+        }
+        if (otherUser.email.isNotEmpty) {
+          return otherUser.email[0].toUpperCase();
+        }
+        return 'U';
+      }
+
+      if (conversation.type == 'group') {
+        final name = conversation.name ?? 'Group';
+        final words = name.split(' ');
+        if (words.length >= 2) {
+          return '${words[0][0]}${words[1][0]}';
+        }
+        return name.isNotEmpty ? name[0].toUpperCase() : 'G';
+      }
+      return 'U';
+    }
+
+    return RepaintBoundary(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Stack(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: AppTheme.primaryColor,
+              backgroundImage: getAvatarUrl()?.isNotEmpty == true
+                  ? NetworkImage(getAvatarUrl()!)
+                  : null,
+              child: getAvatarUrl()?.isEmpty != false
+                  ? Text(
+                      getInitials(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
+                    )
+                  : null,
+            ),
+            if (conversation.type == 'group')
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.8),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: const Icon(
+                    Icons.group,
+                    size: 10,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                getDisplayName(),
+                style: TextStyle(
+                  fontWeight: conversation.unreadCount > 0
+                      ? FontWeight.w600
+                      : FontWeight.w500,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            if (conversation.lastMessageAt != null)
+              Text(
+                timeago.format(conversation.lastMessageAt!),
+                style: TextStyle(
+                  color: conversation.unreadCount > 0
+                      ? AppTheme.primaryColor
+                      : AppTheme.textSecondary,
+                  fontSize: 12,
+                  fontWeight: conversation.unreadCount > 0
+                      ? FontWeight.w600
+                      : FontWeight.normal,
+                ),
+              ),
+          ],
+        ),
+        subtitle: Row(
+          children: [
+            Expanded(
+              child: Text(
+                conversation.lastMessage?.displayContent ?? 'No messages yet',
+                style: TextStyle(
+                  color: conversation.unreadCount > 0
+                      ? AppTheme.textPrimary
+                      : AppTheme.textSecondary,
+                  fontWeight: conversation.unreadCount > 0
+                      ? FontWeight.w500
+                      : FontWeight.normal,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (conversation.unreadCount > 0)
+              Container(
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${conversation.unreadCount}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        onTap: () {
+          ref.read(currentConversationProvider.notifier).state = null;
+          Navigator.of(context)
+              .push(
+            HighRefreshPageRoute(
+              child: LocalChatPage(
+                conversation: conversation,
+              ),
+            ),
+          )
+              .then((_) {
+            Future.delayed(const Duration(milliseconds: 100), () {
+              ref.read(currentConversationProvider.notifier).state = null;
               ref.read(localConversationsProvider.notifier).refresh();
             });
           });
@@ -480,7 +806,11 @@ class ConversationTile extends ConsumerWidget {
     if (conversation.type == LocalConversationType.group) {
       return conversation.name;
     }
-    return conversation.name;
+    // For direct conversations, use otherUserName if available, otherwise fall back to name
+    final displayName = conversation.otherUserName ?? conversation.name;
+    debugPrint(
+        '🔍 [ConversationTile] Direct conversation ${conversation.serverId}: name="${conversation.name}", otherUserName="${conversation.otherUserName}", displayName="$displayName"');
+    return displayName;
   }
 
   String get avatarUrl {
@@ -499,9 +829,9 @@ class ConversationTile extends ConsumerWidget {
       }
       return name.isNotEmpty ? name[0].toUpperCase() : 'G';
     }
-    return conversation.name.isNotEmpty
-        ? conversation.name[0].toUpperCase()
-        : 'U';
+    // For direct conversations, use otherUserName if available
+    final name = conversation.otherUserName ?? conversation.name;
+    return name.isNotEmpty ? name[0].toUpperCase() : 'U';
   }
 
   String _getTypingText(List<String> typingUsers) {
@@ -530,6 +860,10 @@ class ConversationTile extends ConsumerWidget {
         ref.watch(conversationIsTypingProvider(conversation.serverId));
     final typingUsers =
         ref.watch(conversationTypingUsersProvider(conversation.serverId));
+
+    // Debug logging for typing status
+    debugPrint(
+        '🔍 [ConversationTile] ${conversation.serverId}: isTyping=$isTyping, typingUsers=$typingUsers');
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(

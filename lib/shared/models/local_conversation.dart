@@ -152,14 +152,54 @@ class LocalConversation {
 extension LocalConversationExtension on LocalConversation {
   static LocalConversation fromApiJson(
       Map<String, dynamic> json, String currentUserId) {
+    // Extract other user info from the API response
+    String? otherUserId;
+    String? otherUserName;
+    String? otherUserAvatar;
+
+    // Check if we have other_user object (for direct conversations)
+    if (json['other_user'] != null) {
+      final otherUser = json['other_user'] as Map<String, dynamic>;
+      otherUserId = otherUser['id'];
+      otherUserName =
+          '${otherUser['first_name'] ?? ''} ${otherUser['last_name'] ?? ''}'
+              .trim();
+      otherUserAvatar = otherUser['avatar_url'];
+    } else {
+      // Fallback to direct fields
+      otherUserId = json['other_user_id'];
+      otherUserName = json['other_user_name'];
+      otherUserAvatar = json['other_user_avatar'];
+    }
+
+    // For direct conversations, if name is empty or generic, use other user's name
+    String displayName = json['name'] ?? '';
+    if ((json['type'] == 'direct' || json['type'] == null) &&
+        (displayName.isEmpty ||
+            displayName == 'Direct Message' ||
+            displayName == 'Unknown asdfasd')) {
+      displayName = otherUserName ?? 'Unknown User';
+    }
+
+    // Extract last message content from the message object
+    String? lastMessageContent;
+    if (json['last_message'] != null) {
+      if (json['last_message'] is Map<String, dynamic>) {
+        final lastMessageMap = json['last_message'] as Map<String, dynamic>;
+        lastMessageContent = lastMessageMap['content'] as String?;
+      } else if (json['last_message'] is String) {
+        lastMessageContent = json['last_message'] as String;
+      }
+    }
+
     return LocalConversation(
       serverId: json['id'] ?? '',
-      name: json['name'] ?? '',
+      name: displayName,
       description: json['description'],
-      otherUserId: json['other_user_id'],
-      otherUserName: json['other_user_name'],
-      otherUserAvatar: json['other_user_avatar'],
-      lastMessage: json['last_message'],
+      otherUserId: otherUserId,
+      otherUserName: otherUserName,
+      otherUserAvatar: otherUserAvatar,
+      lastMessage: lastMessageContent,
       lastMessageAt: json['last_message_at'] != null
           ? DateTime.parse(json['last_message_at'])
           : null,

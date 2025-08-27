@@ -369,10 +369,10 @@ class LocalChatService {
       debugPrint('🌐 [CONVERSATIONS] Current user ID: $currentUserId');
 
       // Convert and save to local database
-      final localConversations = conversationsList
-          .map((json) =>
-              LocalConversationExtension.fromApiJson(json, currentUserId))
-          .toList();
+      final localConversations = conversationsList.map((json) {
+        debugPrint('🌐 [CONVERSATIONS] Processing conversation JSON: $json');
+        return LocalConversationExtension.fromApiJson(json, currentUserId);
+      }).toList();
       debugPrint(
           '🌐 [CONVERSATIONS] Converted ${localConversations.length} conversations to local format');
 

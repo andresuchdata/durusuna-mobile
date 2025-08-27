@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import '../services/realtime_service.dart';
 
 // Map of conversationId -> Map of userId -> isTyping
@@ -18,6 +19,9 @@ class TypingStatusNotifier
     final userId = typingEvent.userId;
     final isTyping = typingEvent.isTyping;
 
+    debugPrint(
+        '⌨️ [TypingStatusProvider] Updating typing status: conversationId=$conversationId, userId=$userId, isTyping=$isTyping');
+
     final currentState = state;
     final newState = Map<String, Map<String, bool>>.from(currentState);
 
@@ -36,6 +40,7 @@ class TypingStatusNotifier
       }
     }
 
+    debugPrint('⌨️ [TypingStatusProvider] New state: $newState');
     state = newState;
   }
 
