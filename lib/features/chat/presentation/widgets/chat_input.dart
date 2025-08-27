@@ -56,6 +56,7 @@ class _ChatInputState extends State<ChatInput> {
 
     if (hasText && !_isTyping) {
       setState(() => _isTyping = true);
+      debugPrint('⌨️ [CHAT_INPUT] Starting typing indicator');
       widget.onTyping(true);
     }
 
@@ -64,6 +65,7 @@ class _ChatInputState extends State<ChatInput> {
     _typingTimer = Timer(const Duration(seconds: 2), () {
       if (_isTyping) {
         setState(() => _isTyping = false);
+        debugPrint('⌨️ [CHAT_INPUT] Stopping typing indicator (timeout)');
         widget.onTyping(false);
       }
     });

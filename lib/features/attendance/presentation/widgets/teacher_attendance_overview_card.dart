@@ -1,23 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_theme.dart';
-
-class TeacherAttendanceOverview {
-  final String teacherId;
-  final String teacherName;
-  final int totalClasses;
-  final int classesWithAttendance;
-  final int classesWithoutAttendance;
-  final List<Map<String, dynamic>> classes;
-
-  TeacherAttendanceOverview({
-    required this.teacherId,
-    required this.teacherName,
-    required this.totalClasses,
-    required this.classesWithAttendance,
-    required this.classesWithoutAttendance,
-    required this.classes,
-  });
-}
+import '../../../../shared/models/attendance_models.dart';
 
 class TeacherAttendanceOverviewCard extends StatelessWidget {
   final TeacherAttendanceOverview overview;

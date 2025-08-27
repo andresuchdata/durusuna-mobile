@@ -125,14 +125,16 @@ class RealtimeDispatcher {
 
   /// Handle incoming messages with deduplication and circuit breaker
   Future<void> _handleMessage(RealtimeMessage realtimeMessage) async {
-    final messageId =
-        realtimeMessage.message.serverId ??
+    final messageId = realtimeMessage.message.serverId ??
         realtimeMessage.message.id.toString();
     final senderId = realtimeMessage.message.senderId;
     final conversationId = realtimeMessage.conversationId;
 
     debugPrint(
       '🔄 RealtimeDispatcher: Received message $messageId from $senderId in conversation $conversationId',
+    );
+    debugPrint(
+      '🔄 RealtimeDispatcher: Message content: "${realtimeMessage.message.content}"',
     );
 
     // CRITICAL: Check for recently sent messages FIRST (before any other processing)
@@ -161,7 +163,11 @@ class RealtimeDispatcher {
             '⏭️ RealtimeDispatcher: EARLY SKIP - clientMessageId key: "$messageKey"',
           );
           _recentlySentMessages.remove(messageKey);
-          return;
+          // CRITICAL: Don't return here - we need to process the message for read receipt logic
+          // Instead, just mark it as already processed and continue
+          debugPrint(
+            '🔄 RealtimeDispatcher: Continuing processing for read receipt logic',
+          );
         }
       }
 
@@ -183,7 +189,11 @@ class RealtimeDispatcher {
         _recentlySentMessages.removeWhere(
           (key) => key.contains(messageContent),
         );
-        return;
+        // CRITICAL: Don't return here - we need to process the message for read receipt logic
+        // Instead, just mark it as already processed and continue
+        debugPrint(
+          '🔄 RealtimeDispatcher: Continuing processing for read receipt logic',
+        );
       }
 
       debugPrint(
@@ -398,16 +408,14 @@ class RealtimeDispatcher {
       // Update conversation last message
       // Only increment unread count for messages NOT from current user
       final currentUserId = StorageService.getUser()?['id'];
-      final shouldIncrementUnread =
-          currentUserId != null &&
+      final shouldIncrementUnread = currentUserId != null &&
           realtimeMessage.message.senderId != currentUserId;
 
       await ChatRepositoryService.updateConversationLastMessage(
         realtimeMessage.conversationId,
         localMessage,
-        unreadCount: shouldIncrementUnread
-            ? 1
-            : null, // Only increment if not from me
+        unreadCount:
+            shouldIncrementUnread ? 1 : null, // Only increment if not from me
       );
     } catch (_) {}
 
@@ -425,9 +433,7 @@ class RealtimeDispatcher {
     // Also update legacy conversations provider so ConversationsPage reflects last message/unread
     try {
       final converted = _convertLocalToRemote(localMessage, isFromMe: false);
-      _ref!
-          .read(conversationsProvider.notifier)
-          .updateConversationLastMessage(
+      _ref!.read(conversationsProvider.notifier).updateConversationLastMessage(
             realtimeMessage.conversationId,
             converted,
           );
@@ -447,27 +453,47 @@ class RealtimeDispatcher {
     _ref!.read(localMessagesProvider(conversationId).notifier).refresh();
 
     // Check if user is currently viewing this conversation to mark as read
-    final currentConversationId = _ref!.read(currentConversationProvider);
+    // Since we removed currentConversationProvider, we'll always mark as read when app is in foreground
+    // This is simpler and more reliable
     debugPrint(
-      '🐛 [DEBUG] _updateUIForIncomingMessage: conversationId=$conversationId, currentConversationId=$currentConversationId',
+      '🐛 [DEBUG] _updateUIForIncomingMessage: conversationId=$conversationId',
     );
 
     // Only auto-mark read if:
-    // 1. The chat page is actually open for this conversation
-    // 2. The app is in foreground
-    // 3. The message is NOT from the current user (don't auto-mark own messages as read)
+    // 1. The app is in foreground
+    // 2. The message is NOT from the current user (don't auto-mark own messages as read)
     final appLifecycleState = WidgetsBinding.instance.lifecycleState;
     final isForeground = appLifecycleState == AppLifecycleState.resumed;
     final isFromCurrentUser =
         StorageService.getUser()?['id'] == localMessage.senderId;
 
-    if (currentConversationId == conversationId &&
-        isForeground &&
-        !isFromCurrentUser) {
+    if (isForeground && !isFromCurrentUser) {
       await ChatRepositoryService.markConversationAsRead(conversationId);
       debugPrint(
         '✅ [DEBUG] Conversation marked as read (not from current user)',
       );
+
+      // CRITICAL: Send read receipt via WebSocket immediately for this message
+      if (localMessage.serverId != null) {
+        try {
+          final realtimeService = _ref!.read(realtimeServiceProvider);
+          debugPrint(
+            '📖 [DISPATCHER] Sending read receipt for message ${localMessage.serverId}',
+          );
+          realtimeService.markAsRead([localMessage.serverId!], conversationId);
+          debugPrint(
+            '✅ [DISPATCHER] Read receipt sent via WebSocket for message ${localMessage.serverId}',
+          );
+        } catch (e) {
+          debugPrint(
+            '❌ [DISPATCHER] Failed to send read receipt: $e',
+          );
+        }
+      } else {
+        debugPrint(
+          '⚠️ [DISPATCHER] Cannot send read receipt - message has no serverId',
+        );
+      }
     } else {
       // Refresh list for unread badge updates
       _ref!.read(localConversationsProvider.notifier).refresh();
@@ -540,23 +566,43 @@ class RealtimeDispatcher {
     debugPrint(
       '✅ RealtimeDispatcher: Message status update: ${statusEvent.status}',
     );
+    debugPrint(
+        '📖 [DISPATCHER] Processing message status for ${statusEvent.messageIds.length} messages');
+    debugPrint(
+        '📖 [DISPATCHER] Message IDs: ${statusEvent.messageIds.join(', ')}');
+    debugPrint('📖 [DISPATCHER] Status: ${statusEvent.status}');
+    debugPrint(
+        '📖 [DISPATCHER] Conversation ID: ${statusEvent.conversationId}');
 
     // Update message status in database for all affected messages
     final conversationId = statusEvent.conversationId;
     if (conversationId != null) {
       for (final messageId in statusEvent.messageIds) {
+        debugPrint(
+            '📖 [DISPATCHER] Updating message $messageId to status: ${statusEvent.status}');
         await ChatRepositoryService.updateMessageStatus(
           messageId,
           statusEvent.status,
           DateTime.now(),
         );
+        debugPrint('📖 [DISPATCHER] ✅ Updated message $messageId in database');
       }
 
-      // Refresh UI if user is viewing this conversation
-      final currentConversationId = _ref!.read(currentConversationProvider);
-      if (currentConversationId == conversationId) {
-        _ref!.read(localMessagesProvider(conversationId).notifier).refresh();
-      }
+      // Refresh UI for the conversation (simplified - always refresh when status updates)
+      debugPrint(
+          '📖 [DISPATCHER] Refreshing UI for conversation $conversationId');
+
+      // Add small delay to ensure database updates complete before UI refresh
+      Future.delayed(const Duration(milliseconds: 100), () {
+        try {
+          _ref!.read(localMessagesProvider(conversationId).notifier).refresh();
+          debugPrint('📖 [DISPATCHER] ✅ UI refresh triggered after DB update');
+        } catch (e) {
+          debugPrint('❌ [DISPATCHER] Error refreshing UI: $e');
+        }
+      });
+    } else {
+      debugPrint('📖 [DISPATCHER] ❌ No conversation ID in status event');
     }
   }
 

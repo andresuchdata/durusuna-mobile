@@ -779,6 +779,13 @@ class LocalChatRealtime {
     _ref.listen(realtimeMessageStatusProvider, (prev, next) {
       next.whenData((statusEvent) async {
         try {
+          debugPrint(
+              '📖 [STATUS] Received status update: ${statusEvent.status} for ${statusEvent.messageIds.length} messages');
+          debugPrint(
+              '📖 [STATUS] Message IDs: ${statusEvent.messageIds.join(', ')}');
+          debugPrint(
+              '📖 [STATUS] Conversation ID: ${statusEvent.conversationId}');
+
           for (final id in statusEvent.messageIds) {
             await ChatRepositoryService.updateMessageStatus(
               id,
@@ -786,7 +793,13 @@ class LocalChatRealtime {
               statusEvent.timestamp,
             );
           }
-        } catch (_) {}
+          debugPrint('📖 [STATUS] Successfully updated message statuses');
+
+          // Note: UI refresh is now handled in the UI layer (LocalChatPage)
+          // This keeps providers focused on data management only
+        } catch (e) {
+          debugPrint('❌ [STATUS] Error updating message status: $e');
+        }
       });
     });
   }

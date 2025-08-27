@@ -277,6 +277,7 @@ class RealtimeService with WidgetsBindingObserver {
   }
 
   void _setupEventListeners() {
+    debugPrint('🔧 [WEBSOCKET] Setting up event listeners...');
     _socket!.onConnect((_) {
       debugPrint(
           '🔗 RealtimeService: Connected to server on ${Platform.operatingSystem}');
@@ -331,11 +332,21 @@ class RealtimeService with WidgetsBindingObserver {
 
     // Message events
     _socket!.on('message:new', (data) {
+      debugPrint('📨 RealtimeService: Received message:new event: $data');
       try {
         final message = RealtimeMessage.fromJson(data);
+        debugPrint('📨 RealtimeService: Parsed message:new event successfully');
+        debugPrint(
+            '📨 RealtimeService: Message ID: ${message.message.serverId ?? message.message.id}');
+        debugPrint(
+            '📨 RealtimeService: Sender ID: ${message.message.senderId}');
+        debugPrint(
+            '📨 RealtimeService: Conversation ID: ${message.conversationId}');
         _messageController.add(message);
+        debugPrint('📨 RealtimeService: Added message to controller stream');
       } catch (e) {
-        // Error parsing message:new event
+        debugPrint('❌ RealtimeService: Error parsing message:new event: $e');
+        debugPrint('❌ RealtimeService: Raw data: $data');
       }
     });
 
@@ -426,13 +437,56 @@ class RealtimeService with WidgetsBindingObserver {
 
     // Message status updates
     _socket!.on('message:delivered', (data) {
-      final event = MessageStatusEvent.fromJson(data);
-      _messageStatusController.add(event);
+      debugPrint('📖 [WEBSOCKET] Received message:delivered event: $data');
+      try {
+        final event = MessageStatusEvent.fromJson(data);
+        debugPrint(
+            '📖 [WEBSOCKET] Parsed message:delivered event successfully');
+        _messageStatusController.add(event);
+        debugPrint(
+            '📖 [WEBSOCKET] Added message:delivered event to controller');
+      } catch (e) {
+        debugPrint('❌ [WEBSOCKET] Error parsing message:delivered event: $e');
+      }
     });
 
     _socket!.on('message:read', (data) {
-      final event = MessageStatusEvent.fromJson(data);
-      _messageStatusController.add(event);
+      debugPrint('📖 [WEBSOCKET] Received message:read event: $data');
+      debugPrint('📖 [WEBSOCKET] Event data type: ${data.runtimeType}');
+      debugPrint(
+          '📖 [WEBSOCKET] Event data keys: ${data is Map ? data.keys.toList() : 'not a map'}');
+
+      try {
+        final event = MessageStatusEvent.fromJson(data);
+        debugPrint(
+            '📖 [WEBSOCKET] Parsed MessageStatusEvent: ${event.messageIds} - ${event.status}');
+        _messageStatusController.add(event);
+        debugPrint('📖 [WEBSOCKET] Added to messageStatusController stream');
+        debugPrint(
+            '📖 [WEBSOCKET] Event details - messageIds: ${event.messageIds}, status: ${event.status}, userId: ${event.userId}');
+      } catch (e) {
+        debugPrint('❌ [WEBSOCKET] Error parsing message:read event: $e');
+        debugPrint('❌ [WEBSOCKET] Error details: ${e.toString()}');
+      }
+    });
+    debugPrint('🔧 [WEBSOCKET] message:read event listener attached');
+
+    // Add general WebSocket event debugging
+    _socket!.on('connect', (data) {
+      debugPrint('🔌 [WEBSOCKET] Connected to server');
+    });
+
+    _socket!.on('disconnect', (data) {
+      debugPrint('🔌 [WEBSOCKET] Disconnected from server: $data');
+    });
+
+    _socket!.on('error', (data) {
+      debugPrint('❌ [WEBSOCKET] WebSocket error: $data');
+    });
+
+    // Debug: Listen for any event to verify WebSocket is working
+    _socket!.onAny((eventName, data) {
+      debugPrint('🔍 [WEBSOCKET] Received event: $eventName with data: $data');
     });
 
     // Conversation events
@@ -552,12 +606,14 @@ class RealtimeService with WidgetsBindingObserver {
     // Track the intent to be joined regardless of current connection state
     _joinedConversations.add(conversationId);
     if (_socket?.connected == true) {
-      debugPrint(
-          '🔊 RealtimeService: Joining conversation room $conversationId');
+      debugPrint('🔗 [WEBSOCKET] Joining conversation room: $conversationId');
+      debugPrint('🔗 [WEBSOCKET] Current socket ID: ${_socket!.id}');
       _socket!.emit('conversation:join', {'conversationId': conversationId});
+      debugPrint(
+          '🔗 [WEBSOCKET] Emitted conversation:join for: $conversationId');
     } else {
       debugPrint(
-          '🕒 RealtimeService: Queued join for conversation $conversationId (will send on connect)');
+          '🕒 [WEBSOCKET] Queued join for conversation $conversationId (will send on connect)');
     }
   }
 
@@ -584,6 +640,8 @@ class RealtimeService with WidgetsBindingObserver {
   /// Start typing indicator
   void startTyping(String conversationId) {
     if (!_isConnected) return;
+    debugPrint(
+        '⌨️ [REALTIME] Sending typing:start for conversation $conversationId');
     _socket!.emit('typing:start', {
       'conversationId': conversationId,
       'userId': _currentUserId,
@@ -593,6 +651,8 @@ class RealtimeService with WidgetsBindingObserver {
   /// Stop typing indicator
   void stopTyping(String conversationId) {
     if (!_isConnected) return;
+    debugPrint(
+        '⌨️ [REALTIME] Sending typing:stop for conversation $conversationId');
     _socket!.emit('typing:stop', {
       'conversationId': conversationId,
       'userId': _currentUserId,
@@ -616,6 +676,11 @@ class RealtimeService with WidgetsBindingObserver {
 
   /// Mark messages as read with offline queuing support
   void markAsRead(List<String> messageIds, String conversationId) {
+    debugPrint(
+        '📖 [WEBSOCKET] markAsRead called with ${messageIds.length} messages');
+    debugPrint('📖 [WEBSOCKET] Connection status: $_isConnected');
+    debugPrint('📖 [WEBSOCKET] Socket connected: ${_socket?.connected}');
+
     final readReceiptData = {
       'messageIds': messageIds,
       'conversationId': conversationId,
@@ -625,10 +690,13 @@ class RealtimeService with WidgetsBindingObserver {
 
     if (_isConnected && _socket != null) {
       // Send immediately if connected
+      debugPrint('📖 [WEBSOCKET] Sending read receipt via WebSocket');
       _socket!.emit('message:read', readReceiptData);
       debugPrint(
           '✅ Read receipt sent for ${messageIds.length} messages in $conversationId');
     } else {
+      debugPrint(
+          '📖 [WEBSOCKET] WebSocket not connected, queuing read receipt');
       // Queue for later if not connected (with size limit)
       if (_pendingReadReceipts.length >= _maxPendingReadReceipts) {
         // Remove oldest entry if queue is full

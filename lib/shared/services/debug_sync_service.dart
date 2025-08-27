@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/chat_repository_service.dart';
 import 'local_chat_service.dart';
 import 'chat_service.dart';
+import 'realtime_service.dart';
 import '../models/local_conversation.dart';
 import '../models/local_message.dart';
 import '../../core/storage/storage_service.dart';
@@ -40,7 +41,7 @@ class DebugSyncService {
           type: apiConv.type == 'group'
               ? LocalConversationType.group
               : LocalConversationType.direct,
-          name: apiConv.name,
+          name: apiConv.name ?? '',
           description: apiConv.description,
           avatarUrl: apiConv.avatarUrl,
           otherUserId: apiConv.otherUser?.id,
@@ -68,6 +69,11 @@ class DebugSyncService {
 
           // Convert and save messages
           for (final apiMsg in apiMessages) {
+            if (apiMsg.senderId == null) {
+              print('⚠️ Skipping message with null senderId: ${apiMsg.id}');
+              continue;
+            }
+
             final localMsg = LocalMessage(
               serverId: apiMsg.id,
               conversationId: apiMsg.conversationId,
@@ -77,7 +83,7 @@ class DebugSyncService {
               replyToId: apiMsg.replyToId,
               createdAt: apiMsg.createdAt,
               updatedAt: apiMsg.updatedAt,
-              isFromMe: apiMsg.senderId == currentUserId,
+              isFromMe: apiMsg.senderId == currentUserId!,
               isSynced: true, // Already from server
               readStatus: (apiMsg.readStatus as String?) ?? 'sent',
             );
@@ -94,6 +100,45 @@ class DebugSyncService {
     } catch (e) {
       print('❌ FORCE RESYNC FAILED: $e');
       rethrow;
+    }
+  }
+
+  /// Test typing indicator functionality
+  Future<void> testTypingIndicator(String conversationId) async {
+    try {
+      print('🧪 Testing typing indicator for conversation: $conversationId');
+
+      // Get the realtime service
+      final realtimeService = _ref.read(realtimeServiceProvider);
+
+      if (!realtimeService.isConnected) {
+        print('❌ Realtime service not connected');
+        return;
+      }
+
+      print('✅ Realtime service is connected');
+
+      // Join the conversation room
+      realtimeService.joinConversation(conversationId);
+      print('✅ Joined conversation room: $conversationId');
+
+      // Wait a bit for the join to complete
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Send typing start
+      print('⌨️ Sending typing:start event...');
+      realtimeService.startTyping(conversationId);
+
+      // Wait 3 seconds
+      await Future.delayed(const Duration(seconds: 3));
+
+      // Send typing stop
+      print('⌨️ Sending typing:stop event...');
+      realtimeService.stopTyping(conversationId);
+
+      print('✅ Typing indicator test completed');
+    } catch (e) {
+      print('❌ Typing indicator test failed: $e');
     }
   }
 

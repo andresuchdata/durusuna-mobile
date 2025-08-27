@@ -261,16 +261,38 @@ class ChatRepositoryService {
     String status,
     DateTime timestamp,
   ) async {
-    // This would need to be implemented in the repository
-    // For now, just update the message
-    final message = await getMessage(int.tryParse(messageId) ?? 0);
-    if (message != null) {
-      final updatedMessage = message.copyWith(
-        readStatus: status,
-        readAt: status == 'read' ? timestamp : null,
-        deliveredAt: status == 'delivered' ? timestamp : null,
-      );
-      await saveMessage(updatedMessage);
+    try {
+      debugPrint(
+          '📖 [ChatRepositoryService] Updating message status: $messageId -> $status');
+
+      // Try to find message by server ID first (most common case for read receipts)
+      LocalMessage? message = await getMessageByServerId(messageId);
+
+      // If not found by server ID, try by local ID (fallback)
+      if (message == null) {
+        final localId = int.tryParse(messageId);
+        if (localId != null) {
+          message = await getMessage(localId);
+        }
+      }
+
+      if (message != null) {
+        debugPrint(
+            '📖 [ChatRepositoryService] Found message ${message.id}, updating status to $status');
+        final updatedMessage = message.copyWith(
+          readStatus: status,
+          readAt: status == 'read' ? timestamp : null,
+          deliveredAt: status == 'delivered' ? timestamp : null,
+        );
+        await saveMessage(updatedMessage);
+        debugPrint(
+            '📖 [ChatRepositoryService] ✅ Successfully updated message status');
+      } else {
+        debugPrint('❌ [ChatRepositoryService] Message not found: $messageId');
+      }
+    } catch (e) {
+      debugPrint('❌ [ChatRepositoryService] Error updating message status: $e');
+      rethrow;
     }
   }
 

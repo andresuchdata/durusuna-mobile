@@ -380,3 +380,28 @@ Map<String, dynamic> _$StudentWithAttendanceToJson(
       'student_id': instance.studentId,
       'attendance': instance.attendance,
     };
+
+TeacherAttendanceOverview _$TeacherAttendanceOverviewFromJson(
+        Map<String, dynamic> json) =>
+    TeacherAttendanceOverview(
+      teacherId: json['teacher_id'] as String,
+      teacherName: json['teacher_name'] as String,
+      totalClasses: (json['total_classes'] as num).toInt(),
+      classesWithAttendance: (json['classes_with_attendance'] as num).toInt(),
+      classesWithoutAttendance:
+          (json['classes_without_attendance'] as num).toInt(),
+      classes: (json['classes'] as List<dynamic>)
+          .map((e) => e as Map<String, dynamic>)
+          .toList(),
+    );
+
+Map<String, dynamic> _$TeacherAttendanceOverviewToJson(
+        TeacherAttendanceOverview instance) =>
+    <String, dynamic>{
+      'teacher_id': instance.teacherId,
+      'teacher_name': instance.teacherName,
+      'total_classes': instance.totalClasses,
+      'classes_with_attendance': instance.classesWithAttendance,
+      'classes_without_attendance': instance.classesWithoutAttendance,
+      'classes': instance.classes,
+    };

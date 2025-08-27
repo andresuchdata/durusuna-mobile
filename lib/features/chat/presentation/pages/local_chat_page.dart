@@ -5,7 +5,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../core/constants/performance_constants.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
-import '../../../../shared/services/chat_service.dart';
+import '../../../../shared/services/chat_service.dart' as chat_service;
 import '../../../../shared/models/local_message.dart';
 import '../../../../shared/models/conversation.dart';
 import '../../../../shared/models/user.dart';
@@ -13,12 +13,14 @@ import '../../../../shared/providers/local_chat_providers.dart';
 import '../../../../shared/services/local_chat_service.dart';
 import '../../../../shared/services/chat_repository_service.dart';
 import '../../../../shared/services/global_key_manager.dart';
+import '../../../../shared/services/debug_sync_service.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/chat_action_bar.dart';
 import '../widgets/local_message_bubble.dart';
 import '../widgets/reaction_bar.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math' as math;
 import '../../../../shared/widgets/reactions_widget.dart';
 import '../widgets/chat_top_user_panel.dart';
 
@@ -196,9 +198,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final realtimeService = ref.read(realtimeServiceProvider);
 
-      // Set current conversation ID to prevent unread count increments
-      ref.read(currentConversationProvider.notifier).state =
-          widget.conversation.id;
+      // Note: Conversation tracking is now handled directly in the UI layer
 
       realtimeService.joinConversation(widget.conversation.id);
 
@@ -295,12 +295,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     // Clean up GlobalKey management via service
     GlobalKeyManager.instance.forceCleanup();
 
-    // Leave conversation room and clear current conversation ID
+    // Leave conversation room
     try {
       final realtimeService = ref.read(realtimeServiceProvider);
       realtimeService.leaveConversation(widget.conversation.id);
-      // Safe to clear provider here
-      ref.read(currentConversationProvider.notifier).state = null;
     } catch (e) {
       // Error in dispose
     }
@@ -376,6 +374,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
     // Mark conversation as read when user scrolls to bottom (latest messages)
     if (_scrollController.position.pixels <= 100) {
+      debugPrint(
+          '📖 [DEBUG] Scroll position <= 100, calling _markAsReadWhenAtBottom()');
+      debugPrint(
+          '📖 [DEBUG] Current pixels: ${_scrollController.position.pixels}');
       _markAsReadWhenAtBottom();
     }
   }
@@ -418,28 +420,31 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   void _markAsReadWhenAtBottom() {
-    if (_hasMarkedAsReadAtBottom) return;
+    debugPrint('📖 [DEBUG] _markAsReadWhenAtBottom() called');
+    if (_hasMarkedAsReadAtBottom) {
+      debugPrint('📖 [DEBUG] Already marked as read at bottom, skipping');
+      return;
+    }
 
+    debugPrint('📖 [DEBUG] Setting _hasMarkedAsReadAtBottom = true');
     _hasMarkedAsReadAtBottom = true;
 
-    // Mark conversation as read locally (instant)
-    ref
-        .read(localConversationsProvider.notifier)
-        .markAsRead(widget.conversation.id);
+    // Send read receipts via WebSocket (handles both database and notifications)
+    debugPrint('📖 [DEBUG] Calling _sendReadReceiptsForUnreadMessages()');
+    _sendReadReceiptsForUnreadMessages();
 
     // Reset flag after a delay to allow for future mark-as-read calls
     Future.delayed(const Duration(seconds: 2), () {
+      debugPrint('📖 [DEBUG] Resetting _hasMarkedAsReadAtBottom = false');
       _hasMarkedAsReadAtBottom = false;
     });
   }
 
   void _markOnChatPageEnter() {
-    // Mark conversation as read when entering chat page
-    ref
-        .read(localConversationsProvider.notifier)
-        .markAsRead(widget.conversation.id);
-
-    // Also send read receipts for unread messages from other users
+    debugPrint('📖 [DEBUG] _markOnChatPageEnter() called');
+    // Send read receipts for unread messages from other users (WebSocket only - handles both database and notifications)
+    debugPrint(
+        '📖 [DEBUG] Calling _sendReadReceiptsForUnreadMessages() from _markOnChatPageEnter');
     _sendReadReceiptsForUnreadMessages();
   }
 
@@ -472,10 +477,21 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   void _sendReadReceiptsForUnreadMessages() {
+    debugPrint(
+        '📖 [READ_RECEIPTS] _sendReadReceiptsForUnreadMessages() called (WebSocket only)');
     // Get current messages and send read receipts for unread ones from other users
     final messagesAsync =
         ref.read(localMessagesProvider(widget.conversation.id));
     messagesAsync.whenData((messages) {
+      debugPrint(
+          '📖 [READ_RECEIPTS] Processing ${messages.length} total messages');
+
+      // Debug: Show status of each message
+      for (final msg in messages) {
+        debugPrint(
+            '📖 [READ_RECEIPTS] Message ${msg.serverId}: isFromMe=${msg.isFromMe}, status=${msg.readStatus}');
+      }
+
       final unreadFromOthers = messages
           .where((msg) =>
               !msg.isFromMe &&
@@ -484,11 +500,24 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           .map((msg) => msg.serverId!)
           .toList();
 
+      debugPrint(
+          '📖 [READ_RECEIPTS] Found ${unreadFromOthers.length} unread messages from others');
+
       if (unreadFromOthers.isNotEmpty) {
         debugPrint(
-            '📖 Sending read receipts for ${unreadFromOthers.length} unread messages');
+            '📖 [WEBSOCKET] Sending read receipts for ${unreadFromOthers.length} unread messages');
+        debugPrint(
+            '📖 [WEBSOCKET] Message IDs: ${unreadFromOthers.join(', ')}');
         final realtimeService = ref.read(realtimeServiceProvider);
+
+        // Debug: Check WebSocket connection status
+        debugPrint(
+            '📖 [WEBSOCKET] Connection status: ${realtimeService.isConnected}');
+
         realtimeService.markAsRead(unreadFromOthers, widget.conversation.id);
+      } else {
+        debugPrint(
+            '📖 [READ_RECEIPTS] No unread messages to send read receipts for');
       }
     });
   }
@@ -865,34 +894,19 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     }
   }
 
-  void _ensureScrollToBottom() {
-    if (!mounted) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scrollController.hasClients) {
-        try {
-          final position = _scrollController.position;
-          // Since ListView is reversed, scroll to 0 to show latest messages (bottom)
-          _scrollController.animateTo(
-            0.0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        } catch (e) {
-          debugPrint('❌ [UI] Error in _ensureScrollToBottom: $e');
-        }
-      }
-    });
-  }
-
   void _handleTyping(bool isTyping) {
     final realtimeService = ref.read(realtimeServiceProvider);
+    debugPrint(
+        '⌨️ [LOCAL_CHAT] _handleTyping called: isTyping=$isTyping, isConnected=${realtimeService.isConnected}');
     if (realtimeService.isConnected) {
       if (isTyping) {
         realtimeService.startTyping(widget.conversation.id);
       } else {
         realtimeService.stopTyping(widget.conversation.id);
       }
+    } else {
+      debugPrint(
+          '⌨️ [LOCAL_CHAT] Realtime service not connected, cannot send typing event');
     }
   }
 
@@ -972,6 +986,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   Widget build(BuildContext context) {
     debugPrint(
         '🔍 [UI] LocalChatPage.build() called for conversationId: "${widget.conversation.id}"');
+    debugPrint('🔍 [UI] _isOtherUserTyping: $_isOtherUserTyping');
     final authState = ref.watch(authStateProvider);
     final messagesAsync =
         ref.watch(localMessagesProvider(widget.conversation.id));
@@ -1002,7 +1017,32 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             ref
                 .read(localMessagesProvider(widget.conversation.id).notifier)
                 .refresh();
-          } catch (_) {}
+
+            // CRITICAL: Send read receipt immediately for incoming messages from other users
+            final currentUserId = ref.read(authStateProvider).user?.id;
+            final isFromOtherUser = currentUserId != null &&
+                rtMessage.message.senderId != currentUserId;
+
+            if (isFromOtherUser && rtMessage.message.serverId != null) {
+              debugPrint(
+                  '📖 [REALTIME] Incoming message from other user, sending read receipt');
+              debugPrint(
+                  '📖 [REALTIME] Message ID: ${rtMessage.message.serverId}');
+              debugPrint(
+                  '📖 [REALTIME] Sender ID: ${rtMessage.message.senderId}');
+              debugPrint('📖 [REALTIME] Current User ID: $currentUserId');
+
+              // Send read receipt via WebSocket immediately
+              final realtimeService = ref.read(realtimeServiceProvider);
+              realtimeService.markAsRead(
+                  [rtMessage.message.serverId!], widget.conversation.id);
+            } else {
+              debugPrint(
+                  '📖 [REALTIME] Skipping read receipt - message is from current user or missing serverId');
+            }
+          } catch (e) {
+            debugPrint('❌ [REALTIME] Error processing incoming message: $e');
+          }
         }
       });
     });
@@ -1017,6 +1057,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             '🔍 [TYPING] Current conversation ID: ${widget.conversation.id}');
         debugPrint(
             '🔍 [TYPING] Other user ID: ${widget.conversation.otherUser?.id}');
+        debugPrint(
+            '🔍 [TYPING] Conversation type: ${widget.conversation.type}');
+        debugPrint(
+            '🔍 [TYPING] All participants: ${widget.conversation.participants.map((p) => p.id).join(', ')}');
 
         if (typingEvent.conversationId == widget.conversation.id) {
           final otherUserId = widget.conversation.otherUser?.id;
@@ -1064,6 +1108,36 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           setState(() {
             _isOtherUserOnline = presenceEvent.isOnline;
           });
+        }
+      });
+    });
+
+    // CRITICAL: Listen for real-time message status updates (read receipts)
+    ref.listen(realtimeMessageStatusProvider, (previous, next) {
+      next.whenData((statusEvent) {
+        debugPrint(
+            '📖 [UI] Received message status update: ${statusEvent.status}');
+        debugPrint(
+            '📖 [UI] Status event conversation ID: ${statusEvent.conversationId}');
+        debugPrint(
+            '📖 [UI] Current conversation ID: ${widget.conversation.id}');
+        debugPrint('📖 [UI] Message IDs: ${statusEvent.messageIds.join(', ')}');
+
+        // Only refresh UI if the status update is for the current conversation
+        if (statusEvent.conversationId == widget.conversation.id) {
+          debugPrint('📖 [UI] Refreshing UI for message status update');
+          try {
+            // Refresh the messages list to show updated read status
+            ref
+                .read(localMessagesProvider(widget.conversation.id).notifier)
+                .refresh();
+            debugPrint('📖 [UI] ✅ UI refreshed for message status update');
+          } catch (e) {
+            debugPrint('❌ [UI] Error refreshing UI for message status: $e');
+          }
+        } else {
+          debugPrint(
+              '📖 [UI] Ignoring status update for different conversation');
         }
       });
     });
@@ -1120,6 +1194,14 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           ? AppTheme.chatBackgroundDark
           : AppTheme.chatBackgroundLight,
       appBar: _buildAppBar(),
+      floatingActionButton: FloatingActionButton.small(
+        onPressed: () async {
+          debugPrint('🧪 [TEST] Testing typing indicator via realtime service');
+          final debugService = ref.read(debugSyncServiceProvider);
+          await debugService.testTypingIndicator(widget.conversation.id);
+        },
+        child: const Icon(Icons.keyboard),
+      ),
       body: Column(
         children: [
           // Messages list
@@ -1256,10 +1338,12 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     }
 
     // AlwaysScrollable so RefreshIndicator can trigger even with few/no items
-    // Calculate item count including typing indicator
+    // Calculate item count including typing indicator at index 0
     final itemCount =
         (deduplicatedMessages.isEmpty ? 0 : deduplicatedMessages.length) +
             (_isOtherUserTyping ? 1 : 0);
+    debugPrint(
+        '🔍 [UI] Item count: $itemCount (messages: ${deduplicatedMessages.length}, typing: $_isOtherUserTyping)');
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
@@ -1322,20 +1406,24 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
               child: _buildEmptyState(),
             );
           }
-          // Show typing indicator at the end of the list
-          if (index == deduplicatedMessages.length && _isOtherUserTyping) {
-            debugPrint('🔍 [TYPING] Building typing indicator widget');
+          // Show typing indicator at the beginning of the list (since ListView is reversed)
+          if (index == 0 && _isOtherUserTyping) {
+            debugPrint(
+                '🔍 [TYPING] Building typing indicator widget at index 0 - _isOtherUserTyping: $_isOtherUserTyping');
             return _buildTypingIndicator();
           }
 
-          if (index >= deduplicatedMessages.length) {
+          // Adjust index for messages since typing indicator is at index 0
+          final messageIndex = _isOtherUserTyping ? index - 1 : index;
+
+          if (messageIndex < 0 || messageIndex >= deduplicatedMessages.length) {
             return const SizedBox.shrink();
           }
-          final message = deduplicatedMessages[index];
+          final message = deduplicatedMessages[messageIndex];
           final isMe = message.isFromMe;
           final showTimestamp = _shouldShowTimestamp(
             message,
-            index > 0 ? deduplicatedMessages[index - 1] : null,
+            messageIndex > 0 ? deduplicatedMessages[messageIndex - 1] : null,
           );
 
           return Column(
@@ -1434,58 +1522,98 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   Widget _buildTypingIndicator() {
     debugPrint('🔍 [TYPING] _buildTypingIndicator() called');
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
       margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
       child: Align(
         alignment: Alignment.centerLeft,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Animated typing dots
-              SizedBox(
-                width: 24,
-                height: 16,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildTypingDot(0),
-                    _buildTypingDot(1),
-                    _buildTypingDot(2),
-                  ],
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.0, end: 2 * 3.14159), // Full sine wave cycle
+          duration: const Duration(milliseconds: 2000),
+          builder: (context, value, child) {
+            // Create a ripple-like up and down movement using sine wave
+            final sineValue = (math.sin(value) + 1) / 2; // Convert to 0-1 range
+            final verticalOffset = (sineValue - 0.5) *
+                12.0; // Move up and down by 12px (increased)
+            final scale =
+                0.96 + (sineValue * 0.08); // More noticeable scale variation
+
+            return Transform.translate(
+              offset: Offset(0, verticalOffset),
+              child: Transform.scale(
+                scale: scale,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Animated typing dots with realistic movement
+                      SizedBox(
+                        width: 32,
+                        height: 16,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildAnimatedTypingDot(0),
+                            _buildAnimatedTypingDot(1),
+                            _buildAnimatedTypingDot(2),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+            );
+          },
+          onEnd: () {
+            // Restart the ripple animation continuously
+            if (mounted && _isOtherUserTyping) {
+              setState(() {});
+            }
+          },
         ),
       ),
     );
   }
 
-  Widget _buildTypingDot(int index) {
+  Widget _buildAnimatedTypingDot(int index) {
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.5, end: 1.0),
+      tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: 600 + (index * 200)),
       builder: (context, value, child) {
+        // Create a bouncing effect with easing
+        final bounceValue = Curves.easeInOut.transform(value);
+        final scale = 0.5 + (bounceValue * 0.5); // Scale from 0.5 to 1.0
+        final opacity = 0.3 + (bounceValue * 0.7); // Opacity from 0.3 to 1.0
+
         return Transform.scale(
-          scale: value,
+          scale: scale,
           child: Container(
-            width: 4,
-            height: 4,
-            decoration: const BoxDecoration(
-              color: AppTheme.textSecondary,
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: AppTheme.textSecondary.withValues(alpha: opacity),
               shape: BoxShape.circle,
             ),
           ),
         );
       },
       onEnd: () {
-        // Restart animation
+        // Restart animation continuously
         if (mounted && _isOtherUserTyping) {
           setState(() {});
         }
