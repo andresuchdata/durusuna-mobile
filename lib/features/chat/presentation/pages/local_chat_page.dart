@@ -14,6 +14,7 @@ import '../../../../shared/services/local_chat_service.dart';
 import '../../../../shared/services/chat_repository_service.dart';
 import '../../../../shared/services/global_key_manager.dart';
 import '../../../../shared/services/debug_sync_service.dart';
+import '../../../../core/storage/storage_service.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/chat_action_bar.dart';
 import '../widgets/local_message_bubble.dart';
@@ -1103,11 +1104,34 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             '🔍 [TYPING] All participants: ${widget.conversation.participants.map((p) => p.id).join(', ')}');
 
         if (typingEvent.conversationId == widget.conversation.id) {
-          final otherUserId = widget.conversation.otherUser?.id;
+          // Get current user ID to exclude own typing events
+          final currentUserId = StorageService.getUser()?['id'];
+
+          // For group conversations, check if the typing user is a participant and not the current user
+          // For direct conversations, check if it's the other user
+          bool shouldShowTyping = false;
+
+          if (widget.conversation.type == 'group') {
+            // For group conversations, show typing from any participant except current user
+            shouldShowTyping = typingEvent.userId != currentUserId &&
+                widget.conversation.participants
+                    .any((p) => p.id == typingEvent.userId);
+          } else {
+            // For direct conversations, show typing from the other user only
+            final otherUserId = widget.conversation.otherUser?.id;
+            shouldShowTyping =
+                otherUserId != null && typingEvent.userId == otherUserId;
+          }
+
           debugPrint(
               '🔍 [TYPING] Conversation ID matches, checking user ID...');
+          debugPrint(
+              '🔍 [TYPING] Conversation type: ${widget.conversation.type}');
+          debugPrint('🔍 [TYPING] Current user ID: $currentUserId');
+          debugPrint('🔍 [TYPING] Typing user ID: ${typingEvent.userId}');
+          debugPrint('🔍 [TYPING] Should show typing: $shouldShowTyping');
 
-          if (otherUserId != null && typingEvent.userId == otherUserId) {
+          if (shouldShowTyping) {
             debugPrint(
                 '🔍 [TYPING] User ID matches! Setting typing state to: ${typingEvent.isTyping}');
             setState(() {
@@ -1139,7 +1163,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             }
           } else {
             debugPrint(
-                '🔍 [TYPING] User ID mismatch: expected $otherUserId, got ${typingEvent.userId}');
+                '🔍 [TYPING] User ID mismatch or not a participant: typingUserId=${typingEvent.userId}, currentUserId=$currentUserId');
           }
         } else {
           debugPrint(

@@ -9,9 +9,11 @@ import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/services/local_chat_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/conversation.dart';
+import '../../../../shared/models/local_conversation.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
 import '../../../../shared/services/chat_repository_service.dart';
 import '../../../../shared/providers/typing_status_provider.dart';
+import '../../../../shared/providers/local_chat_providers.dart';
 import 'local_chat_page.dart';
 import 'contacts_page.dart';
 
@@ -40,7 +42,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       } catch (_) {}
 
       // Force load conversations to ensure provider is active
-      ref.read(conversationsProvider.notifier).loadConversations();
+      ref.read(localConversationsProvider.notifier).refresh();
 
       // NEW: Ensure Isar has conversation rows after fresh install/reset
       // by syncing from server once when this page opens
@@ -55,17 +57,19 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
 
   /// Join all conversation rooms to receive real-time updates
   void _joinAllConversationRooms() {
-    final conversationsState = ref.read(conversationsProvider);
+    final conversationsAsync = ref.read(localConversationsProvider);
     final realtimeService = ref.read(realtimeServiceProvider);
 
-    if (conversationsState.conversations.isEmpty) {
-      return;
-    }
+    conversationsAsync.whenData((conversations) {
+      if (conversations.isEmpty) {
+        return;
+      }
 
-    for (final conversation in conversationsState.conversations) {
-      if (Platform.isAndroid) {}
-      realtimeService.joinConversation(conversation.id);
-    }
+      for (final conversation in conversations) {
+        if (Platform.isAndroid) {}
+        realtimeService.joinConversation(conversation.serverId);
+      }
+    });
   }
 
   @override
@@ -148,7 +152,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       await ChatRepositoryService.forceRecreateDatabase();
 
       // Refresh the conversations list
-      ref.read(conversationsProvider.notifier).loadConversations();
+      ref.read(localConversationsProvider.notifier).refresh();
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -165,15 +169,15 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final conversationsState = ref.watch(conversationsProvider);
+    final conversationsState = ref.watch(localConversationsProvider);
 
     // Join conversation rooms when conversations are loaded
-    ref.listen(conversationsProvider, (previous, next) {
-      if (previous?.isLoading == true &&
-          next.isLoading == false &&
-          next.conversations.isNotEmpty) {
-        _joinAllConversationRooms();
-      }
+    ref.listen(localConversationsProvider, (previous, next) {
+      next.whenData((conversations) {
+        if (conversations.isNotEmpty) {
+          _joinAllConversationRooms();
+        }
+      });
     });
 
     // Ensure rooms are (re)joined when the socket connects
@@ -201,7 +205,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           // Refresh conversations list when a new conversation is created
           debugPrint(
               '📋 ConversationsPage: New conversation created, refreshing list');
-          ref.read(conversationsProvider.notifier).loadConversations();
+          ref.read(localConversationsProvider.notifier).refresh();
         }
       });
     });
@@ -305,45 +309,57 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     );
   }
 
-  Widget _buildConversationsList(ConversationsState conversationsState) {
+  Widget _buildConversationsList(
+      AsyncValue<List<LocalConversation>> conversationsAsync) {
     return RefreshIndicator(
       onRefresh: () async {
-        await ref.read(conversationsProvider.notifier).loadConversations();
+        await ref.read(localConversationsProvider.notifier).refresh();
       },
-      child: conversationsState.isLoading &&
-              conversationsState.conversations.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : conversationsState.error != null
-              ? _buildErrorState(conversationsState.error!)
-              : conversationsState.conversations.isEmpty
-                  ? _buildEmptyState()
-                  : PerformanceOptimizedList(
-                      itemCount: conversationsState.conversations.length,
-                      itemBuilder: (context, index) {
-                        if (index <
-                            conversationsState.conversations.length - 1) {
-                          // Add separator for all items except the last
-                          return Column(
-                            children: [
-                              _buildConversationTile(
-                                  conversationsState.conversations[index]),
-                              const Divider(height: 0.5, indent: 64),
-                            ],
-                          );
-                        }
-                        return _buildConversationTile(
-                            conversationsState.conversations[index]);
-                      },
-                    ),
+      child: conversationsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stack) => _buildErrorState(error.toString()),
+        data: (conversations) => conversations.isEmpty
+            ? _buildEmptyState()
+            : PerformanceOptimizedList(
+                itemCount: conversations.length,
+                itemBuilder: (context, index) {
+                  if (index < conversations.length - 1) {
+                    // Add separator for all items except the last
+                    return Column(
+                      children: [
+                        _buildConversationTile(conversations[index]),
+                        const Divider(height: 0.5, indent: 64),
+                      ],
+                    );
+                  }
+                  return _buildConversationTile(conversations[index]);
+                },
+              ),
+      ),
     );
   }
 
-  Widget _buildConversationTile(Conversation conversation) {
+  Widget _buildConversationTile(LocalConversation localConversation) {
     return RepaintBoundary(
       child: ConversationTile(
-        conversation: conversation,
+        conversation: localConversation,
         onTap: () {
           ref.read(currentConversationProvider.notifier).state = null;
+
+          // Convert LocalConversation to Conversation for LocalChatPage
+          final conversation = Conversation(
+            id: localConversation.serverId,
+            type: localConversation.type.value,
+            name: localConversation.name,
+            description: localConversation.description,
+            avatarUrl: localConversation.avatarUrl,
+            createdBy: '', // Not available in LocalConversation
+            participants: [], // Not available in LocalConversation
+            unreadCount: localConversation.unreadCount,
+            lastActivity: localConversation.lastActivity,
+            isOnline: localConversation.isOnline,
+          );
+
           Navigator.of(context)
               .push(
             HighRefreshPageRoute(
@@ -359,7 +375,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               ref.read(currentConversationProvider.notifier).state = null;
 
               // Refresh conversations to get latest unread counts
-              ref.read(conversationsProvider.notifier).loadConversations();
+              // Use localConversationsProvider instead of legacy conversationsProvider
+              ref.read(localConversationsProvider.notifier).refresh();
             });
           });
         },
@@ -438,7 +455,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: () {
-              ref.read(conversationsProvider.notifier).loadConversations();
+              ref.read(localConversationsProvider.notifier).refresh();
             },
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
@@ -450,7 +467,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
 }
 
 class ConversationTile extends ConsumerWidget {
-  final Conversation conversation;
+  final LocalConversation conversation;
   final VoidCallback onTap;
 
   const ConversationTile({
@@ -460,62 +477,46 @@ class ConversationTile extends ConsumerWidget {
   });
 
   String get displayName {
-    if (conversation.type == 'group') {
-      return conversation.name ?? 'Group Chat';
+    if (conversation.type == LocalConversationType.group) {
+      return conversation.name;
     }
-    final otherUser = conversation.otherUser;
-    if (otherUser != null) {
-      return otherUser.displayName;
-    }
-    return 'Unknown User';
+    return conversation.name;
   }
 
   String get avatarUrl {
-    if (conversation.type == 'group') {
+    if (conversation.type == LocalConversationType.group) {
       return conversation.avatarUrl ?? '';
     }
-    return conversation.otherUser?.avatarUrl ?? '';
+    return conversation.otherUserAvatar ?? '';
   }
 
   String get initials {
-    if (conversation.type == 'group') {
-      final name = conversation.name ?? 'Group';
+    if (conversation.type == LocalConversationType.group) {
+      final name = conversation.name;
       final words = name.split(' ');
       if (words.length >= 2) {
         return '${words[0][0]}${words[1][0]}';
       }
       return name.isNotEmpty ? name[0].toUpperCase() : 'G';
     }
-    final otherUser = conversation.otherUser;
-    if (otherUser != null) {
-      return '${otherUser.firstName[0]}${otherUser.lastName[0]}';
-    }
-    return 'U';
+    return conversation.name.isNotEmpty
+        ? conversation.name[0].toUpperCase()
+        : 'U';
   }
 
   String _getTypingText(List<String> typingUsers) {
     if (typingUsers.isEmpty) return '';
 
-    if (conversation.type == 'direct') {
+    if (conversation.type == LocalConversationType.direct) {
       // For direct conversations, just show "typing..."
       return 'typing...';
     } else {
       // For group conversations, show who is typing
       if (typingUsers.length == 1) {
-        // Find the typing user's name
-        final typingUserId = typingUsers.first;
-        final typingUser = conversation.participants.firstWhere(
-            (user) => user.id == typingUserId,
-            orElse: () => conversation.participants.first);
-        return '${typingUser.firstName} is typing...';
+        // For now, just show "Someone is typing..." since we don't have participant names
+        return 'Someone is typing...';
       } else if (typingUsers.length == 2) {
-        final user1 = conversation.participants.firstWhere(
-            (user) => user.id == typingUsers[0],
-            orElse: () => conversation.participants.first);
-        final user2 = conversation.participants.firstWhere(
-            (user) => user.id == typingUsers[1],
-            orElse: () => conversation.participants.first);
-        return '${user1.firstName} and ${user2.firstName} are typing...';
+        return '2 people are typing...';
       } else {
         return '${typingUsers.length} people are typing...';
       }
@@ -525,9 +526,10 @@ class ConversationTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Get typing status for this conversation
-    final isTyping = ref.watch(conversationIsTypingProvider(conversation.id));
+    final isTyping =
+        ref.watch(conversationIsTypingProvider(conversation.serverId));
     final typingUsers =
-        ref.watch(conversationTypingUsersProvider(conversation.id));
+        ref.watch(conversationTypingUsersProvider(conversation.serverId));
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(
@@ -552,7 +554,7 @@ class ConversationTile extends ConsumerWidget {
                 : null,
           ),
           // Removed online indicator for direct conversations - only show in actual chat page
-          if (conversation.type == 'group')
+          if (conversation.type == LocalConversationType.group)
             Positioned(
               bottom: 0,
               right: 0,
@@ -586,9 +588,9 @@ class ConversationTile extends ConsumerWidget {
               ),
             ),
           ),
-          if (conversation.lastMessage != null)
+          if (conversation.lastMessageAt != null)
             Text(
-              timeago.format(conversation.lastMessage!.createdAt),
+              timeago.format(conversation.lastMessageAt!),
               style: TextStyle(
                 color: conversation.unreadCount > 0
                     ? AppTheme.primaryColor
@@ -607,8 +609,7 @@ class ConversationTile extends ConsumerWidget {
             child: Text(
               isTyping
                   ? _getTypingText(typingUsers)
-                  : (conversation.lastMessage?.displayContent ??
-                      'No messages yet'),
+                  : (conversation.lastMessage ?? 'No messages yet'),
               style: TextStyle(
                 color: isTyping
                     ? Colors.green[600] // Green color for typing indicator
