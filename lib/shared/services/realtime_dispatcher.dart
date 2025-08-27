@@ -9,7 +9,6 @@ import '../services/chat_service.dart';
 import '../models/message.dart' as remote;
 import 'realtime_service.dart';
 import '../../core/storage/storage_service.dart';
-import 'package:flutter/foundation.dart';
 
 /// Centralized real-time event dispatcher (SINGLETON)
 /// Single source of truth for all real-time events
@@ -421,8 +420,8 @@ class RealtimeDispatcher {
 
     // Always refresh UI, even if DB write collided
     await _updateUIForIncomingMessage(
-      realtimeMessage.conversationId,
       localMessage,
+      realtimeMessage.conversationId,
     );
 
     // Update global conversations list - using localMessage (already a LocalMessage)
@@ -440,21 +439,23 @@ class RealtimeDispatcher {
     } catch (_) {}
   }
 
-  /// Update UI providers for incoming messages
+  /// Update UI for incoming message
   Future<void> _updateUIForIncomingMessage(
-    String conversationId,
     LocalMessage localMessage,
+    String conversationId,
   ) async {
-    // Always refresh messages for that conversation so chat page updates even
-    // if currentConversationProvider hasn't been set yet
+    debugPrint(
+      '🔄 [DEBUG] _updateUIForIncomingMessage: conversationId=$conversationId',
+    );
+
+    // Refresh the messages list for this conversation
     debugPrint(
       '🔄 [DEBUG] Refreshing localMessagesProvider for conversation $conversationId',
     );
     _ref!.read(localMessagesProvider(conversationId).notifier).refresh();
 
     // Check if user is currently viewing this conversation to mark as read
-    // Since we removed currentConversationProvider, we'll always mark as read when app is in foreground
-    // This is simpler and more reliable
+    // We need to check if the user is actually in the chat page for this conversation
     debugPrint(
       '🐛 [DEBUG] _updateUIForIncomingMessage: conversationId=$conversationId',
     );
@@ -462,15 +463,21 @@ class RealtimeDispatcher {
     // Only auto-mark read if:
     // 1. The app is in foreground
     // 2. The message is NOT from the current user (don't auto-mark own messages as read)
+    // 3. The user is actually viewing this specific conversation (not just on conversations list)
     final appLifecycleState = WidgetsBinding.instance.lifecycleState;
     final isForeground = appLifecycleState == AppLifecycleState.resumed;
     final isFromCurrentUser =
         StorageService.getUser()?['id'] == localMessage.senderId;
 
-    if (isForeground && !isFromCurrentUser) {
+    // Check if user is currently viewing this specific conversation
+    // We can check this by looking at the current conversation provider state
+    final currentConversationId = _ref!.read(currentConversationProvider);
+    final isViewingThisConversation = currentConversationId == conversationId;
+
+    if (isForeground && !isFromCurrentUser && isViewingThisConversation) {
       await ChatRepositoryService.markConversationAsRead(conversationId);
       debugPrint(
-        '✅ [DEBUG] Conversation marked as read (not from current user)',
+        '✅ [DEBUG] Conversation marked as read (user is viewing this conversation)',
       );
 
       // CRITICAL: Send read receipt via WebSocket immediately for this message
@@ -499,6 +506,12 @@ class RealtimeDispatcher {
       _ref!.read(localConversationsProvider.notifier).refresh();
       if (isFromCurrentUser) {
         debugPrint('📝 [DEBUG] Skipping auto-mark-read for own message');
+      } else if (!isViewingThisConversation) {
+        debugPrint(
+            '📝 [DEBUG] Skipping auto-mark-read - user not viewing this conversation');
+      } else if (!isForeground) {
+        debugPrint(
+            '📝 [DEBUG] Skipping auto-mark-read - app not in foreground');
       }
     }
   }

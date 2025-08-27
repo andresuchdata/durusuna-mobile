@@ -5,7 +5,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../core/constants/performance_constants.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
-import '../../../../shared/services/chat_service.dart' as chat_service;
+import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/models/local_message.dart';
 import '../../../../shared/models/conversation.dart';
 import '../../../../shared/models/user.dart';
@@ -198,7 +198,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final realtimeService = ref.read(realtimeServiceProvider);
 
-      // Note: Conversation tracking is now handled directly in the UI layer
+      // CRITICAL: Set current conversation provider to track that user is viewing this conversation
+      // This is used by the realtime dispatcher to determine when to send read receipts
+      ref.read(currentConversationProvider.notifier).state =
+          widget.conversation.id;
 
       realtimeService.joinConversation(widget.conversation.id);
 
@@ -294,6 +297,14 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
     // Clean up GlobalKey management via service
     GlobalKeyManager.instance.forceCleanup();
+
+    // CRITICAL: Clear current conversation provider when leaving chat page
+    // This prevents read receipts from being sent when user is not viewing this conversation
+    try {
+      ref.read(currentConversationProvider.notifier).state = null;
+    } catch (e) {
+      // Error clearing provider
+    }
 
     // Leave conversation room
     try {
@@ -479,6 +490,18 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   void _sendReadReceiptsForUnreadMessages() {
     debugPrint(
         '📖 [READ_RECEIPTS] _sendReadReceiptsForUnreadMessages() called (WebSocket only)');
+
+    // Extra safety check: ensure user is actually viewing this conversation
+    final currentConversationId = ref.read(currentConversationProvider);
+    final isViewingThisConversation =
+        currentConversationId == widget.conversation.id;
+
+    if (!isViewingThisConversation) {
+      debugPrint(
+          '📖 [READ_RECEIPTS] Skipping - user not viewing this conversation (current: $currentConversationId, expected: ${widget.conversation.id})');
+      return;
+    }
+
     // Get current messages and send read receipts for unread ones from other users
     final messagesAsync =
         ref.read(localMessagesProvider(widget.conversation.id));
@@ -1019,11 +1042,17 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                 .refresh();
 
             // CRITICAL: Send read receipt immediately for incoming messages from other users
+            // Only if user is actually viewing this conversation
             final currentUserId = ref.read(authStateProvider).user?.id;
             final isFromOtherUser = currentUserId != null &&
                 rtMessage.message.senderId != currentUserId;
+            final currentConversationId = ref.read(currentConversationProvider);
+            final isViewingThisConversation =
+                currentConversationId == widget.conversation.id;
 
-            if (isFromOtherUser && rtMessage.message.serverId != null) {
+            if (isFromOtherUser &&
+                rtMessage.message.serverId != null &&
+                isViewingThisConversation) {
               debugPrint(
                   '📖 [REALTIME] Incoming message from other user, sending read receipt');
               debugPrint(
@@ -1037,8 +1066,16 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
               realtimeService.markAsRead(
                   [rtMessage.message.serverId!], widget.conversation.id);
             } else {
-              debugPrint(
-                  '📖 [REALTIME] Skipping read receipt - message is from current user or missing serverId');
+              if (!isFromOtherUser) {
+                debugPrint(
+                    '📖 [REALTIME] Skipping read receipt - message is from current user');
+              } else if (rtMessage.message.serverId == null) {
+                debugPrint(
+                    '📖 [REALTIME] Skipping read receipt - missing serverId');
+              } else if (!isViewingThisConversation) {
+                debugPrint(
+                    '📖 [REALTIME] Skipping read receipt - user not viewing this conversation');
+              }
             }
           } catch (e) {
             debugPrint('❌ [REALTIME] Error processing incoming message: $e');
