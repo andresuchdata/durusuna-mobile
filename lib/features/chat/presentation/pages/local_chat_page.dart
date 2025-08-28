@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
 import '../../../../core/constants/performance_constants.dart';
+import '../../../../core/constants/api_constants.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/services/chat_service.dart';
@@ -15,6 +16,7 @@ import '../../../../shared/services/chat_repository_service.dart';
 import '../../../../shared/services/global_key_manager.dart';
 import '../../../../shared/services/debug_sync_service.dart';
 import '../../../../core/storage/storage_service.dart';
+import '../../../../shared/services/participant_cache_service.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/chat_action_bar.dart';
 import '../widgets/local_message_bubble.dart';
@@ -201,6 +203,9 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     // Initialize online status from conversation
     _isOtherUserOnline = widget.conversation.isOnline;
 
+    // Clear participant cache when conversation changes
+    _participantNameCache.clear();
+
     // Join conversation room for real-time updates
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final realtimeService = ref.read(realtimeServiceProvider);
@@ -282,14 +287,25 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
       // Load group participants if this is a group conversation
       if (widget.conversation.type == 'group') {
+        // Log initial state
+        _logParticipantDebugInfo('Initial load');
+
         Future.delayed(const Duration(milliseconds: 1000), () async {
           try {
             await _loadGroupParticipants();
             // Refresh the messages to show updated sender names
             if (mounted) {
+              // Force a rebuild to show updated participant names
+              setState(() {});
+              // Also refresh the messages to ensure UI updates
               ref
                   .read(localMessagesProvider(widget.conversation.id).notifier)
                   .refresh();
+              debugPrint(
+                  '🔍 [LocalChatPage] UI refreshed after loading participants');
+
+              // Log final state
+              _logParticipantDebugInfo('After initial load');
             }
           } catch (e) {
             debugPrint(
@@ -545,34 +561,331 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
       // Try to get participants from the local chat service
       final chatService = ref.read(localChatServiceProvider);
+      debugPrint(
+          '🔍 [LocalChatPage] Calling getGroupParticipants for conversation: ${widget.conversation.id}');
+
       final participants =
           await chatService.getGroupParticipants(widget.conversation.id);
+
+      debugPrint(
+          '🔍 [LocalChatPage] API response: ${participants.length} participants');
+
+      // Debug: Log the first participant structure
+      if (participants.isNotEmpty) {
+        debugPrint(
+            '🔍 [LocalChatPage] First participant data: ${participants.first}');
+      }
 
       if (participants.isNotEmpty) {
         debugPrint(
             '🔍 [LocalChatPage] Loaded ${participants.length} participants for group conversation');
 
-        // Cache participant names for better performance
+        // Cache participant names for better performance (both local and global)
+        await ParticipantCacheService.cacheParticipants(
+            widget.conversation.id, participants);
+
+        // Also update local cache for backward compatibility
         for (final participant in participants) {
           final id = participant['id']?.toString() ?? '';
           final firstName = participant['first_name']?.toString() ?? '';
           final lastName = participant['last_name']?.toString() ?? '';
+          final displayName = participant['display_name']?.toString() ?? '';
+          final email = participant['email']?.toString() ?? '';
 
-          if (id.isNotEmpty && (firstName.isNotEmpty || lastName.isNotEmpty)) {
-            final displayName = '${firstName} ${lastName}'.trim();
+          debugPrint(
+              '🔍 [LocalChatPage] Processing participant: id=$id, firstName=$firstName, lastName=$lastName, displayName=$displayName, email=$email');
+
+          if (id.isNotEmpty) {
+            String finalDisplayName = '';
+
+            // Try display_name first, then firstName + lastName, then email as fallback
             if (displayName.isNotEmpty) {
-              _participantNameCache[id] = displayName;
-              debugPrint(
-                  '🔍 [LocalChatPage] Cached participant: $id -> $displayName');
+              finalDisplayName = displayName;
+            } else if (firstName.isNotEmpty || lastName.isNotEmpty) {
+              finalDisplayName = '$firstName $lastName'.trim();
+            } else if (email.isNotEmpty) {
+              finalDisplayName =
+                  email.split('@')[0]; // Use part before @ as name
             }
+
+            if (finalDisplayName.isNotEmpty) {
+              // Clear any existing fallback names and cache the real name
+              _participantNameCache.remove(id);
+              _participantNameCache[id] = finalDisplayName;
+              debugPrint(
+                  '🔍 [LocalChatPage] Cached participant: $id -> $finalDisplayName');
+            } else {
+              debugPrint(
+                  '⚠️ [LocalChatPage] No usable name found for participant $id');
+            }
+          } else {
+            debugPrint(
+                '⚠️ [LocalChatPage] Participant missing ID: $participant');
           }
         }
+
+        // Clear any remaining fallback names from the cache
+        final keysToRemove = _participantNameCache.keys
+            .where((key) =>
+                _participantNameCache[key]?.startsWith('User ') == true &&
+                _participantNameCache[key]?.endsWith('...') == true)
+            .toList();
+
+        for (final key in keysToRemove) {
+          _participantNameCache.remove(key);
+        }
+
+        debugPrint(
+            '🔍 [LocalChatPage] Cleared ${keysToRemove.length} fallback names from cache');
+        debugPrint(
+            '🔍 [LocalChatPage] Final cache contents: $_participantNameCache');
       } else {
         debugPrint(
             '⚠️ [LocalChatPage] No participants found for group conversation');
+
+        // Try to use conversation participants as fallback
+        debugPrint(
+            '🔍 [LocalChatPage] Trying conversation participants as fallback...');
+        if (widget.conversation.participants.isNotEmpty) {
+          for (final participant in widget.conversation.participants) {
+            final id = participant.id;
+            final firstName = participant.firstName;
+            final lastName = participant.lastName;
+
+            if (firstName.isNotEmpty || lastName.isNotEmpty) {
+              final displayName = '${firstName} ${lastName}'.trim();
+              _participantNameCache[id] = displayName;
+              debugPrint(
+                  '🔍 [LocalChatPage] Cached from conversation: $id -> $displayName');
+            }
+          }
+        }
       }
     } catch (e) {
       debugPrint('⚠️ [LocalChatPage] Failed to load group participants: $e');
+      debugPrint('⚠️ [LocalChatPage] Stack trace: ${StackTrace.current}');
+
+      // Try to use conversation participants as fallback
+      debugPrint(
+          '🔍 [LocalChatPage] Using conversation participants as fallback due to error...');
+      if (widget.conversation.participants.isNotEmpty) {
+        for (final participant in widget.conversation.participants) {
+          final id = participant.id;
+          final firstName = participant.firstName;
+          final lastName = participant.lastName;
+
+          if (firstName.isNotEmpty || lastName.isNotEmpty) {
+            final displayName = '$firstName $lastName'.trim();
+            _participantNameCache[id] = displayName;
+            debugPrint(
+                '🔍 [LocalChatPage] Cached from conversation fallback: $id -> $displayName');
+          }
+        }
+      }
+    }
+  }
+
+  /// Refresh participants if we have fallback names in cache
+  /// This helps resolve display names that were cached as fallbacks
+  Future<void> _refreshParticipantsIfNeeded() async {
+    if (widget.conversation.type != 'group') return;
+
+    // Check if we have any fallback names in cache
+    final hasFallbackNames = _participantNameCache.values
+        .any((name) => name.startsWith('User ') && name.endsWith('...'));
+
+    if (hasFallbackNames) {
+      debugPrint(
+          '🔍 [LocalChatPage] Found fallback names, refreshing participants...');
+      try {
+        await _loadGroupParticipants();
+        if (mounted) {
+          setState(() {});
+          debugPrint('🔍 [LocalChatPage] Participants refreshed, UI updated');
+        }
+      } catch (e) {
+        debugPrint('⚠️ [LocalChatPage] Failed to refresh participants: $e');
+      }
+    }
+  }
+
+  /// Force refresh participants for debugging/testing
+  Future<void> _forceRefreshParticipants() async {
+    if (widget.conversation.type != 'group') return;
+
+    debugPrint('🔍 [LocalChatPage] Force refreshing participants...');
+
+    // Log current state before refresh
+    _logParticipantDebugInfo('Before refresh');
+
+    // Clear cache first
+    _participantNameCache.clear();
+
+    try {
+      await _loadGroupParticipants();
+      if (mounted) {
+        setState(() {});
+        debugPrint('🔍 [LocalChatPage] Force refresh completed');
+
+        // Log state after refresh
+        _logParticipantDebugInfo('After refresh');
+
+        // Show feedback to user
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Participants refreshed'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ [LocalChatPage] Force refresh failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to refresh participants: $e'),
+            backgroundColor: AppTheme.errorColor,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Convert cached participants to User objects for display
+  List<User> _getCachedParticipants() {
+    final cachedParticipants =
+        ParticipantCacheService.getConversationParticipants(
+            widget.conversation.id);
+    final users = <User>[];
+
+    for (final participant in cachedParticipants) {
+      final id = participant['id']?.toString() ?? '';
+      final firstName = participant['first_name']?.toString() ?? '';
+      final lastName = participant['last_name']?.toString() ?? '';
+      final email = participant['email']?.toString() ?? '';
+      final avatarUrl = participant['avatar_url']?.toString();
+
+      if (id.isNotEmpty) {
+        users.add(User(
+          id: id,
+          firstName: firstName,
+          lastName: lastName,
+          email: email,
+          avatarUrl: avatarUrl,
+          phone: null,
+          userType: UserType.student, // Default to student type
+          role: UserRole.user,
+          schoolId: null,
+          school: null,
+          isActive: true,
+          lastActiveAt: null,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ));
+      }
+    }
+
+    return users;
+  }
+
+  /// Get participant count text for display in header
+  String _getParticipantCountText() {
+    final cachedCount = ParticipantCacheService.getConversationParticipants(
+            widget.conversation.id)
+        .length;
+    if (cachedCount > 0) {
+      return '$cachedCount participants';
+    } else {
+      // Check if we're still loading participants
+      if (_participantNameCache.isEmpty) {
+        return 'Loading participants...';
+      } else {
+        return '0 participants';
+      }
+    }
+  }
+
+  /// Log debug information about participants and cache
+  void _logParticipantDebugInfo(String context) {
+    debugPrint('🔍 [LocalChatPage] === $context ===');
+    debugPrint(
+        '🔍 [LocalChatPage] Conversation type: ${widget.conversation.type}');
+    debugPrint(
+        '🔍 [LocalChatPage] Conversation participants count: ${widget.conversation.participants.length} (cached: ${ParticipantCacheService.getConversationParticipants(widget.conversation.id).length})');
+    debugPrint(
+        '🔍 [LocalChatPage] Cache size: ${_participantNameCache.length}');
+    debugPrint('🔍 [LocalChatPage] Cache contents: $_participantNameCache');
+
+    if (widget.conversation.participants.isNotEmpty) {
+      debugPrint('🔍 [LocalChatPage] Conversation participants:');
+      for (final participant in widget.conversation.participants) {
+        debugPrint(
+            '🔍 [LocalChatPage]   - ${participant.id}: ${participant.firstName} ${participant.lastName}');
+      }
+    }
+    debugPrint('🔍 [LocalChatPage] === End $context ===');
+  }
+
+  /// Extract participants from messages API response as fallback
+  /// This is needed because the direct participants API is failing with 404
+  Future<void> _extractParticipantsFromMessages() async {
+    try {
+      debugPrint(
+          '🔍 [LocalChatPage] _extractParticipantsFromMessages() called');
+
+      // Get the current messages to extract sender information
+      final messagesAsync =
+          ref.read(localMessagesProvider(widget.conversation.id));
+
+      await messagesAsync.when(
+        data: (messages) async {
+          debugPrint(
+              '🔍 [LocalChatPage] Processing ${messages.length} messages to extract participants');
+
+          // Extract unique sender IDs from messages
+          final senderIds = messages
+              .where((msg) => !msg.isFromMe)
+              .map((msg) => msg.senderId)
+              .toSet();
+
+          debugPrint(
+              '🔍 [LocalChatPage] Found ${senderIds.length} unique sender IDs: ${senderIds.join(', ')}');
+
+          // For each sender, try to get their name from the message sender data
+          // This works because the messages API includes sender information
+          for (final senderId in senderIds) {
+            if (!_participantNameCache.containsKey(senderId)) {
+              // Try to find a message from this sender to get their name
+              final messageFromSender = messages.firstWhere(
+                (msg) => msg.senderId == senderId,
+                orElse: () => messages.first,
+              );
+
+              // Since LocalMessage doesn't have senderName, we'll use a fallback approach
+              // The real participant data should come from the new backend API endpoint
+              final fallbackName = 'User ${senderId.substring(0, 8)}...';
+              _participantNameCache[senderId] = fallbackName;
+              debugPrint(
+                  '🔍 [LocalChatPage] Using fallback name for $senderId: $fallbackName');
+            }
+          }
+
+          debugPrint(
+              '🔍 [LocalChatPage] Final participant cache after extraction: $_participantNameCache');
+        },
+        loading: () async {
+          debugPrint(
+              '🔍 [LocalChatPage] Messages still loading, cannot extract participants');
+        },
+        error: (error, stack) async {
+          debugPrint(
+              '❌ [LocalChatPage] Error getting messages for participant extraction: $error');
+        },
+      );
+    } catch (e) {
+      debugPrint(
+          '❌ [LocalChatPage] Failed to extract participants from messages: $e');
     }
   }
 
@@ -580,9 +893,34 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   String? _getSenderDisplayName(LocalMessage message) {
     if (widget.conversation.type != 'group' || message.isFromMe) return null;
 
-    // Check cache first (this will have names loaded from API)
+    debugPrint(
+        '🔍 [LocalChatPage] Getting display name for senderId: ${message.senderId}');
+
+    // Check global participant cache first (fastest)
+    final cachedName = ParticipantCacheService.getParticipantName(
+        widget.conversation.id, message.senderId);
+    if (cachedName != null) {
+      debugPrint('🔍 [LocalChatPage] Found name in global cache: $cachedName');
+      return cachedName;
+    }
+
+    // Check local cache second (this will have names loaded from API)
     if (_participantNameCache.containsKey(message.senderId)) {
-      return _participantNameCache[message.senderId];
+      final localCachedName = _participantNameCache[message.senderId];
+      debugPrint(
+          '🔍 [LocalChatPage] Found cached name in local cache: $localCachedName');
+
+      // Don't return fallback names if we have real participant data now
+      if (localCachedName != null &&
+          !localCachedName.startsWith('User ') &&
+          !localCachedName.endsWith('...')) {
+        debugPrint(
+            '🔍 [LocalChatPage] Returning cached real name: $localCachedName');
+        return localCachedName;
+      } else {
+        debugPrint(
+            '🔍 [LocalChatPage] Cached name is fallback, ignoring: $localCachedName');
+      }
     }
 
     try {
@@ -594,18 +932,30 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       if (displayName.isNotEmpty) {
         // Cache the result
         _participantNameCache[message.senderId] = displayName;
+        debugPrint(
+            '🔍 [LocalChatPage] Found participant in conversation, cached: $displayName');
         return displayName;
+      } else {
+        debugPrint(
+            '🔍 [LocalChatPage] Participant found but no usable name: firstName=${participant.firstName}, lastName=${participant.lastName}');
       }
     } catch (_) {
       // Participant not found in conversation model
       debugPrint(
-          '🔍 [LocalChatPage] Participant not found for senderId: ${message.senderId}');
+          '🔍 [LocalChatPage] Participant not found in conversation for senderId: ${message.senderId}');
     }
 
-    // If we still don't have a name, use a more descriptive fallback
-    // This will be replaced once participants are loaded from the API
+    // Try to trigger participant loading if we don't have any data yet
+    if (_participantNameCache.isEmpty) {
+      debugPrint(
+          '🔍 [LocalChatPage] No participants in cache, triggering load...');
+      _refreshParticipantsIfNeeded();
+    }
+
+    // Only use fallback if we don't have any participant data yet
+    // Don't cache fallback names to allow real names to override them later
     final fallbackName = 'User ${message.senderId.substring(0, 8)}...';
-    _participantNameCache[message.senderId] = fallbackName;
+    debugPrint('🔍 [LocalChatPage] Using fallback name: $fallbackName');
     return fallbackName;
   }
 
@@ -923,29 +1273,71 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         onCancel: _exitSelectionMode,
       );
     } else {
-      return ChatTopUserPanel(
-        displayName: _getDisplayName(),
-        avatarUrl: _getAvatarUrl(),
-        initials: _getInitials(),
-        isDirect: widget.conversation.type == 'direct',
-        isOnline: _isOtherUserOnline,
-        isTyping: _isOtherUserTyping,
-        lastSeenLabel: widget.conversation.lastActivity != null
-            ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
-            : 'Last seen recently',
-        onAvatarTap: _showProfileCard,
-        onVoiceCall: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Voice call coming soon')),
-          );
-        },
-        onVideoCall: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Video call coming soon')),
-          );
-        },
-        onClearChat: _showClearChatDialog,
-        onBlockUser: _showBlockUserDialog,
+      return AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: AppTheme.primaryColor,
+              backgroundImage: _getAvatarUrl().isNotEmpty
+                  ? NetworkImage(_getAvatarUrl())
+                  : null,
+              child: _getAvatarUrl().isEmpty
+                  ? Text(
+                      _getInitials(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _getDisplayName(),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (widget.conversation.type == 'group')
+                    Text(
+                      _getParticipantCountText(),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          // Debug button for group chats to refresh participants
+          if (widget.conversation.type == 'group')
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _forceRefreshParticipants,
+              tooltip: 'Refresh participants',
+            ),
+          IconButton(
+            icon: const Icon(Icons.more_vert),
+            onPressed: _showProfileCard,
+          ),
+        ],
       );
     }
   }
@@ -970,7 +1362,9 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           avatarUrl: avatarUrl,
           initials: initials,
           description: description,
-          participants: widget.conversation.participants,
+          participants: isGroup
+              ? _getCachedParticipants()
+              : widget.conversation.participants,
           isOnline: widget.conversation.isOnline,
           lastSeenLabel: widget.conversation.lastActivity != null
               ? 'Last seen ${timeago.format(widget.conversation.lastActivity!)}'
@@ -1558,6 +1952,16 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             });
           }
         }
+
+        // For group conversations, try to refresh participants if we have fallback names
+        if (widget.conversation.type == 'group') {
+          _refreshParticipantsIfNeeded();
+
+          // Force UI rebuild to show updated participant names
+          if (mounted) {
+            setState(() {});
+          }
+        }
       });
     });
 
@@ -1830,7 +2234,9 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                       .contains(message.serverId ?? message.id.toString()),
                   senderName: _getSenderDisplayName(message),
                   senderAvatarUrl: _getSenderAvatarUrl(message),
-                  participants: widget.conversation.participants,
+                  participants: widget.conversation.type == 'group'
+                      ? _getCachedParticipants()
+                      : widget.conversation.participants,
                   reactionsJson: message.reactions,
                   currentUserId: authState.user?.id,
                   onReactionTap: (emoji) async {

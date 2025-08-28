@@ -30,6 +30,7 @@ import '../../../attendance/presentation/pages/teacher_attendance_page.dart';
 import '../../../subjects/presentation/pages/subjects_main_page.dart';
 import '../../../assignments/presentation/pages/flexible_assignments_page.dart';
 import '../../../../shared/services/chat_service.dart';
+import '../../../../shared/services/early_participant_loader.dart';
 
 // Import the existing provider to avoid conflicts
 import '../../../class_management/presentation/pages/class_management_page.dart'
@@ -155,8 +156,59 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
       if (authState.isAuthenticated && authState.user != null) {
         debugPrint('🔔 Initializing notifications...');
         ref.read(notificationsProvider.notifier).initializeWithData();
+
+        // Load participants for group conversations early to prevent flickering
+        _loadParticipantsEarly();
       }
     });
+  }
+
+  /// Load participants for group conversations early to prevent flickering
+  /// This ensures participant names are available immediately when opening group chats
+  Future<void> _loadParticipantsEarly() async {
+    try {
+      debugPrint('🔍 [HomePage] Starting early participant loading...');
+
+      // Get conversations to find group conversations
+      final conversationsState = ref.read(conversationsProvider);
+      List<String> groupConversationIds = [];
+
+      if (conversationsState.conversations.isNotEmpty) {
+        // Extract group conversation IDs
+        groupConversationIds = conversationsState.conversations
+            .where((conv) => conv.type == 'group')
+            .map((conv) => conv.id)
+            .toList();
+
+        debugPrint(
+            '🔍 [HomePage] Found ${groupConversationIds.length} group conversations');
+      } else {
+        // If no conversations loaded yet, try to load them first
+        debugPrint(
+            '🔍 [HomePage] No conversations loaded yet, loading conversations first...');
+        await ref.read(conversationsProvider.notifier).loadConversations();
+
+        final updatedState = ref.read(conversationsProvider);
+        groupConversationIds = updatedState.conversations
+            .where((conv) => conv.type == 'group')
+            .map((conv) => conv.id)
+            .toList();
+
+        debugPrint(
+            '🔍 [HomePage] Loaded ${groupConversationIds.length} group conversations');
+      }
+
+      if (groupConversationIds.isNotEmpty) {
+        // Load participants for all group conversations
+        await EarlyParticipantLoader.loadAllParticipants(groupConversationIds);
+        debugPrint('🔍 [HomePage] Early participant loading completed');
+      } else {
+        debugPrint(
+            '🔍 [HomePage] No group conversations found, skipping participant loading');
+      }
+    } catch (e) {
+      debugPrint('❌ [HomePage] Failed to load participants early: $e');
+    }
   }
 
   @override
