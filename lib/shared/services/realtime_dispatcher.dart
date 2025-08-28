@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/chat_repository_service.dart';
 import '../models/local_message.dart';
+import '../models/local_conversation.dart';
 import '../providers/local_chat_providers.dart';
 import '../services/chat_service.dart';
 import '../models/message.dart' as remote;
@@ -532,16 +533,32 @@ class RealtimeDispatcher {
       }
 
       // CRITICAL: Send read receipt via WebSocket immediately for this message
+      // BUT ONLY for direct conversations - group conversations should not send read receipts immediately
       if (localMessage.serverId != null) {
         try {
-          final realtimeService = _ref!.read(realtimeServiceProvider);
-          debugPrint(
-            '📖 [DISPATCHER] Sending read receipt for message ${localMessage.serverId}',
-          );
-          realtimeService.markAsRead([localMessage.serverId!], conversationId);
-          debugPrint(
-            '✅ [DISPATCHER] Read receipt sent via WebSocket for message ${localMessage.serverId}',
-          );
+          // Check if this is a group conversation
+          final conversation =
+              await ChatRepositoryService.getConversation(conversationId);
+          if (conversation != null &&
+              conversation.type == LocalConversationType.group) {
+            debugPrint(
+              '📖 [DISPATCHER] Group conversation - not sending read receipt immediately',
+            );
+            debugPrint(
+              '📖 [DISPATCHER] Read status will update when all members read the message',
+            );
+          } else {
+            // Direct conversation - send read receipt immediately
+            final realtimeService = _ref!.read(realtimeServiceProvider);
+            debugPrint(
+              '📖 [DISPATCHER] Direct conversation - sending read receipt for message ${localMessage.serverId}',
+            );
+            realtimeService
+                .markAsRead([localMessage.serverId!], conversationId);
+            debugPrint(
+              '✅ [DISPATCHER] Read receipt sent via WebSocket for message ${localMessage.serverId}',
+            );
+          }
         } catch (e) {
           debugPrint(
             '❌ [DISPATCHER] Failed to send read receipt: $e',

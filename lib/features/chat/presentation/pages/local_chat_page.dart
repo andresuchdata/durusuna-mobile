@@ -280,6 +280,24 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         }
       });
 
+      // Load group participants if this is a group conversation
+      if (widget.conversation.type == 'group') {
+        Future.delayed(const Duration(milliseconds: 1000), () async {
+          try {
+            await _loadGroupParticipants();
+            // Refresh the messages to show updated sender names
+            if (mounted) {
+              ref
+                  .read(localMessagesProvider(widget.conversation.id).notifier)
+                  .refresh();
+            }
+          } catch (e) {
+            debugPrint(
+                '⚠️ [LocalChatPage] Failed to load group participants: $e');
+          }
+        });
+      }
+
       // Handle message highlighting and scrolling if requested
       if (widget.highlightMessageId != null && widget.scrollToMessage) {
         _scrollToHighlightedMessage();
@@ -303,6 +321,9 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     _focusNode.dispose();
     _typingAutoHideTimer?.cancel();
     _messageUpdateTimer?.cancel();
+
+    // Clear participant cache
+    _participantNameCache.clear();
 
     // Clean up GlobalKey management via service
     GlobalKeyManager.instance.forceCleanup();
@@ -511,24 +532,92 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     }
   }
 
+  // Cache for participant names to avoid repeated lookups
+  final Map<String, String> _participantNameCache = {};
+
+  /// Load participants for group conversations to resolve sender names
+  Future<void> _loadGroupParticipants() async {
+    if (widget.conversation.type != 'group') return;
+
+    try {
+      debugPrint(
+          '🔍 [LocalChatPage] Loading participants for group conversation ${widget.conversation.id}');
+
+      // Try to get participants from the local chat service
+      final chatService = ref.read(localChatServiceProvider);
+      final participants =
+          await chatService.getGroupParticipants(widget.conversation.id);
+
+      if (participants.isNotEmpty) {
+        debugPrint(
+            '🔍 [LocalChatPage] Loaded ${participants.length} participants for group conversation');
+
+        // Cache participant names for better performance
+        for (final participant in participants) {
+          final id = participant['id']?.toString() ?? '';
+          final firstName = participant['first_name']?.toString() ?? '';
+          final lastName = participant['last_name']?.toString() ?? '';
+
+          if (id.isNotEmpty && (firstName.isNotEmpty || lastName.isNotEmpty)) {
+            final displayName = '${firstName} ${lastName}'.trim();
+            if (displayName.isNotEmpty) {
+              _participantNameCache[id] = displayName;
+              debugPrint(
+                  '🔍 [LocalChatPage] Cached participant: $id -> $displayName');
+            }
+          }
+        }
+      } else {
+        debugPrint(
+            '⚠️ [LocalChatPage] No participants found for group conversation');
+      }
+    } catch (e) {
+      debugPrint('⚠️ [LocalChatPage] Failed to load group participants: $e');
+    }
+  }
+
+  /// Get sender display name with improved fallback logic
   String? _getSenderDisplayName(LocalMessage message) {
     if (widget.conversation.type != 'group' || message.isFromMe) return null;
+
+    // Check cache first (this will have names loaded from API)
+    if (_participantNameCache.containsKey(message.senderId)) {
+      return _participantNameCache[message.senderId];
+    }
+
     try {
+      // First try to find participant in the conversation's participants list
       final participant = widget.conversation.participants
           .firstWhere((p) => p.id == message.senderId);
-      return '${participant.firstName} ${participant.lastName}'.trim();
+      final displayName =
+          '${participant.firstName} ${participant.lastName}'.trim();
+      if (displayName.isNotEmpty) {
+        // Cache the result
+        _participantNameCache[message.senderId] = displayName;
+        return displayName;
+      }
     } catch (_) {
-      return 'Unknown';
+      // Participant not found in conversation model
+      debugPrint(
+          '🔍 [LocalChatPage] Participant not found for senderId: ${message.senderId}');
     }
+
+    // If we still don't have a name, use a more descriptive fallback
+    // This will be replaced once participants are loaded from the API
+    final fallbackName = 'User ${message.senderId.substring(0, 8)}...';
+    _participantNameCache[message.senderId] = fallbackName;
+    return fallbackName;
   }
 
   String? _getSenderAvatarUrl(LocalMessage message) {
     if (widget.conversation.type != 'group' || message.isFromMe) return null;
+
     try {
       final participant = widget.conversation.participants
           .firstWhere((p) => p.id == message.senderId);
       return participant.avatarUrl;
     } catch (_) {
+      // Participant not found, return null for avatar
       return null;
     }
   }
@@ -558,9 +647,18 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     debugPrint('📖 [DEBUG] Setting _hasMarkedAsReadAtBottom = true');
     _hasMarkedAsReadAtBottom = true;
 
-    // Send read receipts via WebSocket (handles both database and notifications)
-    debugPrint('📖 [DEBUG] Calling _sendReadReceiptsForUnreadMessages()');
-    _sendReadReceiptsForUnreadMessages();
+    // For group conversations, we don't send read receipts immediately
+    // Read status should only update when all members have read the message
+    if (widget.conversation.type == 'group') {
+      debugPrint(
+          '📖 [DEBUG] Group conversation - not sending read receipts when at bottom');
+      debugPrint(
+          '📖 [DEBUG] Read status will update when all members read the message');
+    } else {
+      // Send read receipts via WebSocket (handles both database and notifications)
+      debugPrint('📖 [DEBUG] Calling _sendReadReceiptsForUnreadMessages()');
+      _sendReadReceiptsForUnreadMessages();
+    }
 
     // Reset flag after a delay to allow for future mark-as-read calls
     Future.delayed(const Duration(seconds: 2), () {
@@ -571,10 +669,25 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
 
   void _markOnChatPageEnter() {
     debugPrint('📖 [DEBUG] _markOnChatPageEnter() called');
-    // Send read receipts for unread messages from other users (WebSocket only - handles both database and notifications)
+
+    // For both direct and group conversations, mark as read
+    // The difference is in how read receipts are sent, not in marking local unread count
     debugPrint(
         '📖 [DEBUG] Calling _sendReadReceiptsForUnreadMessages() from _markOnChatPageEnter');
     _sendReadReceiptsForUnreadMessages();
+
+    // CRITICAL: Also ensure the local conversations provider is updated immediately
+    // This fixes the issue where unread count doesn't update when returning to conversations page
+    try {
+      ref
+          .read(localConversationsProvider.notifier)
+          .markAsRead(widget.conversation.id);
+      debugPrint(
+          '📖 [LocalChatPage] Immediately updated local conversations provider for conversation ${widget.conversation.id}');
+    } catch (e) {
+      debugPrint(
+          '⚠️ [LocalChatPage] Failed to update local conversations provider: $e');
+    }
   }
 
   Future<void> _syncLatestFromServer() async {
@@ -1028,7 +1141,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     try {
       final position = _scrollController.position;
       // Since ListView is reversed, scroll to 0 to show latest messages (bottom)
-      final targetPosition = 0.0;
+      const targetPosition = 0.0;
 
       debugPrint(
           '🔄 [UI] Scrolling to bottom: targetPosition=$targetPosition, animated=$animated, currentPosition=${position.pixels}');
@@ -1183,18 +1296,27 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             if (isFromOtherUser &&
                 rtMessage.message.serverId != null &&
                 isViewingThisConversation) {
-              debugPrint(
-                  '📖 [REALTIME] Incoming message from other user, sending read receipt');
-              debugPrint(
-                  '📖 [REALTIME] Message ID: ${rtMessage.message.serverId}');
-              debugPrint(
-                  '📖 [REALTIME] Sender ID: ${rtMessage.message.senderId}');
-              debugPrint('📖 [REALTIME] Current User ID: $currentUserId');
+              // For group conversations, we don't send read receipts immediately
+              // Read status should only update when all members have read the message
+              if (widget.conversation.type == 'group') {
+                debugPrint(
+                    '📖 [REALTIME] Group conversation - not sending read receipt immediately');
+                debugPrint(
+                    '📖 [REALTIME] Read status will update when all members read the message');
+              } else {
+                debugPrint(
+                    '📖 [REALTIME] Direct conversation - sending read receipt immediately');
+                debugPrint(
+                    '📖 [REALTIME] Message ID: ${rtMessage.message.serverId}');
+                debugPrint(
+                    '📖 [REALTIME] Sender ID: ${rtMessage.message.senderId}');
+                debugPrint('📖 [REALTIME] Current User ID: $currentUserId');
 
-              // Send read receipt via WebSocket immediately
-              final realtimeService = ref.read(realtimeServiceProvider);
-              realtimeService.markAsRead(
-                  [rtMessage.message.serverId!], widget.conversation.id);
+                // Send read receipt via WebSocket immediately
+                final realtimeService = ref.read(realtimeServiceProvider);
+                realtimeService.markAsRead(
+                    [rtMessage.message.serverId!], widget.conversation.id);
+              }
             } else {
               if (!isFromOtherUser) {
                 debugPrint(

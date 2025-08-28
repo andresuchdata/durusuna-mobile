@@ -733,6 +733,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               } catch (e) {
                 debugPrint(
                     '⚠️ [ConversationsPage] Failed to update conversation unread count: $e');
+                // Fallback: try to refresh the conversations list
+                try {
+                  ref.read(localConversationsProvider.notifier).refresh();
+                } catch (refreshError) {
+                  debugPrint(
+                      '⚠️ [ConversationsPage] Failed to refresh conversations: $refreshError');
+                }
               }
             });
           });
@@ -827,17 +834,68 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       LocalConversation localConversation) {
     final participants = <User>[];
 
-    // Add the other user if this is a direct conversation
-    if (localConversation.type == LocalConversationType.direct &&
-        localConversation.otherUserId != null &&
-        localConversation.otherUserName != null) {
+    if (localConversation.type == LocalConversationType.direct) {
+      // Add the other user if this is a direct conversation
+      if (localConversation.otherUserId != null &&
+          localConversation.otherUserName != null) {
+        // Parse the other user's name
+        final nameParts = localConversation.otherUserName!.split(' ');
+        final firstName = nameParts.isNotEmpty ? nameParts.first : '';
+        final lastName =
+            nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+
+        participants.add(User(
+          id: localConversation.otherUserId!,
+          firstName: firstName,
+          lastName: lastName,
+          email: '', // Not available in LocalConversation
+          avatarUrl: localConversation.otherUserAvatar,
+          phone: null,
+          userType: UserType.student, // Default to student type
+          role: UserRole.user,
+          schoolId: null,
+          school: null,
+          isActive: true,
+          lastActiveAt: null,
+          createdAt: localConversation.createdAt,
+          updatedAt: localConversation.updatedAt,
+        ));
+      }
+    } else if (localConversation.type == LocalConversationType.group) {
+      // For group conversations, we need to load participants from the local chat service
+      // This is a temporary solution - ideally the LocalConversation should store participant info
+      try {
+        // Try to get participants from the local chat service
+        final localChatService = ref.read(localChatServiceProvider);
+        // Note: This is a synchronous call, but we need async data
+        // We'll handle this in the LocalChatPage by loading participants there
+        debugPrint(
+            '🔍 [ConversationsPage] Group conversation ${localConversation.serverId}: Will load participants in LocalChatPage');
+      } catch (e) {
+        debugPrint(
+            '⚠️ [ConversationsPage] Could not access localChatService: $e');
+      }
+    }
+
+    return participants;
+  }
+
+  /// Build otherUser from LocalConversation data
+  User? _buildOtherUserFromLocalConversation(
+      LocalConversation localConversation) {
+    if (localConversation.type == LocalConversationType.direct) {
+      if (localConversation.otherUserId == null ||
+          localConversation.otherUserName == null) {
+        return null;
+      }
+
       // Parse the other user's name
       final nameParts = localConversation.otherUserName!.split(' ');
       final firstName = nameParts.isNotEmpty ? nameParts.first : '';
       final lastName =
           nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
 
-      participants.add(User(
+      return User(
         id: localConversation.otherUserId!,
         firstName: firstName,
         lastName: lastName,
@@ -852,42 +910,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
         lastActiveAt: null,
         createdAt: localConversation.createdAt,
         updatedAt: localConversation.updatedAt,
-      ));
-    }
-
-    return participants;
-  }
-
-  /// Build otherUser from LocalConversation data
-  User? _buildOtherUserFromLocalConversation(
-      LocalConversation localConversation) {
-    if (localConversation.type != LocalConversationType.direct ||
-        localConversation.otherUserId == null ||
-        localConversation.otherUserName == null) {
+      );
+    } else if (localConversation.type == LocalConversationType.group) {
+      // For group conversations, return null as there's no single "other user"
       return null;
     }
 
-    // Parse the other user's name
-    final nameParts = localConversation.otherUserName!.split(' ');
-    final firstName = nameParts.isNotEmpty ? nameParts.first : '';
-    final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
-
-    return User(
-      id: localConversation.otherUserId!,
-      firstName: firstName,
-      lastName: lastName,
-      email: '', // Not available in LocalConversation
-      avatarUrl: localConversation.otherUserAvatar,
-      phone: null,
-      userType: UserType.student, // Default to student type
-      role: UserRole.user,
-      schoolId: null,
-      school: null,
-      isActive: true,
-      lastActiveAt: null,
-      createdAt: localConversation.createdAt,
-      updatedAt: localConversation.updatedAt,
-    );
+    return null;
   }
 }
 

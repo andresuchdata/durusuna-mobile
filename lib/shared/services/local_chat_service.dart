@@ -1072,6 +1072,31 @@ class LocalChatService {
     }
   }
 
+  /// Get group participants for a conversation
+  Future<List<Map<String, dynamic>>> getGroupParticipants(
+      String conversationId) async {
+    try {
+      // Try to get conversation details from the API which should include participants
+      final response = await _apiService.get(
+        '${ApiConstants.conversations}/$conversationId',
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final participants = response.data['participants'] as List<dynamic>?;
+        if (participants != null) {
+          return participants.cast<Map<String, dynamic>>();
+        }
+      }
+
+      debugPrint(
+          '⚠️ [LocalChatService] No participants found for conversation $conversationId');
+      return [];
+    } catch (e) {
+      debugPrint('❌ [LocalChatService] Failed to get group participants: $e');
+      return [];
+    }
+  }
+
   // _updateLastMessageSyncTime not used; watermark derived from DB
 
   // ========== REAL-TIME INTEGRATION ==========
