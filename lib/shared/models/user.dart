@@ -35,9 +35,14 @@ class User {
   final UserRole? role;
   @JsonKey(name: 'school_id')
   final String? schoolId;
+  @JsonKey(includeToJson: false, includeFromJson: true)
   final School? school;
   @JsonKey(name: 'is_active')
   final bool? isActive;
+  @JsonKey(name: 'email_verified')
+  final bool? emailVerified;
+  @JsonKey(name: 'email_verified_at')
+  final DateTime? emailVerifiedAt;
   @JsonKey(name: 'last_active_at')
   final DateTime? lastActiveAt;
   @JsonKey(name: 'created_at')
@@ -57,6 +62,8 @@ class User {
     this.schoolId,
     this.school,
     this.isActive,
+    this.emailVerified,
+    this.emailVerifiedAt,
     this.lastActiveAt,
     this.createdAt,
     this.updatedAt,
@@ -79,6 +86,8 @@ class User {
     String? schoolId,
     School? school,
     bool? isActive,
+    bool? emailVerified,
+    DateTime? emailVerifiedAt,
     DateTime? lastActiveAt,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -95,6 +104,8 @@ class User {
       schoolId: schoolId ?? this.schoolId,
       school: school ?? this.school,
       isActive: isActive ?? this.isActive,
+      emailVerified: emailVerified ?? this.emailVerified,
+      emailVerifiedAt: emailVerifiedAt ?? this.emailVerifiedAt,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

@@ -144,10 +144,13 @@ class ApiConstants {
   // User endpoints
   static const String searchUsers = '$users/search';
   static const String getContacts = '$users/contacts';
+  static const String updateUserProfile = '$users/profile';
 
   // Conversation endpoints
   static String getConversations = conversations;
   static String createConversation = conversations;
+  static String updateConversation(String conversationId) =>
+      '$conversations/$conversationId';
   static String getConversationMessages(String conversationId) =>
       '$conversations/$conversationId/messages';
   static String loadMoreMessages(String conversationId) =>

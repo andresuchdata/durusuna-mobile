@@ -3,6 +3,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../core/constants/app_theme.dart';
 import '../models/user.dart';
 import '../models/conversation.dart';
+import '../../features/chat/presentation/pages/group_profile_page.dart';
 
 class GroupProfileCard extends StatefulWidget {
   final Conversation conversation;
@@ -10,6 +11,7 @@ class GroupProfileCard extends StatefulWidget {
   final VoidCallback? onAddMembers;
   final VoidCallback? onEditGroup;
   final Function(User)? onUserTap;
+  final bool showEditButton;
 
   const GroupProfileCard({
     super.key,
@@ -18,6 +20,7 @@ class GroupProfileCard extends StatefulWidget {
     this.onAddMembers,
     this.onEditGroup,
     this.onUserTap,
+    this.showEditButton = false,
   });
 
   @override
@@ -72,12 +75,12 @@ class _GroupProfileCardState extends State<GroupProfileCard> {
                             )
                           : null,
                     ),
-                    if (widget.onEditGroup != null)
+                    if (widget.showEditButton)
                       Positioned(
                         bottom: 0,
                         right: 0,
                         child: GestureDetector(
-                          onTap: widget.onEditGroup,
+                          onTap: () => _navigateToGroupProfile(context),
                           child: Container(
                             width: 32,
                             height: 32,
@@ -622,6 +625,15 @@ class _GroupProfileCardState extends State<GroupProfileCard> {
         onAddMembers: onAddMembers,
         onEditGroup: onEditGroup,
         onUserTap: onUserTap,
+      ),
+    );
+  }
+
+  void _navigateToGroupProfile(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) =>
+            GroupProfilePage(conversation: widget.conversation),
       ),
     );
   }

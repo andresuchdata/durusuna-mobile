@@ -20,6 +20,10 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
           ? null
           : School.fromJson(json['school'] as Map<String, dynamic>),
       isActive: json['is_active'] as bool?,
+      emailVerified: json['email_verified'] as bool?,
+      emailVerifiedAt: json['email_verified_at'] == null
+          ? null
+          : DateTime.parse(json['email_verified_at'] as String),
       lastActiveAt: json['last_active_at'] == null
           ? null
           : DateTime.parse(json['last_active_at'] as String),
@@ -41,8 +45,9 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
       'user_type': _$UserTypeEnumMap[instance.userType]!,
       'role': _$UserRoleEnumMap[instance.role],
       'school_id': instance.schoolId,
-      'school': instance.school,
       'is_active': instance.isActive,
+      'email_verified': instance.emailVerified,
+      'email_verified_at': instance.emailVerifiedAt?.toIso8601String(),
       'last_active_at': instance.lastActiveAt?.toIso8601String(),
       'created_at': instance.createdAt?.toIso8601String(),
       'updated_at': instance.updatedAt?.toIso8601String(),

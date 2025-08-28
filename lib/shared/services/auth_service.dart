@@ -107,8 +107,63 @@ class AuthService {
       final response = await _apiService.get(ApiConstants.profile);
 
       if (response.statusCode == 200) {
-        final userData = response.data['user'] as Map<String, dynamic>;
-        final user = User.fromJson(userData);
+        final userData = response.data as Map<String, dynamic>;
+        debugPrint('🔄 [AuthService] getCurrentUser data from API: $userData');
+
+        // Filter the data to only include fields present in the User model
+        final filteredData = <String, dynamic>{};
+        final validFields = [
+          'id',
+          'first_name',
+          'last_name',
+          'email',
+          'phone',
+          'avatar_url',
+          'user_type',
+          'role',
+          'school_id',
+          'school',
+          'is_active',
+          'email_verified',
+          'email_verified_at',
+          'last_login_at',
+          'created_at',
+          'updated_at'
+        ];
+        final fieldMapping = {'last_login_at': 'last_active_at'};
+
+        for (final field in validFields) {
+          if (userData.containsKey(field)) {
+            try {
+              final frontendField = fieldMapping[field] ?? field;
+              var value = userData[field];
+
+              // Handle null boolean fields explicitly
+              if (field == 'is_active' && value == null) {
+                value = false;
+              } else if (field == 'email_verified' && value == null) {
+                value = false;
+              }
+
+              filteredData[frontendField] = value;
+            } catch (e) {
+              debugPrint('🔄 [AuthService] Error processing field $field: $e');
+              rethrow;
+            }
+          }
+        }
+
+        debugPrint(
+            '🔄 [AuthService] getCurrentUser filtered data: $filteredData');
+
+        User user;
+        try {
+          user = User.fromJson(filteredData);
+        } catch (e) {
+          debugPrint(
+              '🔄 [AuthService] Error parsing user data in getCurrentUser: $e');
+          rethrow;
+        }
 
         // Update stored user data
         await StorageService.saveUser(user.toJson());
@@ -134,6 +189,7 @@ class AuthService {
     String? firstName,
     String? lastName,
     String? phone,
+    String? avatarUrl,
     DateTime? dateOfBirth,
     Map<String, dynamic>? preferences,
   }) async {
@@ -142,23 +198,115 @@ class AuthService {
       if (firstName != null) updateData['first_name'] = firstName;
       if (lastName != null) updateData['last_name'] = lastName;
       if (phone != null) updateData['phone'] = phone;
-      if (dateOfBirth != null)
+      if (avatarUrl != null) updateData['avatar_url'] = avatarUrl;
+      if (dateOfBirth != null) {
         updateData['date_of_birth'] = dateOfBirth.toIso8601String();
+      }
       if (preferences != null) updateData['preferences'] = preferences;
 
       final response = await _apiService.put(
-        ApiConstants.profile,
+        ApiConstants.updateUserProfile,
         data: updateData,
       );
 
       if (response.statusCode == 200) {
         final userData = response.data['user'] as Map<String, dynamic>;
-        final user = User.fromJson(userData);
+
+        // Filter out fields that aren't in our User model
+        final filteredData = <String, dynamic>{};
+        final validFields = [
+          'id',
+          'first_name',
+          'last_name',
+          'email',
+          'phone',
+          'avatar_url',
+          'user_type',
+          'role',
+          'school_id',
+          'school',
+          'is_active',
+          'email_verified',
+          'email_verified_at',
+          'last_login_at',
+          'created_at',
+          'updated_at'
+        ];
+
+        // Map backend field names to frontend field names
+        final fieldMapping = {
+          'last_login_at': 'last_active_at',
+        };
+
+        for (final field in validFields) {
+          if (userData.containsKey(field)) {
+            try {
+              final frontendField = fieldMapping[field] ?? field;
+              var value = userData[field];
+
+              // Handle null boolean fields explicitly
+              if (field == 'is_active' && value == null) {
+                value = false; // Default to false if null
+              } else if (field == 'email_verified' && value == null) {
+                value = false; // Default to false if null
+              }
+
+              filteredData[frontendField] = value;
+              debugPrint(
+                  '🔄 [AuthService] Processing field: $field -> $frontendField = $value (type: ${value.runtimeType})');
+            } catch (e) {
+              debugPrint('🔄 [AuthService] Error processing field $field: $e');
+              rethrow;
+            }
+          }
+        }
+
+        // Debug: Print the data to see what's causing the type casting error
+        debugPrint('🔄 [AuthService] User data from API: $userData');
+        debugPrint('🔄 [AuthService] Filtered data: $filteredData');
+        debugPrint('🔄 [AuthService] Field mapping: $fieldMapping');
+
+        // Debug specific boolean fields that might be causing issues
+        debugPrint(
+            '🔄 [AuthService] is_active value: ${userData['is_active']} (type: ${userData['is_active'].runtimeType})');
+        debugPrint(
+            '🔄 [AuthService] email_verified value: ${userData['email_verified']} (type: ${userData['email_verified'].runtimeType})');
+
+        // Debug all fields to find the problematic one
+        for (final entry in userData.entries) {
+          if (entry.value != null &&
+              entry.value.runtimeType.toString().contains('bool')) {
+            debugPrint(
+                '🔄 [AuthService] Boolean field: ${entry.key} = ${entry.value} (type: ${entry.value.runtimeType})');
+          }
+        }
+
+        User user;
+        try {
+          user = User.fromJson(filteredData);
+        } catch (e) {
+          debugPrint('🔄 [AuthService] Error parsing user data: $e');
+          debugPrint(
+              '🔄 [AuthService] User data keys: ${userData.keys.toList()}');
+          debugPrint(
+              '🔄 [AuthService] Filtered data keys: ${filteredData.keys.toList()}');
+          debugPrint('🔄 [AuthService] Filtered data content: $filteredData');
+          rethrow;
+        }
+
+        // If we updated the avatar but the response doesn't include it,
+        // manually update the user object with the new avatar URL
+        User finalUser = user;
+        if (avatarUrl != null && user.avatarUrl != avatarUrl) {
+          debugPrint(
+              '🔄 [AuthService] Backend returned null avatar_url, manually updating with: $avatarUrl');
+          finalUser = user.copyWith(avatarUrl: avatarUrl);
+        }
 
         // Update stored user data
-        await StorageService.saveUser(user.toJson());
+        await StorageService.saveUser(finalUser.toJson());
 
-        return user;
+        return finalUser;
       } else {
         throw ApiException(
           message: 'Failed to update profile',

@@ -104,6 +104,50 @@ class ChatService {
     }
   }
 
+  /// Update conversation details (name, description, avatar) - for group conversations only
+  Future<Conversation> updateConversation({
+    required String conversationId,
+    String? name,
+    String? description,
+    String? avatarUrl,
+  }) async {
+    try {
+      final updateData = <String, dynamic>{};
+      if (name != null) updateData['name'] = name;
+      if (description != null) updateData['description'] = description;
+      if (avatarUrl != null) updateData['avatar_url'] = avatarUrl;
+
+      if (updateData.isEmpty) {
+        throw ApiException(
+          message: 'At least one field must be provided for update',
+          statusCode: 400,
+        );
+      }
+
+      final response = await _apiService.put(
+        ApiConstants.updateConversation(conversationId),
+        data: updateData,
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data as Map<String, dynamic>;
+        final conversation = Conversation.fromJson(data['conversation']);
+        return conversation;
+      } else {
+        throw ApiException(
+          message: 'Failed to update conversation',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(
+        message: 'Failed to update conversation: ${e.toString()}',
+        statusCode: 0,
+      );
+    }
+  }
+
   /// Load more messages for a conversation (optimized endpoint)
   Future<List<Message>> loadMoreMessages(
     String conversationId, {

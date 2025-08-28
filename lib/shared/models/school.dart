@@ -14,11 +14,11 @@ class School {
   final String? logoUrl;
   final String? description;
   @JsonKey(name: 'is_active')
-  final bool isActive;
+  final bool? isActive;
   @JsonKey(name: 'created_at')
-  final DateTime createdAt;
+  final DateTime? createdAt;
   @JsonKey(name: 'updated_at')
-  final DateTime updatedAt;
+  final DateTime? updatedAt;
 
   School({
     required this.id,
@@ -29,9 +29,9 @@ class School {
     this.website,
     this.logoUrl,
     this.description,
-    required this.isActive,
-    required this.createdAt,
-    required this.updatedAt,
+    this.isActive,
+    this.createdAt,
+    this.updatedAt,
   });
 
   factory School.fromJson(Map<String, dynamic> json) => _$SchoolFromJson(json);
@@ -72,4 +72,4 @@ class School {
 
   @override
   int get hashCode => id.hashCode;
-} 
+}
