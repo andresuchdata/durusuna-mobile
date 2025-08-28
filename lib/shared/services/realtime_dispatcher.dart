@@ -29,6 +29,10 @@ class RealtimeDispatcher {
   bool _circuitBreakerOpen = false;
   DateTime? _circuitBreakerOpenTime;
 
+  // CRITICAL: Prevent multiple rapid refreshes that cause flickering
+  // Use a debounced refresh approach to ensure UI stability
+  final Map<String, Timer> _refreshTimers = {};
+
   // Private constructor for singleton
   RealtimeDispatcher._internal();
 
@@ -311,8 +315,13 @@ class RealtimeDispatcher {
         debugPrint(
           '✅ RealtimeDispatcher: Own message adopted successfully via real-time: ${realtimeMessage.message.id}',
         );
-        // Update conversations list (legacy provider) so ConversationsPage shows latest
+        // Update conversations list (both local and legacy providers) so ConversationsPage shows latest
         try {
+          // Update local conversations provider
+          _ref!.read(localConversationsProvider.notifier).updateLastMessage(
+              realtimeMessage.conversationId, realtimeMessage.message);
+
+          // Update legacy conversations provider
           final converted = _convertLocalToRemote(
             realtimeMessage.message,
             isFromMe: true,
@@ -362,6 +371,11 @@ class RealtimeDispatcher {
       );
       // Also update conversations list with the latest message for own sends
       try {
+        // Update local conversations provider
+        _ref!.read(localConversationsProvider.notifier).updateLastMessage(
+            realtimeMessage.conversationId, realtimeMessage.message);
+
+        // Update legacy conversations provider
         final converted = _convertLocalToRemote(
           realtimeMessage.message,
           isFromMe: true,
@@ -448,11 +462,34 @@ class RealtimeDispatcher {
       '🔄 [DEBUG] _updateUIForIncomingMessage: conversationId=$conversationId',
     );
 
-    // Refresh the messages list for this conversation
-    debugPrint(
-      '🔄 [DEBUG] Refreshing localMessagesProvider for conversation $conversationId',
-    );
-    _ref!.read(localMessagesProvider(conversationId).notifier).refresh();
+    // CRITICAL: Prevent multiple rapid refreshes that cause flickering
+    // Use a debounced refresh approach to ensure UI stability
+
+    // Cancel any pending refresh for this conversation
+    _refreshTimers[conversationId]?.cancel();
+
+    // Schedule a single refresh after a short delay to batch multiple rapid updates
+    _refreshTimers[conversationId] =
+        Timer(const Duration(milliseconds: 100), () async {
+      try {
+        debugPrint(
+          '🔄 [DEBUG] Executing debounced refresh for conversation $conversationId',
+        );
+
+        // Only refresh messages list, NOT conversations list to prevent flickering
+        // The conversations list is already updated via updateLastMessage above
+        _ref!.read(localMessagesProvider(conversationId).notifier).refresh();
+
+        debugPrint(
+          '✅ [DEBUG] Debounced refresh completed for conversation $conversationId',
+        );
+      } catch (e) {
+        debugPrint('❌ [DEBUG] Error in debounced refresh: $e');
+      } finally {
+        // Clean up timer reference
+        _refreshTimers.remove(conversationId);
+      }
+    });
 
     // Check if user is currently viewing this conversation to mark as read
     // We need to check if the user is actually in the chat page for this conversation
@@ -502,8 +539,7 @@ class RealtimeDispatcher {
         );
       }
     } else {
-      // Refresh list for unread badge updates
-      _ref!.read(localConversationsProvider.notifier).refresh();
+      // Don't refresh conversations list here - it's handled by the debounced refresh above
       if (isFromCurrentUser) {
         debugPrint('📝 [DEBUG] Skipping auto-mark-read for own message');
       } else if (!isViewingThisConversation) {
@@ -719,18 +755,11 @@ class RealtimeDispatcher {
       );
 
       if (event.action == 'created') {
-        // Refresh conversations list when a new conversation is created
-        if (_ref != null) {
-          // Force refresh the conversations provider to pick up the new conversation
-          final conversationsNotifier = _ref!.read(
-            localConversationsProvider.notifier,
-          );
-          await conversationsNotifier.refresh();
-
-          debugPrint(
-            '✅ RealtimeDispatcher: Refreshed conversations list after creation of ${event.conversationId}',
-          );
-        }
+        // Don't refresh conversations list here to prevent flickering
+        // The new conversation will be picked up by the next natural refresh
+        debugPrint(
+          '📋 RealtimeDispatcher: New conversation created: ${event.conversationId} (letting natural refresh handle it)',
+        );
       } else if (event.action == 'updated') {
         // Handle conversation updates (e.g., name changes)
         debugPrint(
@@ -776,10 +805,17 @@ class RealtimeDispatcher {
     }
   }
 
-  /// Dispose resources
+  /// Cleanup method to dispose of timers
   void dispose() {
+    // Cancel all pending refresh timers
+    for (final timer in _refreshTimers.values) {
+      timer.cancel();
+    }
+    _refreshTimers.clear();
+
+    // Cancel cleanup timer
     _cleanupTimer?.cancel();
-    _processedMessageIds.clear();
-    debugPrint('🔌 RealtimeDispatcher: Disposed');
+
+    debugPrint('🧹 RealtimeDispatcher: Cleanup completed');
   }
 }

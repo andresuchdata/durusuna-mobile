@@ -56,7 +56,13 @@ class LocalConversationsNotifier
     }
   }
 
-  Future<void> refresh() => _loadConversations();
+  Future<void> refresh() async {
+    // Only refresh if we're not in the middle of an optimistic update
+    // This prevents database data from overriding real-time updates
+    if (mounted) {
+      await _loadConversations();
+    }
+  }
 
   void markAsRead(String conversationId) {
     // Update database immediately
@@ -102,16 +108,25 @@ class LocalConversationsNotifier
     state.whenData((conversations) {
       final updated = conversations.map((c) {
         if (c.serverId == conversationId) {
-          final newUnreadCount =
-              message.isFromMe ? c.unreadCount : c.unreadCount + 1;
-          debugPrint(
-              '🐛 [LOCAL] updateLastMessage: conversationId=$conversationId, isFromMe=${message.isFromMe}, oldUnread=${c.unreadCount}, newUnread=$newUnreadCount');
-          return c.copyWith(
-            lastMessage: message.content,
-            lastMessageAt: message.createdAt,
-            lastActivity: message.createdAt,
-            unreadCount: newUnreadCount,
-          );
+          // CRITICAL: Only update if the new message is actually newer
+          // This prevents older messages from overriding newer ones
+          if (c.lastMessageAt == null ||
+              message.createdAt.isAfter(c.lastMessageAt!)) {
+            final newUnreadCount =
+                message.isFromMe ? c.unreadCount : c.unreadCount + 1;
+            debugPrint(
+                '🐛 [LOCAL] updateLastMessage: conversationId=$conversationId, isFromMe=${message.isFromMe}, oldUnread=${c.unreadCount}, newUnread=$newUnreadCount, messageTime=${message.createdAt}, lastMessageTime=${c.lastMessageAt}');
+            return c.copyWith(
+              lastMessage: message.content,
+              lastMessageAt: message.createdAt,
+              lastActivity: message.createdAt,
+              unreadCount: newUnreadCount,
+            );
+          } else {
+            debugPrint(
+                '⏭️ [LOCAL] Skipping update - existing message is newer: existing=${c.lastMessageAt}, new=${message.createdAt}');
+            return c; // Keep existing conversation unchanged
+          }
         }
         return c;
       }).toList();
@@ -483,7 +498,19 @@ class LocalMessagesNotifier
       if (index != -1 && mounted) {
         final updated = [...messages];
         updated[index] = updatedMessage;
-        state = AsyncValue.data(updated);
+
+        // CRITICAL: Prevent unnecessary state updates that cause flickering
+        // Only update if the message content actually changed
+        final existingMessage = messages[index];
+        if (existingMessage.content != updatedMessage.content ||
+            existingMessage.readStatus != updatedMessage.readStatus ||
+            existingMessage.reactions != updatedMessage.reactions) {
+          state = AsyncValue.data(updated);
+          debugPrint('🔄 [PROVIDER] Message updated: ${updatedMessage.id}');
+        } else {
+          debugPrint(
+              '⏭️ [PROVIDER] Skipping update - no meaningful changes: ${updatedMessage.id}');
+        }
       }
     });
   }
@@ -646,11 +673,6 @@ class LocalMessagesNotifier
   }
 
   bool get hasMore => _hasMore;
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }
 
 /// Provider for local contacts/users

@@ -187,6 +187,10 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   // Track last known message count to detect new arrivals
   int _lastMessageCount = 0;
 
+  // CRITICAL: Prevent rapid message updates that cause flickering
+  Timer? _messageUpdateTimer;
+  int _pendingMessageCount = 0;
+
   // Message highlighting removed - not used
 
   @override
@@ -298,6 +302,7 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     _messageController.dispose();
     _focusNode.dispose();
     _typingAutoHideTimer?.cancel();
+    _messageUpdateTimer?.cancel();
 
     // Clean up GlobalKey management via service
     GlobalKeyManager.instance.forceCleanup();
@@ -1236,22 +1241,8 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             debugPrint(
                 '🔄 [UI] Messages loaded/updated, scrolling to bottom... (${messages.length} messages)');
 
-            // Immediate scroll
+            // Use a single delayed scroll to prevent multiple rapid scroll attempts
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                _scrollToBottom(animated: false);
-              }
-            });
-
-            // Backup scroll after a short delay
-            Future.delayed(const Duration(milliseconds: 100), () {
-              if (mounted) {
-                _scrollToBottom(animated: false);
-              }
-            });
-
-            // Final backup scroll after layout is complete
-            Future.delayed(const Duration(milliseconds: 300), () {
               if (mounted) {
                 _scrollToBottom(animated: false);
               }
@@ -1366,11 +1357,12 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   }
 
   Widget _buildMessagesList(List<LocalMessage> messages, dynamic authState) {
-    // CRITICAL: Deduplicate messages at UI level to prevent GlobalKey conflicts
+    // CRITICAL: Enhanced deduplication to prevent flickering
     // This prevents crashes when duplicate messages exist in the database
     final deduplicatedMessages = <LocalMessage>[];
     final seenLocalIds = <int>{};
     final seenServerIds = <String>{};
+    final seenContentHashes = <String>{}; // Add content-based deduplication
 
     for (final message in messages) {
       bool shouldAdd = true;
@@ -1388,12 +1380,23 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
         shouldAdd = false;
       }
 
+      // CRITICAL: Check for duplicate content + timestamp to prevent flickering
+      // This prevents the same message from appearing multiple times
+      final contentHash =
+          '${message.content}_${message.createdAt.millisecondsSinceEpoch}';
+      if (seenContentHashes.contains(contentHash)) {
+        debugPrint(
+            '🚨 UI: Skipping duplicate content + timestamp: ${message.content}');
+        shouldAdd = false;
+      }
+
       if (shouldAdd) {
         deduplicatedMessages.add(message);
         seenLocalIds.add(message.id);
         if (message.serverId != null) {
           seenServerIds.add(message.serverId!);
         }
+        seenContentHashes.add(contentHash);
       }
     }
 

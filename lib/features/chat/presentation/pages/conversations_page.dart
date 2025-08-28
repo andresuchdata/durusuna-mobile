@@ -42,7 +42,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       } catch (_) {}
 
       // Force load conversations to ensure provider is active
-      ref.read(localConversationsProvider.notifier).refresh();
+      // Don't refresh here to prevent flickering - let the provider load naturally
 
       // NEW: Ensure Isar has conversation rows after fresh install/reset
       // by syncing from server once when this page opens
@@ -276,10 +276,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     ref.listen(realtimeConversationProvider, (previous, next) {
       next.whenData((conversationEvent) {
         if (conversationEvent.action == 'created') {
-          // Refresh conversations list when a new conversation is created
+          // Don't refresh here to prevent flickering - let realtime dispatcher handle updates
           debugPrint(
-              '📋 ConversationsPage: New conversation created, refreshing list');
-          ref.read(localConversationsProvider.notifier).refresh();
+              '📋 ConversationsPage: New conversation created, letting realtime dispatcher handle update');
         }
       });
     });
@@ -524,9 +523,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
             Future.delayed(const Duration(milliseconds: 100), () {
               ref.read(currentConversationProvider.notifier).state = null;
 
-              // Refresh conversations to get latest unread counts
-              // Use localConversationsProvider instead of legacy conversationsProvider
-              ref.read(localConversationsProvider.notifier).refresh();
+              // Don't refresh conversations here to prevent flickering
+              // The unread counts are already updated via realtime updates
             });
           });
         },
@@ -702,7 +700,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               .then((_) {
             Future.delayed(const Duration(milliseconds: 100), () {
               ref.read(currentConversationProvider.notifier).state = null;
-              ref.read(localConversationsProvider.notifier).refresh();
+              // Don't refresh conversations here to prevent flickering
+              // The unread counts are already updated via realtime updates
             });
           });
         },

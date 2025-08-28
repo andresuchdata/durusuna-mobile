@@ -537,6 +537,15 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
     if (index != -1) {
       final conversation = state.conversations[index];
 
+      // CRITICAL: Only update if the new message is actually newer
+      // This prevents older messages from overriding newer ones
+      if (conversation.lastMessageAt != null &&
+          !message.createdAt.isAfter(conversation.lastMessageAt!)) {
+        print(
+            '⏭️ [LEGACY] Skipping update - existing message is newer: existing=${conversation.lastMessageAt}, new=${message.createdAt}');
+        return;
+      }
+
       // Get current user ID from storage for more reliable comparison
       final currentUserId = StorageService.getUser()?['id'];
 
@@ -587,6 +596,8 @@ class ConversationsNotifier extends StateNotifier<ConversationsState> {
 
       updatedConversations[index] = conversation.copyWith(
         lastMessage: lastMessage,
+        lastMessageAt:
+            message.createdAt, // Add this line to track last message time
         lastActivity: message.createdAt,
         unreadCount: newUnreadCount,
       );
