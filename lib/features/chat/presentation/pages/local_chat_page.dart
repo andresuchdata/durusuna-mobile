@@ -1145,13 +1145,14 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
                   '🔍 [TYPING] State updated: _isOtherUserTyping = $_isOtherUserTyping');
             });
 
-            // Auto-hide typing indicator after 3 seconds of no updates
+            // Auto-hide typing indicator after 1.5 seconds of no updates
             if (typingEvent.isTyping) {
               // Cancel any existing timer
               _typingAutoHideTimer?.cancel();
               debugPrint(
-                  '🔍 [TYPING] Cancelled previous timer and setting new auto-hide timer for 3 seconds');
-              _typingAutoHideTimer = Timer(const Duration(seconds: 3), () {
+                  '🔍 [TYPING] Cancelled previous timer and setting new auto-hide timer for 1.5 seconds');
+              _typingAutoHideTimer =
+                  Timer(const Duration(milliseconds: 1500), () {
                 if (mounted) {
                   debugPrint('🔍 [TYPING] Auto-hiding typing indicator');
                   setState(() {

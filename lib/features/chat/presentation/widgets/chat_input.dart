@@ -67,7 +67,7 @@ class _ChatInputState extends State<ChatInput> {
 
     // Reset stop typing timer
     _typingTimer?.cancel();
-    _typingTimer = Timer(const Duration(seconds: 5), () {
+    _typingTimer = Timer(const Duration(seconds: 2), () {
       if (_isTyping) {
         setState(() => _isTyping = false);
         debugPrint('⌨️ [CHAT_INPUT] Stopping typing indicator (timeout)');
