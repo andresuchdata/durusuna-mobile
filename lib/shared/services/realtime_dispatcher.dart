@@ -517,6 +517,20 @@ class RealtimeDispatcher {
         '✅ [DEBUG] Conversation marked as read (user is viewing this conversation)',
       );
 
+      // CRITICAL: Also update the local conversations provider to reflect the unread count change
+      try {
+        _ref!
+            .read(localConversationsProvider.notifier)
+            .markAsRead(conversationId);
+        debugPrint(
+          '✅ [DEBUG] Local conversations provider updated with unread count = 0',
+        );
+      } catch (e) {
+        debugPrint(
+          '⚠️ [DEBUG] Failed to update local conversations provider: $e',
+        );
+      }
+
       // CRITICAL: Send read receipt via WebSocket immediately for this message
       if (localMessage.serverId != null) {
         try {

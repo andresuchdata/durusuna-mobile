@@ -52,6 +52,10 @@ abstract class ChatRepository {
   /// Get a conversation by ID
   Future<LocalConversation?> getConversation(String conversationId);
 
+  /// Update conversation unread count
+  Future<void> updateConversationUnreadCount(
+      String conversationId, int unreadCount);
+
   // ========== USER OPERATIONS ==========
 
   /// Save a user

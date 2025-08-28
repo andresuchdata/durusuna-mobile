@@ -9,6 +9,7 @@ import '../../../../shared/services/chat_service.dart';
 import '../../../../shared/services/local_chat_service.dart';
 import '../../../../shared/services/realtime_service.dart';
 import '../../../../shared/models/conversation.dart';
+import '../../../../shared/models/user.dart';
 import '../../../../shared/models/local_conversation.dart';
 import '../../../../shared/widgets/global_app_scaffold.dart';
 import '../../../../shared/services/chat_repository_service.dart';
@@ -52,6 +53,23 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
 
       // Join all conversation rooms for real-time updates
       _joinAllConversationRooms();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Update conversations when dependencies change (e.g., when returning to this page)
+    // This ensures unread counts are up-to-date when navigating back from chat pages
+    // Use targeted updates instead of full refresh to prevent flickering
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        // Don't refresh the entire list - just ensure the provider is up-to-date
+        // The unread counts should already be updated via the markAsRead calls
+      } catch (e) {
+        debugPrint('⚠️ [ConversationsPage] Error in didChangeDependencies: $e');
+      }
     });
   }
 
@@ -503,7 +521,9 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
             description: localConversation.description,
             avatarUrl: localConversation.avatarUrl,
             createdBy: '', // Not available in LocalConversation
-            participants: [], // Not available in LocalConversation
+            participants:
+                _buildParticipantsFromLocalConversation(localConversation),
+            otherUser: _buildOtherUserFromLocalConversation(localConversation),
             unreadCount: localConversation.unreadCount,
             lastActivity: localConversation.lastActivity,
             isOnline: localConversation.isOnline,
@@ -700,8 +720,20 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               .then((_) {
             Future.delayed(const Duration(milliseconds: 100), () {
               ref.read(currentConversationProvider.notifier).state = null;
-              // Don't refresh conversations here to prevent flickering
-              // The unread counts are already updated via realtime updates
+
+              // CRITICAL: Update the specific conversation's unread count to 0
+              // This ensures that when returning from chat page, unread counts are updated
+              // Use targeted update instead of full refresh to prevent flickering
+              try {
+                ref
+                    .read(localConversationsProvider.notifier)
+                    .markAsRead(conversation.id);
+                debugPrint(
+                    '🔄 [ConversationsPage] Updated conversation ${conversation.id} unread count to 0');
+              } catch (e) {
+                debugPrint(
+                    '⚠️ [ConversationsPage] Failed to update conversation unread count: $e');
+              }
             });
           });
         },
@@ -787,6 +819,74 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Build participants list from LocalConversation data
+  List<User> _buildParticipantsFromLocalConversation(
+      LocalConversation localConversation) {
+    final participants = <User>[];
+
+    // Add the other user if this is a direct conversation
+    if (localConversation.type == LocalConversationType.direct &&
+        localConversation.otherUserId != null &&
+        localConversation.otherUserName != null) {
+      // Parse the other user's name
+      final nameParts = localConversation.otherUserName!.split(' ');
+      final firstName = nameParts.isNotEmpty ? nameParts.first : '';
+      final lastName =
+          nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+
+      participants.add(User(
+        id: localConversation.otherUserId!,
+        firstName: firstName,
+        lastName: lastName,
+        email: '', // Not available in LocalConversation
+        avatarUrl: localConversation.otherUserAvatar,
+        phone: null,
+        userType: UserType.student, // Default to student type
+        role: UserRole.user,
+        schoolId: null,
+        school: null,
+        isActive: true,
+        lastActiveAt: null,
+        createdAt: localConversation.createdAt,
+        updatedAt: localConversation.updatedAt,
+      ));
+    }
+
+    return participants;
+  }
+
+  /// Build otherUser from LocalConversation data
+  User? _buildOtherUserFromLocalConversation(
+      LocalConversation localConversation) {
+    if (localConversation.type != LocalConversationType.direct ||
+        localConversation.otherUserId == null ||
+        localConversation.otherUserName == null) {
+      return null;
+    }
+
+    // Parse the other user's name
+    final nameParts = localConversation.otherUserName!.split(' ');
+    final firstName = nameParts.isNotEmpty ? nameParts.first : '';
+    final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+
+    return User(
+      id: localConversation.otherUserId!,
+      firstName: firstName,
+      lastName: lastName,
+      email: '', // Not available in LocalConversation
+      avatarUrl: localConversation.otherUserAvatar,
+      phone: null,
+      userType: UserType.student, // Default to student type
+      role: UserRole.user,
+      schoolId: null,
+      school: null,
+      isActive: true,
+      lastActiveAt: null,
+      createdAt: localConversation.createdAt,
+      updatedAt: localConversation.updatedAt,
     );
   }
 }

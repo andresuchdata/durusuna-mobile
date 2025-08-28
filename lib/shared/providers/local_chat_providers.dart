@@ -65,6 +65,9 @@ class LocalConversationsNotifier
   }
 
   void markAsRead(String conversationId) {
+    debugPrint(
+        '📖 [LocalConversationsNotifier] markAsRead called for conversation: $conversationId');
+
     // Update database immediately
     _chatService.markConversationAsRead(conversationId);
 
@@ -75,6 +78,8 @@ class LocalConversationsNotifier
               c.serverId == conversationId ? c.copyWith(unreadCount: 0) : c)
           .toList();
       if (mounted) {
+        debugPrint(
+            '📖 [LocalConversationsNotifier] Updating UI: conversation $conversationId unread count set to 0');
         state = AsyncValue.data(updated);
       }
     });

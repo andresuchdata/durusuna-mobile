@@ -236,8 +236,7 @@ class ChatRepositoryService {
   /// Mark conversation as read
   static Future<void> markConversationAsRead(String conversationId) async {
     try {
-      // This would need to be implemented in the repository
-      // For now, just update all messages in the conversation
+      // Update all messages in the conversation to read status
       final messages = await getConversationMessages(conversationId);
       for (final message in messages) {
         if (message.readStatus != 'read') {
@@ -248,6 +247,13 @@ class ChatRepositoryService {
           await saveMessage(updatedMessage);
         }
       }
+
+      // CRITICAL: Also update the conversation's unread count to 0
+      await RepositoryFactory.repository
+          .updateConversationUnreadCount(conversationId, 0);
+
+      debugPrint(
+          '✅ [ChatRepositoryService] Conversation $conversationId marked as read');
     } catch (e) {
       debugPrint(
           '❌ [ChatRepositoryService] Failed to mark conversation as read: $e');

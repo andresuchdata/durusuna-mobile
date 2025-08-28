@@ -336,15 +336,84 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     if (widget.conversation.type == 'group') {
       return widget.conversation.name ?? 'Group Chat';
     }
+
+    // For direct messages, try multiple fallback strategies
     final otherUser = widget.conversation.otherUser;
-    return otherUser?.displayName ?? 'Unknown User';
+    if (otherUser != null) {
+      // Try displayName first
+      if (otherUser.displayName.isNotEmpty) {
+        return otherUser.displayName;
+      }
+
+      // Try firstName + lastName
+      if (otherUser.firstName.isNotEmpty || otherUser.lastName.isNotEmpty) {
+        return '${otherUser.firstName} ${otherUser.lastName}'.trim();
+      }
+
+      // Try email as last resort
+      if (otherUser.email.isNotEmpty) {
+        return otherUser.email;
+      }
+    }
+
+    // If otherUser is null or has no usable info, try to get from participants
+    if (widget.conversation.participants.isNotEmpty) {
+      // Find the other participant (not the current user)
+      final currentUserId = ref.read(authStateProvider).user?.id;
+      final otherParticipant = widget.conversation.participants
+          .where((p) => p.id != currentUserId)
+          .firstOrNull;
+
+      if (otherParticipant != null) {
+        if (otherParticipant.firstName.isNotEmpty ||
+            otherParticipant.lastName.isNotEmpty) {
+          return '${otherParticipant.firstName} ${otherParticipant.lastName}'
+              .trim();
+        }
+        if (otherParticipant.email.isNotEmpty) {
+          return otherParticipant.email;
+        }
+      }
+    }
+
+    // Final fallback - try to use the conversation name if it's not generic
+    if (widget.conversation.name != null &&
+        widget.conversation.name!.isNotEmpty &&
+        widget.conversation.name != 'Direct Message' &&
+        widget.conversation.name != 'Unknown User') {
+      return widget.conversation.name!;
+    }
+
+    // Last resort
+    return 'Unknown User';
   }
 
   String _getAvatarUrl() {
     if (widget.conversation.type == 'group') {
       return widget.conversation.avatarUrl ?? '';
     }
-    return widget.conversation.otherUser?.avatarUrl ?? '';
+
+    // For direct messages, try multiple fallback strategies
+    final otherUser = widget.conversation.otherUser;
+    if (otherUser != null && otherUser.avatarUrl?.isNotEmpty == true) {
+      return otherUser.avatarUrl!;
+    }
+
+    // If otherUser is null or has no avatar, try to get from participants
+    if (widget.conversation.participants.isNotEmpty) {
+      // Find the other participant (not the current user)
+      final currentUserId = ref.read(authStateProvider).user?.id;
+      final otherParticipant = widget.conversation.participants
+          .where((p) => p.id != currentUserId)
+          .firstOrNull;
+
+      if (otherParticipant?.avatarUrl?.isNotEmpty == true) {
+        return otherParticipant!.avatarUrl!;
+      }
+    }
+
+    // Final fallback - try to use the conversation avatar
+    return widget.conversation.avatarUrl ?? '';
   }
 
   String _getInitials() {
@@ -356,10 +425,50 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
       }
       return name.isNotEmpty ? name[0].toUpperCase() : 'G';
     }
+
+    // For direct messages, try multiple fallback strategies
     final otherUser = widget.conversation.otherUser;
     if (otherUser != null) {
-      return _getUserInitials(otherUser.firstName, otherUser.lastName);
+      final initials =
+          _getUserInitials(otherUser.firstName, otherUser.lastName);
+      if (initials != 'U') {
+        return initials;
+      }
     }
+
+    // If otherUser is null or has no usable info, try to get from participants
+    if (widget.conversation.participants.isNotEmpty) {
+      // Find the other participant (not the current user)
+      final currentUserId = ref.read(authStateProvider).user?.id;
+      final otherParticipant = widget.conversation.participants
+          .where((p) => p.id != currentUserId)
+          .firstOrNull;
+
+      if (otherParticipant != null) {
+        final initials = _getUserInitials(
+            otherParticipant.firstName, otherParticipant.lastName);
+        if (initials != 'U') {
+          return initials;
+        }
+      }
+    }
+
+    // Final fallback - try to use the conversation name if it's not generic
+    if (widget.conversation.name != null &&
+        widget.conversation.name!.isNotEmpty &&
+        widget.conversation.name != 'Direct Message' &&
+        widget.conversation.name != 'Unknown User') {
+      final words = widget.conversation.name!
+          .split(' ')
+          .where((word) => word.isNotEmpty)
+          .toList();
+      if (words.length >= 2 && words[0].isNotEmpty && words[1].isNotEmpty) {
+        return '${words[0][0].toUpperCase()}${words[1][0].toUpperCase()}';
+      }
+      return widget.conversation.name![0].toUpperCase();
+    }
+
+    // Last resort
     return 'U';
   }
 
@@ -547,6 +656,18 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
             '📖 [WEBSOCKET] Connection status: ${realtimeService.isConnected}');
 
         realtimeService.markAsRead(unreadFromOthers, widget.conversation.id);
+
+        // CRITICAL: Also update the local conversations provider to reflect the unread count change
+        try {
+          ref
+              .read(localConversationsProvider.notifier)
+              .markAsRead(widget.conversation.id);
+          debugPrint(
+              '📖 [READ_RECEIPTS] Local conversations provider updated with unread count = 0');
+        } catch (e) {
+          debugPrint(
+              '⚠️ [READ_RECEIPTS] Failed to update local conversations provider: $e');
+        }
       } else {
         debugPrint(
             '📖 [READ_RECEIPTS] No unread messages to send read receipts for');

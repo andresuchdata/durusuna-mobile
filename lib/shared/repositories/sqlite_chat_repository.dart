@@ -531,6 +531,28 @@ class SQLiteChatRepository implements ChatRepository {
     }
   }
 
+  @override
+  Future<void> updateConversationUnreadCount(
+      String conversationId, int unreadCount) async {
+    try {
+      await _db.update(
+        _conversationsTable,
+        {
+          'unread_count': unreadCount,
+          'updated_at': DateTime.now().toIso8601String(),
+          'updated_at_timestamp': DateTime.now().millisecondsSinceEpoch,
+        },
+        where: 'server_id = ?',
+        whereArgs: [conversationId],
+      );
+      debugPrint(
+          '✅ [SQLite] Updated unread count for conversation $conversationId to $unreadCount');
+    } catch (e) {
+      debugPrint('❌ [SQLite] Error updating conversation unread count: $e');
+      rethrow;
+    }
+  }
+
   // ========== USER OPERATIONS ==========
 
   @override
