@@ -651,12 +651,24 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
     // Read status should only update when all members have read the message
     if (widget.conversation.type == 'group') {
       debugPrint(
-          '📖 [DEBUG] Group conversation - not sending read receipts when at bottom');
-      debugPrint(
-          '📖 [DEBUG] Read status will update when all members read the message');
+          '📖 [DEBUG] Messages will remain in delivered status (2 gray ticks)');
+
+      // Still update the local conversations provider to clear unread count
+      // But don't send read receipts to the server
+      try {
+        ref
+            .read(localConversationsProvider.notifier)
+            .markAsRead(widget.conversation.id);
+        debugPrint(
+            '📖 [DEBUG] Group conversation: Updated local conversations provider only (unread count = 0)');
+      } catch (e) {
+        debugPrint(
+            '⚠️ [DEBUG] Failed to update local conversations provider: $e');
+      }
     } else {
       // Send read receipts via WebSocket (handles both database and notifications)
-      debugPrint('📖 [DEBUG] Calling _sendReadReceiptsForUnreadMessages()');
+      debugPrint(
+          '📖 [DEBUG] Direct conversation - calling _sendReadReceiptsForUnreadMessages()');
       _sendReadReceiptsForUnreadMessages();
     }
 
@@ -670,23 +682,47 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
   void _markOnChatPageEnter() {
     debugPrint('📖 [DEBUG] _markOnChatPageEnter() called');
 
-    // For both direct and group conversations, mark as read
-    // The difference is in how read receipts are sent, not in marking local unread count
-    debugPrint(
-        '📖 [DEBUG] Calling _sendReadReceiptsForUnreadMessages() from _markOnChatPageEnter');
-    _sendReadReceiptsForUnreadMessages();
+    // For group conversations, we need to handle read status differently
+    // We don't want to immediately mark messages as read in the database
+    // This prevents blue ticks from appearing until all participants have read
+    if (widget.conversation.type == 'group') {
+      debugPrint(
+          '📖 [DEBUG] Group conversation - handling read status differently');
+      debugPrint(
+          '📖 [DEBUG] Not calling _sendReadReceiptsForUnreadMessages() for group conversation');
 
-    // CRITICAL: Also ensure the local conversations provider is updated immediately
-    // This fixes the issue where unread count doesn't update when returning to conversations page
-    try {
-      ref
-          .read(localConversationsProvider.notifier)
-          .markAsRead(widget.conversation.id);
+      // Only update the local conversations provider to clear unread count
+      // But don't send read receipts or mark messages as read in database
+      try {
+        ref
+            .read(localConversationsProvider.notifier)
+            .markAsRead(widget.conversation.id);
+        debugPrint(
+            '📖 [LocalChatPage] Group conversation: Updated local conversations provider only (unread count = 0)');
+      } catch (e) {
+        debugPrint(
+            '⚠️ [LocalChatPage] Failed to update local conversations provider: $e');
+      }
+    } else {
+      // For direct conversations, proceed with normal read receipt logic
       debugPrint(
-          '📖 [LocalChatPage] Immediately updated local conversations provider for conversation ${widget.conversation.id}');
-    } catch (e) {
+          '📖 [DEBUG] Direct conversation - proceeding with normal read receipts');
       debugPrint(
-          '⚠️ [LocalChatPage] Failed to update local conversations provider: $e');
+          '📖 [DEBUG] Calling _sendReadReceiptsForUnreadMessages() from _markOnChatPageEnter');
+      _sendReadReceiptsForUnreadMessages();
+
+      // CRITICAL: Also ensure the local conversations provider is updated immediately
+      // This fixes the issue where unread count doesn't update when returning to conversations page
+      try {
+        ref
+            .read(localConversationsProvider.notifier)
+            .markAsRead(widget.conversation.id);
+        debugPrint(
+            '📖 [LocalChatPage] Direct conversation: Updated local conversations provider (unread count = 0)');
+      } catch (e) {
+        debugPrint(
+            '⚠️ [LocalChatPage] Failed to update local conversations provider: $e');
+      }
     }
   }
 
@@ -732,6 +768,35 @@ class _LocalChatPageState extends ConsumerState<LocalChatPage> {
           '📖 [READ_RECEIPTS] Skipping - user not viewing this conversation (current: $currentConversationId, expected: ${widget.conversation.id})');
       return;
     }
+
+    // CRITICAL: For group conversations, don't send read receipts immediately
+    // This prevents blue ticks from appearing until all participants have read the message
+    if (widget.conversation.type == 'group') {
+      debugPrint(
+          '📖 [READ_RECEIPTS] Group conversation - not sending read receipts immediately');
+      debugPrint(
+          '📖 [READ_RECEIPTS] Read status will update when all members read the message');
+      debugPrint(
+          '📖 [READ_RECEIPTS] Messages will remain in delivered status (2 gray ticks)');
+
+      // Still update the local conversations provider to clear unread count
+      // But don't send read receipts to the server
+      try {
+        ref
+            .read(localConversationsProvider.notifier)
+            .markAsRead(widget.conversation.id);
+        debugPrint(
+            '📖 [READ_RECEIPTS] Local conversations provider updated for group conversation (unread count = 0)');
+      } catch (e) {
+        debugPrint(
+            '⚠️ [READ_RECEIPTS] Failed to update local conversations provider: $e');
+      }
+      return;
+    }
+
+    // For direct conversations, proceed with normal read receipt logic
+    debugPrint(
+        '📖 [READ_RECEIPTS] Direct conversation - proceeding with read receipts');
 
     // Get current messages and send read receipts for unread ones from other users
     final messagesAsync =

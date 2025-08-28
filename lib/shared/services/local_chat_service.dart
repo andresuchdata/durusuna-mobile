@@ -93,10 +93,16 @@ class LocalChatService {
               offset: offset,
             );
 
+      // CRITICAL: For group conversations, process messages to ensure proper read status display
+      final processedMessages = await _processMessagesForGroupConversation(
+        conversationId,
+        messages,
+      );
+
       // Trigger background sync for this conversation
       _triggerMessagesSync(conversationId);
 
-      return messages;
+      return processedMessages;
     } catch (e) {
       debugPrint('❌ [LocalChatService] Failed to get messages: $e');
       throw LocalChatException('Failed to load messages locally: $e');
@@ -246,16 +252,48 @@ class LocalChatService {
   /// Mark conversation as read locally (instant)
   Future<void> markConversationAsRead(String conversationId) async {
     try {
-      // Update locally instantly
-      await ChatRepositoryService.markConversationAsRead(conversationId);
+      // Check if this is a group conversation before marking as read
+      final conversation =
+          await ChatRepositoryService.getConversation(conversationId);
 
-      // Sync to server in background
-      _syncReadStatusToServer(conversationId);
+      if (conversation != null &&
+          conversation.type == LocalConversationType.group) {
+        // For group conversations, don't mark messages as read immediately
+        // This prevents blue ticks from appearing until all participants have read
+        debugPrint(
+            '📖 [LocalChatService] Group conversation - not marking as read immediately');
+        debugPrint(
+            '📖 [LocalChatService] Read status will update when all members read the message');
+
+        // Don't call ChatRepositoryService.markConversationAsRead for group conversations
+        // This prevents the database from marking messages as read
+        debugPrint(
+            '📖 [LocalChatService] Skipping database read status update for group conversation');
+      } else {
+        // For direct conversations, proceed with normal read logic
+        debugPrint(
+            '📖 [LocalChatService] Direct conversation - proceeding with normal read logic');
+
+        // Update locally instantly
+        await ChatRepositoryService.markConversationAsRead(conversationId);
+
+        // Sync to server in background
+        _syncReadStatusToServer(conversationId);
+      }
     } catch (e) {
       // Just log the error instead of throwing to avoid crashes
       debugPrint('Failed to mark conversation as read: $e');
-      // Still try to sync to server even if local update failed
-      _syncReadStatusToServer(conversationId);
+      debugPrint('Error details: $e');
+
+      // Fallback: try to proceed with normal read logic
+      try {
+        await ChatRepositoryService.markConversationAsRead(conversationId);
+        _syncReadStatusToServer(conversationId);
+        debugPrint(
+            '✅ [LocalChatService] Fallback: Conversation marked as read');
+      } catch (fallbackError) {
+        debugPrint('❌ [LocalChatService] Fallback also failed: $fallbackError');
+      }
     }
   }
 
@@ -572,7 +610,12 @@ class LocalChatService {
             conversationId,
             limit: 100,
             offsetFromLatest: 0); // Reduced limit
-        for (final m in recent) {
+
+        // CRITICAL: Process messages for group conversations to ensure proper read status
+        final processedRecent =
+            await _processMessagesForGroupConversation(conversationId, recent);
+
+        for (final m in processedRecent) {
           if (m.serverId != null) {
             try {
               await ChatRepositoryService.adoptServerMessage(m);
@@ -618,10 +661,14 @@ class LocalChatService {
           conversationId,
           limit: 200);
 
+      // CRITICAL: Process messages for group conversations to ensure proper read status
+      final processedAllMessages = await _processMessagesForGroupConversation(
+          conversationId, allMessages);
+
       // Group messages by content and sender
       final Map<String, List<LocalMessage>> messageGroups = {};
 
-      for (final message in allMessages) {
+      for (final message in processedAllMessages) {
         if (message.content?.trim().isNotEmpty == true) {
           final key = '${message.senderId}_${message.content?.trim()}';
           messageGroups[key] ??= [];
@@ -712,8 +759,12 @@ class LocalChatService {
           conversationId,
           limit: 200);
 
+      // CRITICAL: Process messages for group conversations to ensure proper read status
+      final processedAllMessages = await _processMessagesForGroupConversation(
+          conversationId, allMessages);
+
       // Find old messages without clientMessageId that are stuck
-      final orphaned = allMessages
+      final orphaned = processedAllMessages
           .where((message) =>
                   message.clientMessageId == null &&
                   message.serverId == null &&
@@ -798,7 +849,12 @@ class LocalChatService {
         limit: 3,
         offsetFromLatest: 0,
       );
-      final bool shallowLocal = recentLocal.length < 3;
+
+      // CRITICAL: Process messages for group conversations to ensure proper read status
+      final processedRecentLocal = await _processMessagesForGroupConversation(
+          conversationId, recentLocal);
+
+      final bool shallowLocal = processedRecentLocal.length < 3;
 
       // Get last sync time for this conversation based on latest local message
       // This prevents the server from re-sending messages we already have locally
@@ -1094,6 +1150,52 @@ class LocalChatService {
     } catch (e) {
       debugPrint('❌ [LocalChatService] Failed to get group participants: $e');
       return [];
+    }
+  }
+
+  /// Process messages for group conversations to ensure proper read status display
+  /// This forces group messages to show "delivered" instead of "read" to prevent blue ticks
+  Future<List<LocalMessage>> _processMessagesForGroupConversation(
+    String conversationId,
+    List<LocalMessage> messages,
+  ) async {
+    try {
+      // Check if this is a group conversation
+      final conversation =
+          await ChatRepositoryService.getConversation(conversationId);
+
+      if (conversation != null &&
+          conversation.type == LocalConversationType.group) {
+        debugPrint(
+            '🔍 [LocalChatService] Processing ${messages.length} messages for group conversation');
+
+        // For group conversations, force messages from others to show "delivered" instead of "read"
+        // This prevents blue ticks from appearing until all participants have read
+        final processedMessages = messages.map((message) {
+          if (!message.isFromMe && message.readStatus == 'read') {
+            debugPrint(
+                '🔍 [LocalChatService] Group conversation: Forcing message ${message.id} from "read" to "delivered"');
+            return message.copyWith(
+              readStatus: 'delivered',
+              readAt:
+                  null, // Clear read timestamp since we're forcing delivered status
+            );
+          }
+          return message;
+        }).toList();
+
+        debugPrint(
+            '🔍 [LocalChatService] Processed ${processedMessages.length} messages for group conversation');
+        return processedMessages;
+      } else {
+        // For direct conversations, return messages as-is
+        return messages;
+      }
+    } catch (e) {
+      debugPrint(
+          '⚠️ [LocalChatService] Failed to process messages for group conversation: $e');
+      // Return original messages on error
+      return messages;
     }
   }
 

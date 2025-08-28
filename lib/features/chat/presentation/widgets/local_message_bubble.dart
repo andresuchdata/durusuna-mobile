@@ -561,7 +561,19 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
     // Get the appropriate color for status icons
     final metaColor = _getMetaTextColor(context);
 
-    switch (status) {
+    // CRITICAL: For group conversations, force messages to show "delivered" status
+    // instead of "read" status to prevent blue ticks from appearing
+    // This ensures group messages show 2 gray ticks until all participants have read
+    String effectiveStatus = status ?? 'sent';
+
+    if (widget.isGroup && !widget.isMe && effectiveStatus == 'read') {
+      // Force group conversation messages from others to show "delivered" instead of "read"
+      effectiveStatus = 'delivered';
+      debugPrint(
+          '🔍 [LocalMessageBubble] Group conversation: Forcing message status from "read" to "delivered"');
+    }
+
+    switch (effectiveStatus) {
       case 'sending':
         return SizedBox(
           width: 12,

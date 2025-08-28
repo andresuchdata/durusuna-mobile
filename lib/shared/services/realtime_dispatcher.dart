@@ -513,23 +513,79 @@ class RealtimeDispatcher {
     final isViewingThisConversation = currentConversationId == conversationId;
 
     if (isForeground && !isFromCurrentUser && isViewingThisConversation) {
-      await ChatRepositoryService.markConversationAsRead(conversationId);
-      debugPrint(
-        '✅ [DEBUG] Conversation marked as read (user is viewing this conversation)',
-      );
-
-      // CRITICAL: Also update the local conversations provider to reflect the unread count change
+      // Check if this is a group conversation before marking as read
       try {
-        _ref!
-            .read(localConversationsProvider.notifier)
-            .markAsRead(conversationId);
-        debugPrint(
-          '✅ [DEBUG] Local conversations provider updated with unread count = 0',
-        );
+        final conversation =
+            await ChatRepositoryService.getConversation(conversationId);
+
+        if (conversation != null &&
+            conversation.type == LocalConversationType.group) {
+          // For group conversations, don't mark as read immediately
+          // This prevents blue ticks from appearing until all participants have read
+          debugPrint(
+            '📖 [DISPATCHER] Group conversation - not marking as read immediately',
+          );
+          debugPrint(
+            '📖 [DISPATCHER] Read status will update when all members read the message',
+          );
+
+          // Still update the local conversations provider to clear unread count
+          // But don't mark messages as read in the database
+          try {
+            _ref!
+                .read(localConversationsProvider.notifier)
+                .markAsRead(conversationId);
+            debugPrint(
+              '📖 [DISPATCHER] Group conversation: Updated local conversations provider only (unread count = 0)',
+            );
+          } catch (e) {
+            debugPrint(
+              '⚠️ [DISPATCHER] Failed to update local conversations provider: $e',
+            );
+          }
+        } else {
+          // For direct conversations, proceed with normal read logic
+          await ChatRepositoryService.markConversationAsRead(conversationId);
+          debugPrint(
+            '✅ [DEBUG] Direct conversation marked as read (user is viewing this conversation)',
+          );
+
+          // CRITICAL: Also update the local conversations provider to reflect the unread count change
+          try {
+            _ref!
+                .read(localConversationsProvider.notifier)
+                .markAsRead(conversationId);
+            debugPrint(
+              '✅ [DEBUG] Local conversations provider updated with unread count = 0',
+            );
+          } catch (e) {
+            debugPrint(
+              '⚠️ [DEBUG] Failed to update local conversations provider: $e',
+            );
+          }
+        }
       } catch (e) {
         debugPrint(
-          '⚠️ [DEBUG] Failed to update local conversations provider: $e',
+          '❌ [DISPATCHER] Failed to check conversation type: $e',
         );
+        // Fallback: proceed with normal read logic
+        await ChatRepositoryService.markConversationAsRead(conversationId);
+        debugPrint(
+          '✅ [DEBUG] Fallback: Conversation marked as read',
+        );
+
+        try {
+          _ref!
+              .read(localConversationsProvider.notifier)
+              .markAsRead(conversationId);
+          debugPrint(
+            '✅ [DEBUG] Fallback: Local conversations provider updated',
+          );
+        } catch (providerError) {
+          debugPrint(
+            '⚠️ [DEBUG] Fallback: Failed to update local conversations provider: $providerError',
+          );
+        }
       }
 
       // CRITICAL: Send read receipt via WebSocket immediately for this message
@@ -614,6 +670,19 @@ class RealtimeDispatcher {
     required bool isFromMe,
   }) {
     final remoteType = _mapType(m.messageType);
+
+    // CRITICAL: Use the actual message read status instead of hardcoding 'sent'
+    // This ensures that existing messages show their proper status
+    remote.ReadStatus effectiveReadStatus;
+
+    if (m.readStatus == 'read') {
+      effectiveReadStatus = remote.ReadStatus.read;
+    } else if (m.readStatus == 'delivered') {
+      effectiveReadStatus = remote.ReadStatus.delivered;
+    } else {
+      effectiveReadStatus = remote.ReadStatus.sent;
+    }
+
     return remote.Message(
       id: m.serverId ?? m.id.toString(),
       conversationId: m.conversationId,
@@ -623,7 +692,7 @@ class RealtimeDispatcher {
       isFromMe: isFromMe,
       createdAt: m.createdAt,
       updatedAt: m.updatedAt ?? m.createdAt,
-      readStatus: remote.ReadStatus.sent,
+      readStatus: effectiveReadStatus,
     );
   }
 
