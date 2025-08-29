@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/user.dart';
+import '../../../../shared/widgets/avatar_widget.dart';
 
 class ContactTile extends StatelessWidget {
   final User user;
@@ -53,44 +54,12 @@ class ContactTile extends StatelessWidget {
             child: Row(
               children: [
                 // Avatar with online status
-                Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: AppTheme.primaryColor,
-                      backgroundImage:
-                          user.avatarUrl != null && user.avatarUrl!.isNotEmpty
-                              ? NetworkImage(user.avatarUrl!)
-                              : null,
-                      child: user.avatarUrl == null || user.avatarUrl!.isEmpty
-                          ? Text(
-                              '${user.firstName[0]}${user.lastName[0]}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
-                            )
-                          : null,
-                    ),
-                    if (showOnlineStatus && _isUserOnline())
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          width: 14,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color: AppTheme.successColor,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
+                AvatarWidget(
+                  avatarUrl: user.avatarUrl,
+                  initials: '${user.firstName[0]}${user.lastName[0]}',
+                  radius: 24,
+                  showOnlineIndicator: showOnlineStatus,
+                  isOnline: _isUserOnline(),
                 ),
 
                 const SizedBox(width: 16),

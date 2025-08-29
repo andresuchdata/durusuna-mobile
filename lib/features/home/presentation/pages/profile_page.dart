@@ -7,6 +7,7 @@ import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/api_service.dart';
+import '../../../../shared/widgets/avatar_widget.dart';
 import '../../../../features/auth/presentation/pages/profile_edit_page.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
@@ -73,14 +74,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                                   },
                             child: Stack(
                               children: [
-                                CircleAvatar(
-                                  radius: 40,
-                                  backgroundColor: AppTheme.primaryColor,
-                                  backgroundImage: user.avatarUrl != null
-                                      ? NetworkImage(user.avatarUrl!)
-                                      : null,
-                                  child: _isUploadingAvatar
-                                      ? const SizedBox(
+                                _isUploadingAvatar
+                                    ? const CircleAvatar(
+                                        radius: 40,
+                                        backgroundColor: AppTheme.primaryColor,
+                                        child: SizedBox(
                                           width: 30,
                                           height: 30,
                                           child: CircularProgressIndicator(
@@ -89,18 +87,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                                                 AlwaysStoppedAnimation<Color>(
                                                     Colors.white),
                                           ),
-                                        )
-                                      : user.avatarUrl == null
-                                          ? Text(
-                                              '${user.firstName[0]}${user.lastName[0]}',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 24,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            )
-                                          : null,
-                                ),
+                                        ),
+                                      )
+                                    : AvatarWidget(
+                                        avatarUrl: user.avatarUrl,
+                                        initials:
+                                            '${user.firstName[0]}${user.lastName[0]}',
+                                        radius: 40,
+                                        textColor: Colors.white,
+                                      ),
                                 if (!_isUploadingAvatar)
                                   Positioned(
                                     bottom: 0,
@@ -124,6 +119,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           ),
                         ),
                         const SizedBox(height: 16),
+                        // User name
                         Text(
                           user.displayName,
                           style: const TextStyle(
@@ -133,20 +129,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           ),
                         ),
                         const SizedBox(height: 4),
+                        // User email
                         Text(
                           user.email,
                           style: const TextStyle(
                             fontSize: 14,
-                            color: Colors.white70,
+                            color: AppTheme.cardColor,
                           ),
                         ),
                         const SizedBox(height: 10),
+                        // User type ('teacher', 'student', 'parent')
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
-                            color: _getUserTypeColor(user.userType)
-                                .withValues(alpha: 0.2),
+                            color: AppTheme.cardColor,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -275,7 +272,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   Color _getUserTypeColor(UserType userType) {
     switch (userType) {
       case UserType.teacher:
-        return Colors.blue;
+        return AppTheme.primaryColor;
       case UserType.student:
         return Colors.green;
       case UserType.parent:

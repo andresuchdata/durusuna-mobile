@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/models/attendance_models.dart';
+import '../../../../shared/widgets/avatar_widget.dart';
 
 class StudentAttendanceTile extends StatelessWidget {
   final StudentWithAttendance studentWithAttendance;
@@ -186,37 +187,18 @@ class StudentAttendanceTile extends StatelessWidget {
           height: 50,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.grey[200],
             border: hasAttendance
                 ? Border.all(
                     color: _getAttendanceColor().withValues(alpha: 0.8),
                     width: 3)
                 : null,
           ),
-          child: studentWithAttendance.avatarUrl != null &&
-                  studentWithAttendance.avatarUrl!.isNotEmpty
-              ? ClipOval(
-                  child: Image.network(
-                    studentWithAttendance.avatarUrl!,
-                    width: 50,
-                    height: 50,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return _buildInitialsAvatar();
-                    },
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      );
-                    },
-                  ),
-                )
-              : _buildInitialsAvatar(),
+          child: AvatarWidget(
+            avatarUrl: studentWithAttendance.avatarUrl,
+            initials: studentWithAttendance.initials,
+            radius: 25,
+            backgroundColor: Colors.grey[200],
+          ),
         ),
         // Attendance status indicator on avatar
         if (hasAttendance)

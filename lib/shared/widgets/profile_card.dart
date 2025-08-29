@@ -9,6 +9,7 @@ import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../widgets/loading_button.dart';
+import '../widgets/avatar_widget.dart';
 
 class ProfileCard extends ConsumerStatefulWidget {
   final User user;
@@ -316,27 +317,19 @@ class _ProfileCardState extends ConsumerState<ProfileCard> {
                   // Profile Picture Section
                   Stack(
                     children: [
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: AppTheme.primaryColor,
-                        backgroundImage: _selectedImageFile != null
-                            ? FileImage(_selectedImageFile!)
-                            : (_selectedAvatarUrl?.isNotEmpty == true
-                                ? NetworkImage(_selectedAvatarUrl!)
-                                    as ImageProvider
-                                : null),
-                        child: (_selectedImageFile == null &&
-                                _selectedAvatarUrl?.isEmpty != false)
-                            ? Text(
-                                '${_firstNameController.text.isNotEmpty ? _firstNameController.text[0] : ''}${_lastNameController.text.isNotEmpty ? _lastNameController.text[0] : ''}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              )
-                            : null,
-                      ),
+                      _selectedImageFile != null
+                          ? CircleAvatar(
+                              radius: 50,
+                              backgroundColor: AppTheme.primaryColor,
+                              backgroundImage: FileImage(_selectedImageFile!),
+                            )
+                          : AvatarWidget(
+                              avatarUrl: _selectedAvatarUrl,
+                              initials:
+                                  '${_firstNameController.text.isNotEmpty ? _firstNameController.text[0] : ''}${_lastNameController.text.isNotEmpty ? _lastNameController.text[0] : ''}',
+                              radius: 50,
+                              textColor: Colors.white,
+                            ),
                       Positioned(
                         bottom: 0,
                         right: 0,
@@ -469,22 +462,13 @@ class _ProfileCardState extends ConsumerState<ProfileCard> {
             // Profile Avatar with online indicator and edit button
             Stack(
               children: [
-                CircleAvatar(
+                AvatarWidget(
+                  avatarUrl: widget.user.avatarUrl,
+                  initials:
+                      '${widget.user.firstName[0]}${widget.user.lastName[0]}',
                   radius: 50,
-                  backgroundColor: AppTheme.primaryColor,
-                  backgroundImage: widget.user.avatarUrl?.isNotEmpty == true
-                      ? NetworkImage(widget.user.avatarUrl!)
-                      : null,
-                  child: widget.user.avatarUrl?.isEmpty != false
-                      ? Text(
-                          '${widget.user.firstName[0]}${widget.user.lastName[0]}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      : null,
+                  showOnlineIndicator: widget.isOnline,
+                  isOnline: widget.isOnline,
                 ),
                 if (widget.isOnline)
                   Positioned(

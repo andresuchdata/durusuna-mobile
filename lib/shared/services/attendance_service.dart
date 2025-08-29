@@ -644,6 +644,50 @@ class AttendanceService {
     }
   }
 
+  Future<AttendanceRecord> submitTeacherAttendanceGPS(
+      AttendanceStatus status, String? notes) async {
+    try {
+      // Get current location
+      final position = await getCurrentLocation();
+
+      final headers = await _getHeaders();
+      final body = json.encode({
+        'status': status.name,
+        'notes': notes,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'accuracy': position.accuracy,
+        'marked_via': 'gps',
+      });
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/attendance/teacher/submit'),
+        headers: headers,
+        body: body,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        return AttendanceRecord.fromJson(data['record']);
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied - teacher access required');
+      } else if (response.statusCode == 409) {
+        throw Exception('Attendance already submitted for this date');
+      } else if (response.statusCode == 400) {
+        final Map<String, dynamic> errorData = json.decode(response.body);
+        throw Exception(errorData['error'] ?? 'Location verification failed');
+      } else {
+        final Map<String, dynamic> errorData = json.decode(response.body);
+        throw Exception(
+            errorData['error'] ?? 'Failed to submit teacher attendance');
+      }
+    } catch (e) {
+      throw Exception('Error submitting teacher attendance: $e');
+    }
+  }
+
   // Helper methods for quick actions
   Future<bool> canMarkAttendanceForClass(String classId) async {
     try {
@@ -683,6 +727,31 @@ class AttendanceService {
       }
     } catch (e) {
       throw Exception('Error fetching classes for attendance: $e');
+    }
+  }
+
+  Future<List<ClassModel>> getTeacherClassesForAttendance() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/attendance/teacher/classes'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic> classesJson = data['classes'] ?? [];
+        return classesJson.map((json) => ClassModel.fromJson(json)).toList();
+      } else if (response.statusCode == 401) {
+        throw Exception('Authentication failed');
+      } else if (response.statusCode == 403) {
+        throw Exception('Access denied - teacher access required');
+      } else {
+        throw Exception(
+            'Failed to fetch teacher classes: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching teacher classes for attendance: $e');
     }
   }
 
