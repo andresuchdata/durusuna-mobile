@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_theme.dart';
+import '../../../../shared/widgets/avatar_widget.dart';
 
 class ChatTopUserPanel extends StatelessWidget implements PreferredSizeWidget {
   final String displayName;
@@ -47,20 +48,13 @@ class ChatTopUserPanel extends StatelessWidget implements PreferredSizeWidget {
             onTap: onAvatarTap,
             child: Stack(
               children: [
-                CircleAvatar(
+                AvatarWidget(
+                  avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+                  displayName: displayName,
                   radius: 20,
                   backgroundColor: AppTheme.primaryColor,
-                  backgroundImage:
-                      avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                  child: avatarUrl.isEmpty
-                      ? Text(
-                          initials,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      : null,
+                  textColor: Colors.white,
+                  fontSize: 16,
                 ),
                 if (isDirect && isOnline)
                   Positioned(

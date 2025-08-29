@@ -13,6 +13,7 @@ import '../../../../shared/services/auth_service.dart';
 
 import '../../../../shared/widgets/global_app_drawer.dart';
 import '../../../../shared/widgets/global_bottom_navigation.dart';
+import '../../../../shared/widgets/avatar_widget.dart';
 import '../../../../core/utils/date_utils.dart' as app_date_utils;
 import '../../../assignments/presentation/pages/assignment_detail_page.dart';
 
@@ -81,6 +82,108 @@ final classAssignmentsProvider =
   } catch (e) {
     debugPrint('🔍 [FLUTTER DEBUG] getClassAssignments error: $e');
     rethrow;
+  }
+});
+
+// Provider for teachers associated with class through subject offerings
+final classSubjectTeachersProvider =
+    FutureProvider.family<Map<String, dynamic>, String>((ref, classId) async {
+  final service = ref.read(classManagementServiceProvider);
+  try {
+    final subjects = await service.getClassOfferings(classId);
+
+    // Extract unique teachers from subject offerings
+    final Map<String, Map<String, dynamic>> uniqueTeachers = {};
+    final homeroomTeacherAsync = ref.read(classTeachersProvider(classId));
+    final homeroomTeacher = homeroomTeacherAsync.when(
+      data: (teachers) => teachers.isNotEmpty ? teachers.first : null,
+      loading: () => null,
+      error: (_, __) => null,
+    );
+    final homeroomTeacherId = homeroomTeacher?.id;
+
+    debugPrint(
+        '🔍 [ClassDetails] Processing ${subjects.length} subjects for teachers');
+    debugPrint('🔍 [ClassDetails] Homeroom teacher ID: $homeroomTeacherId');
+
+    for (final subject in subjects) {
+      final teacher = subject['teacher'];
+      final subjectName =
+          subject['subject_name'] ?? subject['subject']?['name'] ?? 'Unknown';
+
+      debugPrint('🔍 [ClassDetails] Subject: $subjectName, Teacher: $teacher');
+
+      if (teacher != null && teacher is Map<String, dynamic>) {
+        final teacherId = teacher['id'] as String?;
+        final teacherName =
+            teacher['first_name'] != null && teacher['last_name'] != null
+                ? '${teacher['first_name']} ${teacher['last_name']}'
+                : teacher['email'] as String? ?? 'Unknown';
+
+        if (teacherId != null && teacherId.isNotEmpty) {
+          // Include all teachers, including homeroom teacher if they teach subjects
+          if (!uniqueTeachers.containsKey(teacherId)) {
+            uniqueTeachers[teacherId] = teacher;
+            debugPrint('🔍 [ClassDetails] Added subject teacher: $teacherName');
+          } else {
+            debugPrint(
+                '🔍 [ClassDetails] Subject teacher already exists: $teacherName');
+          }
+        }
+      }
+    }
+
+    final totalTeacherCount = uniqueTeachers.length;
+    debugPrint(
+        '🔍 [ClassDetails] Found ${uniqueTeachers.length} subject teachers, $totalTeacherCount total');
+
+    return {
+      'subjectTeachers': uniqueTeachers.values.toList(),
+      'subjectTeacherCount': uniqueTeachers.length,
+      'homeroomTeacher': homeroomTeacher,
+      'totalTeacherCount': totalTeacherCount,
+    };
+  } catch (e) {
+    debugPrint('🔍 [ClassDetails] Error getting subject teachers: $e');
+    return {
+      'subjectTeachers': [],
+      'subjectTeacherCount': 0,
+      'homeroomTeacher': null,
+      'totalTeacherCount': 0,
+    };
+  }
+});
+
+// Provider for class statistics based on subject offerings
+final classStatisticsProvider =
+    FutureProvider.family<Map<String, dynamic>, String>((ref, classId) async {
+  final service = ref.read(classManagementServiceProvider);
+  try {
+    final subjects = await service.getClassOfferings(classId);
+    final students = await service.getClassStudents(classId);
+    final updates = await ref
+        .read(classUpdatesServiceProvider)
+        .getClassUpdates(classId, limit: 5);
+
+    final teachersData =
+        await ref.read(classSubjectTeachersProvider(classId).future);
+
+    return {
+      'studentCount': students.length,
+      'teacherCount': teachersData['totalTeacherCount'],
+      'subjectCount': subjects.length,
+      'updatesCount': updates.length,
+      'totalMembers': students.length + teachersData['totalTeacherCount'],
+    };
+  } catch (e) {
+    debugPrint('🔍 [ClassDetails] Error getting statistics: $e');
+    return {
+      'studentCount': 0,
+      'teacherCount': 0,
+      'subjectCount': 0,
+      'updatesCount': 0,
+      'totalMembers': 0,
+    };
   }
 });
 
@@ -697,22 +800,13 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
+          AvatarWidget(
+            avatarUrl: student.avatarUrl,
+            displayName: student.displayName,
             radius: 18,
             backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-            backgroundImage: student.avatarUrl != null
-                ? NetworkImage(student.avatarUrl!)
-                : null,
-            child: student.avatarUrl == null
-                ? Text(
-                    '${student.firstName[0]}${student.lastName[0]}',
-                    style: const TextStyle(
-                      color: AppTheme.primaryColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  )
-                : null,
+            textColor: AppTheme.primaryColor,
+            fontSize: 12,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1110,7 +1204,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 color: Color(0xFFE5E5E5),
                 width: 0.5,
               ),
-              left: const BorderSide(
+              left: BorderSide(
                 color: Colors.blue,
                 width: 4,
               ),
@@ -1207,9 +1301,9 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                                   AppTheme.warningColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Text(
+                            child: const Text(
                               'pending',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w500,
                                 color: AppTheme.warningColor,
@@ -1373,25 +1467,33 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
   }
 
   Widget _buildClassStatistics() {
-    final countsAsync = ref.watch(classCountsProvider(widget.classModel.id));
-    final subjectsAsync =
-        ref.watch(classSubjectsProvider(widget.classModel.id));
-    final updatesAsync =
-        ref.watch(recentClassUpdatesProvider(widget.classModel.id));
-
-    // Get teacher from API instead of static model data
-    final teachersAsync =
-        ref.watch(classTeachersProvider(widget.classModel.id));
-    final teacher = teachersAsync.when(
-      data: (teachers) => teachers.isNotEmpty ? teachers.first : null,
-      loading: () => null,
-      error: (_, __) => null,
-    );
+    final statisticsAsync =
+        ref.watch(classStatisticsProvider(widget.classModel.id));
+    final teachersDataAsync =
+        ref.watch(classSubjectTeachersProvider(widget.classModel.id));
 
     return Column(
       children: [
-        // Teacher info section
-        if (teacher != null) _buildTeacherInfoCard(teacher),
+        // Homeroom Teacher section
+        teachersDataAsync.when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (teachersData) {
+            final homeroomTeacher = teachersData['homeroomTeacher'] as User?;
+            return _buildHomeroomTeacherSection(homeroomTeacher);
+          },
+        ),
+
+        // Subject Teachers section
+        teachersDataAsync.when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (teachersData) {
+            final subjectTeachers =
+                teachersData['subjectTeachers'] as List<dynamic>;
+            return _buildSubjectTeachersSection(subjectTeachers);
+          },
+        ),
 
         // Statistics section
         Container(
@@ -1421,7 +1523,7 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                countsAsync.when(
+                statisticsAsync.when(
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
                   error: (error, stack) => _buildStatisticsRow(
@@ -1429,15 +1531,15 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                     teacherCount: widget.classModel.teachersCount ?? 0,
                     totalMembers: (widget.classModel.studentsCount ?? 0) +
                         (widget.classModel.teachersCount ?? 0),
-                    subjectCount: subjectsAsync.valueOrNull?.length ?? 0,
-                    updatesCount: updatesAsync.valueOrNull?.length ?? 0,
+                    subjectCount: 0,
+                    updatesCount: 0,
                   ),
-                  data: (counts) => _buildStatisticsRow(
-                    studentCount: counts.studentCount,
-                    teacherCount: counts.teacherCount,
-                    totalMembers: counts.totalMembers,
-                    subjectCount: subjectsAsync.valueOrNull?.length ?? 0,
-                    updatesCount: updatesAsync.valueOrNull?.length ?? 0,
+                  data: (stats) => _buildStatisticsRow(
+                    studentCount: stats['studentCount'] ?? 0,
+                    teacherCount: stats['teacherCount'] ?? 0,
+                    totalMembers: stats['totalMembers'] ?? 0,
+                    subjectCount: stats['subjectCount'] ?? 0,
+                    updatesCount: stats['updatesCount'] ?? 0,
                   ),
                 ),
               ],
@@ -1448,13 +1550,12 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
     );
   }
 
-  Widget _buildTeacherInfoCard(User teacher) {
+  Widget _buildHomeroomTeacherSection(User? teacher) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -1463,40 +1564,243 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
           ),
         ],
       ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.home,
+                    color: AppTheme.primaryColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Homeroom Teacher',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (teacher != null)
+              _buildTeacherCard(teacher, isHomeroom: true)
+            else
+              _buildNoTeacherCard(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubjectTeachersSection(List<dynamic> subjectTeachers) {
+    // Get homeroom teacher to check if any subject teachers are also homeroom teachers
+    final homeroomTeacherAsync =
+        ref.watch(classTeachersProvider(widget.classModel.id));
+    final homeroomTeacher = homeroomTeacherAsync.when(
+      data: (teachers) => teachers.isNotEmpty ? teachers.first : null,
+      loading: () => null,
+      error: (_, __) => null,
+    );
+    final homeroomTeacherId = homeroomTeacher?.id;
+
+    if (subjectTeachers.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.school,
+                      color: AppTheme.accentColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Subject Teachers',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.grey.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.person_off,
+                        color: Colors.grey,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'No subject teachers assigned yet',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.school,
+                    color: AppTheme.accentColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Subject Teachers (${subjectTeachers.length})',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ...subjectTeachers.map((teacher) {
+              final teacherId = teacher['id'] as String?;
+              final isAlsoHomeroom =
+                  homeroomTeacherId != null && teacherId == homeroomTeacherId;
+              return _buildTeacherCard(
+                _convertTeacherMapToUser(teacher),
+                isHomeroom: isAlsoHomeroom,
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeacherCard(User teacher, {required bool isHomeroom}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isHomeroom
+            ? AppTheme.primaryColor.withValues(alpha: 0.05)
+            : AppTheme.accentColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isHomeroom
+              ? AppTheme.primaryColor.withValues(alpha: 0.2)
+              : AppTheme.accentColor.withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 25,
-            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-            backgroundImage: teacher.avatarUrl?.isNotEmpty == true
-                ? NetworkImage(teacher.avatarUrl!)
-                : null,
-            child: teacher.avatarUrl?.isEmpty != false
-                ? const Icon(
-                    Icons.person,
-                    color: AppTheme.primaryColor,
-                    size: 28,
-                  )
-                : null,
+          AvatarWidget(
+            avatarUrl: teacher.avatarUrl,
+            displayName: teacher.displayName,
+            radius: 20,
+            backgroundColor: isHomeroom
+                ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                : AppTheme.accentColor.withValues(alpha: 0.1),
+            textColor:
+                isHomeroom ? AppTheme.primaryColor : AppTheme.accentColor,
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Teacher',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
                 Text(
                   teacher.displayName,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1505,10 +1809,29 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
                 Text(
                   teacher.email,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     color: AppTheme.textSecondary.withValues(alpha: 0.8),
                   ),
                 ),
+                if (isHomeroom) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Homeroom',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1516,19 +1839,94 @@ class _ClassDetailsPageState extends ConsumerState<ClassDetailsPage> {
             onPressed: () {
               // TODO: Implement chat with teacher
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Chat with teacher coming soon'),
-                  backgroundColor: AppTheme.primaryColor,
+                SnackBar(
+                  content: Text('Chat with ${teacher.displayName} coming soon'),
+                  backgroundColor:
+                      isHomeroom ? AppTheme.primaryColor : AppTheme.accentColor,
                 ),
               );
             },
-            icon: const Icon(
+            icon: Icon(
               Icons.message,
-              color: AppTheme.primaryColor,
+              color: isHomeroom ? AppTheme.primaryColor : AppTheme.accentColor,
+              size: 20,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildNoTeacherCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.grey.withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.person_off,
+              color: Colors.grey,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'No homeroom teacher assigned',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  User _convertTeacherMapToUser(Map<String, dynamic> teacherMap) {
+    debugPrint('🔍 [ClassDetails] Converting teacher map: $teacherMap');
+
+    final firstName = teacherMap['first_name'] as String? ?? '';
+    final lastName = teacherMap['last_name'] as String? ?? '';
+    final email = teacherMap['email'] as String? ?? '';
+    final avatarUrl = teacherMap['avatar_url'] as String?;
+
+    // Create display name
+    final displayName =
+        [firstName, lastName].where((s) => s.isNotEmpty).join(' ');
+    final finalDisplayName = displayName.isNotEmpty ? displayName : email;
+
+    debugPrint('🔍 [ClassDetails] Teacher display name: $finalDisplayName');
+
+    return User(
+      id: teacherMap['id'] as String? ?? '',
+      firstName: firstName,
+      lastName: lastName,
+      email: email,
+      avatarUrl: avatarUrl,
+      userType: UserType.teacher,
+      isActive: teacherMap['is_active'] as bool? ?? true,
+      createdAt: teacherMap['created_at'] != null
+          ? DateTime.parse(teacherMap['created_at'] as String)
+          : DateTime.now(),
+      updatedAt: teacherMap['updated_at'] != null
+          ? DateTime.parse(teacherMap['updated_at'] as String)
+          : DateTime.now(),
     );
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../core/constants/app_theme.dart';
+import '../../../../shared/widgets/avatar_widget.dart';
 import '../../../../shared/models/message.dart';
 import '../../../../shared/widgets/reactions_widget.dart';
 
@@ -366,22 +367,13 @@ class MessageBubble extends StatelessWidget {
 
               // Avatar for other participants in group chats only
               if (_shouldShowAvatar) ...[
-                CircleAvatar(
+                AvatarWidget(
+                  avatarUrl: message.sender?.avatarUrl,
+                  displayName: message.sender?.displayName,
                   radius: 16,
                   backgroundColor: AppTheme.primaryColor,
-                  backgroundImage: message.sender?.avatarUrl?.isNotEmpty == true
-                      ? NetworkImage(message.sender!.avatarUrl!)
-                      : null,
-                  child: message.sender?.avatarUrl?.isEmpty != false
-                      ? Text(
-                          _senderInitials,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        )
-                      : null,
+                  textColor: Colors.white,
+                  fontSize: 12,
                 ),
                 const SizedBox(width: 8),
               ],

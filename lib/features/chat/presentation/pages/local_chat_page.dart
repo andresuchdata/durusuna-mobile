@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import '../../../../shared/widgets/avatar_widget.dart';
 import '../../../../core/constants/app_theme.dart';
 import '../../../../core/constants/performance_constants.dart';
 import '../../../../core/constants/api_constants.dart';
@@ -2483,22 +2484,13 @@ class _ProfileCardSheet extends StatelessWidget {
                       Stack(
                         alignment: Alignment.bottomRight,
                         children: [
-                          CircleAvatar(
+                          AvatarWidget(
+                            avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+                            displayName: name,
                             radius: 40,
                             backgroundColor: AppTheme.primaryColor,
-                            backgroundImage: avatarUrl.isNotEmpty
-                                ? NetworkImage(avatarUrl)
-                                : null,
-                            child: avatarUrl.isEmpty
-                                ? Text(
-                                    initials,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  )
-                                : null,
+                            textColor: Colors.white,
+                            fontSize: 28,
                           ),
                           if (!isGroup && isOnline)
                             Container(
@@ -2563,20 +2555,13 @@ class _ProfileCardSheet extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final user = users[index];
                     return ListTile(
-                      leading: CircleAvatar(
+                      leading: AvatarWidget(
+                        avatarUrl: user.avatarUrl,
+                        displayName: user.displayName,
+                        radius: 20,
                         backgroundColor: AppTheme.primaryColor,
-                        backgroundImage: (user.avatarUrl?.isNotEmpty ?? false)
-                            ? NetworkImage(user.avatarUrl!)
-                            : null,
-                        child: (user.avatarUrl == null ||
-                                user.avatarUrl!.isEmpty)
-                            ? Text(
-                                _initialsFrom(user.firstName, user.lastName),
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600),
-                              )
-                            : null,
+                        textColor: Colors.white,
+                        fontSize: 16,
                       ),
                       title: Text('${user.firstName} ${user.lastName}'.trim()),
                       subtitle: Text(user.email),

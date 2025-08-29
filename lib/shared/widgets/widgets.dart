@@ -8,3 +8,4 @@ export 'media_viewer.dart';
 export 'profile_card.dart';
 export 'group_profile_card.dart';
 export 'robust_image_widget.dart';
+export 'avatar_widget.dart';

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_theme.dart';
+import '../../../../shared/widgets/avatar_widget.dart';
 import '../../../../shared/models/class_update.dart';
 import '../../../../shared/models/class_update_comment.dart';
 import '../../../../shared/models/user.dart';
@@ -1072,26 +1073,13 @@ class _CommentsBottomSheetState extends ConsumerState<CommentsBottomSheet> {
                     child: Row(
                       children: [
                         // User avatar
-                        CircleAvatar(
+                        AvatarWidget(
+                          avatarUrl: authState.user?.avatarUrl,
+                          displayName: authState.user?.displayName,
                           radius: 16,
                           backgroundColor: AppTheme.primaryColor,
-                          backgroundImage:
-                              authState.user?.avatarUrl?.isNotEmpty == true
-                                  ? NetworkImage(authState.user!.avatarUrl!)
-                                  : null,
-                          child: authState.user?.avatarUrl?.isEmpty != false
-                              ? Text(
-                                  authState.user?.firstName.isNotEmpty == true
-                                      ? authState.user!.firstName[0]
-                                          .toUpperCase()
-                                      : 'U',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
-                                  ),
-                                )
-                              : null,
+                          textColor: Colors.white,
+                          fontSize: 14,
                         ),
                         const SizedBox(width: 12),
                         Expanded(

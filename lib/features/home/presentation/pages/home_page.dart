@@ -12,6 +12,7 @@ import '../../../../shared/services/auth_service.dart';
 import '../../../../shared/services/notification_service.dart';
 import '../../../../shared/widgets/global_app_drawer.dart';
 import '../../../../shared/widgets/global_bottom_navigation.dart';
+import '../../../../shared/widgets/avatar_widget.dart';
 import '../../../../shared/utils/notification_helpers.dart';
 
 import '../../../notifications/presentation/pages/notifications_page.dart';
@@ -563,21 +564,13 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
             left: 72, right: 16, bottom: 50), // Added space for hamburger menu
         child: Row(
           children: [
-            CircleAvatar(
+            AvatarWidget(
+              avatarUrl: user.avatarUrl,
+              displayName: user.displayName,
               radius: 25,
               backgroundColor: Colors.white.withValues(alpha: 0.2),
-              backgroundImage:
-                  user.avatarUrl != null ? NetworkImage(user.avatarUrl!) : null,
-              child: user.avatarUrl == null
-                  ? Text(
-                      '${user.firstName[0]}${user.lastName[0]}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    )
-                  : null,
+              textColor: Colors.white,
+              fontSize: 18,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1197,22 +1190,13 @@ class _EnhancedHomePageState extends ConsumerState<EnhancedHomePage> {
                     ),
                     child: Column(
                       children: [
-                        CircleAvatar(
+                        AvatarWidget(
+                          avatarUrl: user.avatarUrl,
+                          displayName: user.displayName,
                           radius: 50,
                           backgroundColor: AppTheme.primaryColor,
-                          backgroundImage: user.avatarUrl != null
-                              ? NetworkImage(user.avatarUrl!)
-                              : null,
-                          child: user.avatarUrl == null
-                              ? Text(
-                                  '${user.firstName[0]}${user.lastName[0]}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                )
-                              : null,
+                          textColor: Colors.white,
+                          fontSize: 24,
                         ),
                         const SizedBox(height: 16),
                         Text(

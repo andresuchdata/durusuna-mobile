@@ -48,7 +48,6 @@ class _RobustImageWidgetState extends State<RobustImageWidget> {
 
   Map<String, String> get _headers {
     final headers = <String, String>{
-      'Cache-Control': 'no-cache',
       'Accept': 'image/*',
     };
 
@@ -76,7 +75,11 @@ class _RobustImageWidgetState extends State<RobustImageWidget> {
             );
       },
       errorWidget: (context, url, error) {
-        debugPrint('Image load error: $error for URL: $url');
+        // Only log actual network errors, not cache-related issues
+        if (error.toString().contains('NetworkException') ||
+            error.toString().contains('SocketException')) {
+          debugPrint('Network image load error: $error for URL: $url');
+        }
 
         // Try fallback without auth headers if initial request failed
         if (_authToken != null) {
@@ -86,7 +89,6 @@ class _RobustImageWidgetState extends State<RobustImageWidget> {
             height: widget.height,
             fit: widget.fit,
             httpHeaders: const {
-              'Cache-Control': 'no-cache',
               'Accept': 'image/*',
             },
             placeholder: (context, url) {
@@ -96,7 +98,11 @@ class _RobustImageWidgetState extends State<RobustImageWidget> {
                   );
             },
             errorWidget: (context, url, error) {
-              debugPrint('Fallback image load also failed: $error');
+              // Only log actual network failures
+              if (error.toString().contains('NetworkException') ||
+                  error.toString().contains('SocketException')) {
+                debugPrint('Fallback image load also failed: $error');
+              }
               return widget.errorWidget ??
                   const Icon(
                     Icons.broken_image,

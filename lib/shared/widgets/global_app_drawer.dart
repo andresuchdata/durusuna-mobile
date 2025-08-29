@@ -4,6 +4,7 @@ import '../../core/constants/app_theme.dart';
 import '../../core/utils/global_auth_handler.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
+import 'avatar_widget.dart';
 import '../../features/class_management/presentation/pages/class_management_page.dart';
 import '../../features/chat/presentation/pages/conversations_page.dart';
 
@@ -115,22 +116,13 @@ class GlobalAppDrawer extends ConsumerWidget {
           children: [
             Row(
               children: [
-                CircleAvatar(
+                AvatarWidget(
+                  avatarUrl: user.avatarUrl,
+                  displayName: user.displayName,
                   radius: 28,
                   backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  backgroundImage: user.avatarUrl != null
-                      ? NetworkImage(user.avatarUrl!)
-                      : null,
-                  child: user.avatarUrl == null
-                      ? Text(
-                          '${user.firstName[0]}${user.lastName[0]}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      : null,
+                  textColor: Colors.white,
+                  fontSize: 20,
                 ),
                 const Spacer(),
                 IconButton(

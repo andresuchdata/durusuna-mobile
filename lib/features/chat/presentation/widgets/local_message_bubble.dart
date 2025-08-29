@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_theme.dart';
+import '../../../../shared/widgets/avatar_widget.dart';
 import '../../../../shared/models/local_message.dart';
 import '../../../../shared/services/chat_repository_service.dart';
 import '../../../../shared/models/user.dart';
@@ -313,32 +314,13 @@ class _LocalMessageBubbleState extends State<LocalMessageBubble> {
                     : MainAxisAlignment.start,
                 children: [
                   if (_shouldShowAvatar && !widget.isSelectionMode) ...[
-                    CircleAvatar(
+                    AvatarWidget(
+                      avatarUrl: widget.senderAvatarUrl,
+                      displayName: widget.senderName,
                       radius: 14,
                       backgroundColor: AppTheme.primaryColor,
-                      backgroundImage: (widget.senderAvatarUrl != null &&
-                              widget.senderAvatarUrl!.isNotEmpty)
-                          ? NetworkImage(widget.senderAvatarUrl!)
-                          : null,
-                      child: (widget.senderAvatarUrl == null ||
-                              widget.senderAvatarUrl!.isEmpty)
-                          ? Text(
-                              (widget.senderName?.trim().isNotEmpty == true)
-                                  ? widget.senderName!
-                                      .trim()
-                                      .split(' ')
-                                      .where((w) => w.isNotEmpty)
-                                      .take(2)
-                                      .map((w) => w[0].toUpperCase())
-                                      .join()
-                                  : 'U',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 11,
-                              ),
-                            )
-                          : null,
+                      textColor: Colors.white,
+                      fontSize: 11,
                     ),
                     const SizedBox(width: 8),
                   ],

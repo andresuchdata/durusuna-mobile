@@ -3,6 +3,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../core/constants/app_theme.dart';
 import '../models/user.dart';
 import '../models/conversation.dart';
+import 'avatar_widget.dart';
 
 class GroupProfileCard extends StatefulWidget {
   final Conversation conversation;
@@ -57,20 +58,13 @@ class _GroupProfileCardState extends State<GroupProfileCard> {
                 // Group Avatar
                 Stack(
                   children: [
-                    CircleAvatar(
+                    AvatarWidget(
+                      avatarUrl: widget.conversation.avatarUrl,
+                      displayName: widget.conversation.name,
                       radius: 50,
                       backgroundColor: AppTheme.primaryColor,
-                      backgroundImage:
-                          widget.conversation.avatarUrl?.isNotEmpty == true
-                              ? NetworkImage(widget.conversation.avatarUrl!)
-                              : null,
-                      child: widget.conversation.avatarUrl?.isEmpty != false
-                          ? const Icon(
-                              Icons.group,
-                              size: 50,
-                              color: Colors.white,
-                            )
-                          : null,
+                      textColor: Colors.white,
+                      fontSize: 28,
                     ),
                     if (widget.onEditGroup != null)
                       Positioned(
@@ -365,22 +359,13 @@ class _GroupProfileCardState extends State<GroupProfileCard> {
       ),
       leading: Stack(
         children: [
-          CircleAvatar(
+          AvatarWidget(
+            avatarUrl: member.avatarUrl,
+            displayName: member.displayName,
             radius: 22,
             backgroundColor: AppTheme.primaryColor,
-            backgroundImage: member.avatarUrl?.isNotEmpty == true
-                ? NetworkImage(member.avatarUrl!)
-                : null,
-            child: member.avatarUrl?.isEmpty != false
-                ? Text(
-                    _getUserInitials(member),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  )
-                : null,
+            textColor: Colors.white,
+            fontSize: 16,
           ),
           // Online indicator (for future use when we have real-time presence)
           // Positioned(
@@ -440,17 +425,17 @@ class _GroupProfileCardState extends State<GroupProfileCard> {
       trailing: PopupMenuButton<String>(
         onSelected: (value) => _handleMemberAction(value, member),
         itemBuilder: (context) => [
-          PopupMenuItem(
+          const PopupMenuItem(
             value: 'message',
             child: Row(
               children: [
-                const Icon(Icons.chat_bubble_outline, size: 18),
-                const SizedBox(width: 8),
-                const Text('Message'),
+                Icon(Icons.chat_bubble_outline, size: 18),
+                SizedBox(width: 8),
+                Text('Message'),
               ],
             ),
           ),
-          PopupMenuItem(
+          const PopupMenuItem(
             value: 'view_profile',
             child: Row(
               children: [
