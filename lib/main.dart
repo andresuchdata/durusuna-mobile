@@ -25,6 +25,7 @@ import 'features/class_management/presentation/pages/class_management_page.dart'
     show userClassesProvider;
 import 'shared/services/firebase/firebase_service.dart';
 import 'shared/services/firebase/fcm_service.dart';
+import 'shared/services/web_storage_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +40,9 @@ void main() async {
   // Initialize Hive
   await Hive.initFlutter();
   await StorageService.init();
+
+  // Initialize web storage service for web platform
+  await WebStorageService.initialize();
 
   // Initialize repository factory (SQLite with Isar fallback)
   await RepositoryFactory.initialize(preferSQLite: true);

@@ -1,5 +1,6 @@
 import 'chat_repository.dart';
 import 'sqlite_chat_repository.dart';
+import 'web_chat_repository.dart';
 import 'package:flutter/foundation.dart';
 
 /// Factory for creating and managing chat repositories
@@ -9,13 +10,21 @@ class RepositoryFactory {
   static bool _initialized = false;
 
   /// Initialize the repository factory with the preferred database type
-  /// [preferSQLite] - If true, tries SQLite first, then falls back to Isar
+  /// [preferSQLite] - If true, tries SQLite first, then falls back to web storage
   static Future<void> initialize({bool preferSQLite = true}) async {
     if (_initialized) return;
 
     try {
-      if (preferSQLite) {
-        // Try SQLite first
+      if (kIsWeb) {
+        // Use web repository for web platform
+        final webRepo = WebChatRepository();
+        await webRepo.initialize();
+        _currentRepository = webRepo;
+        _initialized = true;
+        debugPrint(
+            '✅ [RepositoryFactory] Using Web repository for web platform');
+      } else if (preferSQLite) {
+        // Try SQLite first for mobile platforms
         final sqliteRepo = SQLiteChatRepository();
         await sqliteRepo.initialize();
         _currentRepository = sqliteRepo;
@@ -26,7 +35,25 @@ class RepositoryFactory {
       }
     } catch (e) {
       debugPrint('⚠️ [RepositoryFactory] Primary repository failed: $e');
-      rethrow;
+
+      // Fallback to web repository if SQLite fails
+      if (!kIsWeb) {
+        try {
+          debugPrint(
+              '🔄 [RepositoryFactory] Falling back to web repository...');
+          final webRepo = WebChatRepository();
+          await webRepo.initialize();
+          _currentRepository = webRepo;
+          _initialized = true;
+          debugPrint('✅ [RepositoryFactory] Using Web repository as fallback');
+        } catch (webError) {
+          debugPrint(
+              '❌ [RepositoryFactory] Web repository also failed: $webError');
+          rethrow;
+        }
+      } else {
+        rethrow;
+      }
     }
   }
 
@@ -61,6 +88,12 @@ class RepositoryFactory {
           _currentRepository = sqliteRepo;
           debugPrint('✅ [RepositoryFactory] Switched to SQLite repository');
           break;
+        case RepositoryType.web:
+          final webRepo = WebChatRepository();
+          await webRepo.initialize();
+          _currentRepository = webRepo;
+          debugPrint('✅ [RepositoryFactory] Switched to Web repository');
+          break;
         default:
           throw ArgumentError('Cannot switch to unknown repository type');
       }
@@ -74,6 +107,9 @@ class RepositoryFactory {
   static RepositoryType get currentType {
     if (_currentRepository is SQLiteChatRepository) {
       return RepositoryType.sqlite;
+    }
+    if (_currentRepository is WebChatRepository) {
+      return RepositoryType.web;
     }
 
     return RepositoryType.unknown;
@@ -122,6 +158,8 @@ class RepositoryFactory {
     switch (currentType) {
       case RepositoryType.sqlite:
         return 'SQLite';
+      case RepositoryType.web:
+        return 'Web';
       default:
         return 'Unknown';
     }
@@ -132,5 +170,6 @@ class RepositoryFactory {
 enum RepositoryType {
   sqlite,
   isar,
+  web,
   unknown,
 }

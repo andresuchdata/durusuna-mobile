@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Flutter Web Debug",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "deviceId": "web-server",
+            "args": [
+                "--web-port=3000"
+            ]
+        },
+        {
+            "name": "Flutter Web Profile",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "deviceId": "web-server",
+            "args": [
+                "--web-port=3000",
+                "--profile"
+            ]
+        }
+    ]
+}

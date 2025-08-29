@@ -1,6 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
+import '../services/platform_path_service.dart';
 import '../models/local_message.dart';
 import '../models/local_conversation.dart';
 import '../models/local_user.dart';
@@ -25,18 +25,35 @@ class SQLiteChatRepository implements ChatRepository {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    final dir = await getApplicationDocumentsDirectory();
-    final dbPath = join(dir.path, _dbName);
+    // Use platform-specific path service
+    final dbPath = await PlatformPathService.getDatabasePath(_dbName);
 
-    _database = await openDatabase(
-      dbPath,
-      version: _version,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
+    // Check if we're on web platform
+    if (PlatformPathService.isWeb) {
+      debugPrint(
+          '⚠️ [SQLite] Running on web platform - SQLite may not work properly');
+      // For web, we might want to use a different storage solution
+      // For now, we'll try to initialize but it may fail
+    }
 
-    _initialized = true;
-    debugPrint('✅ [SQLite] Repository initialized successfully');
+    try {
+      _database = await openDatabase(
+        dbPath,
+        version: _version,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+
+      _initialized = true;
+      debugPrint('✅ [SQLite] Repository initialized successfully');
+    } catch (e) {
+      debugPrint('❌ [SQLite] Failed to initialize database: $e');
+      if (PlatformPathService.isWeb) {
+        debugPrint(
+            '💡 [SQLite] Consider using IndexedDB or localStorage for web storage');
+      }
+      rethrow;
+    }
   }
 
   @override
