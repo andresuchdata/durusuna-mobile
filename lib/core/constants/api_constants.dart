@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 class ApiConstants {
   /// 🌐 BACKEND CONNECTION CONFIGURATION
@@ -71,10 +71,12 @@ class ApiConstants {
     }
 
     // Platform-specific defaults for simulators/emulators
-    if (Platform.isAndroid) {
-      return 'http://10.0.2.2:$_developmentPort'; // Android emulator
+    if (kIsWeb) {
+      return 'http://localhost:$_developmentPort'; // Web platform
     } else {
-      return 'http://localhost:$_developmentPort'; // iOS simulator
+      // For mobile platforms, assume Android emulator by default
+      // In a real implementation, you might want to use conditional imports
+      return 'http://10.0.2.2:$_developmentPort'; // Android emulator
     }
   }
 

@@ -38,7 +38,7 @@ class FCMService {
       );
 
       // Initialize local notifications
-      await _notificationHandler.initialize();
+      await NotificationHandler.initialize();
 
       // Get and store FCM token
       await _refreshToken();
@@ -93,13 +93,13 @@ class FCMService {
   /// Handle foreground messages
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     debugPrint('🔥 Foreground message received: ${message.messageId}');
-    await _notificationHandler.showLocalNotification(message);
+    await NotificationHandler.showLocalNotification(message);
   }
 
   /// Handle notification tap (background)
   Future<void> _handleNotificationTap(RemoteMessage message) async {
     debugPrint('🔥 Notification tapped: ${message.messageId}');
-    _notificationHandler.handleNotificationNavigation(message.data);
+    NotificationHandler.handleNotificationNavigation(message.data);
   }
 
   /// Handle app launch from notification
@@ -108,7 +108,7 @@ class FCMService {
     if (initialMessage != null) {
       debugPrint(
           '🔥 App launched from notification: ${initialMessage.messageId}');
-      _notificationHandler.handleNotificationNavigation(initialMessage.data);
+      NotificationHandler.handleNotificationNavigation(initialMessage.data);
     }
   }
 

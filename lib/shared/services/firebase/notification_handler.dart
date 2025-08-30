@@ -1,24 +1,20 @@
-import 'dart:io';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../notification_deeplink_router.dart';
 
-/// Handles local notifications and navigation from Firebase messages
+/// Handles local notifications for foreground messages
 class NotificationHandler {
-  static final NotificationHandler _instance = NotificationHandler._internal();
-  factory NotificationHandler() => _instance;
-  NotificationHandler._internal();
-
-  final FlutterLocalNotificationsPlugin _localNotifications =
+  static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
-  static const String _channelId = 'durusuna_notifications';
+  static const String _channelId = 'durusuna_channel';
   static const String _channelName = 'Durusuna Notifications';
-  static const String _channelDescription = 'Notifications for Durusuna app';
+  static const String _channelDescription = 'Notifications from Durusuna app';
 
   /// Initialize local notifications
-  Future<void> initialize() async {
+  static Future<void> initialize() async {
     try {
       const androidSettings =
           AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -38,7 +34,7 @@ class NotificationHandler {
         onDidReceiveNotificationResponse: _onLocalNotificationTapped,
       );
 
-      if (Platform.isAndroid) {
+      if (!kIsWeb) {
         await _createNotificationChannel();
       }
 
@@ -49,7 +45,7 @@ class NotificationHandler {
   }
 
   /// Show local notification for foreground messages
-  Future<void> showLocalNotification(RemoteMessage message) async {
+  static Future<void> showLocalNotification(RemoteMessage message) async {
     try {
       final notification = message.notification;
       if (notification == null) return;
@@ -92,20 +88,25 @@ class NotificationHandler {
   }
 
   /// Handle navigation from notification data
-  void handleNotificationNavigation(Map<String, dynamic> data) {
+  static void handleNotificationNavigation(Map<String, dynamic> data) {
     NotificationDeepLinkRouter.handleFCMNavigation(data);
   }
 
   /// Handle local notification tap
-  void _onLocalNotificationTapped(NotificationResponse response) {
+  static void _onLocalNotificationTapped(NotificationResponse response) {
     debugPrint('🔔 Local notification tapped: ${response.payload}');
     if (response.payload?.isNotEmpty == true) {
       handleNotificationNavigation({'actionUrl': response.payload});
     }
   }
 
-  /// Create notification channel for Android
-  Future<void> _createNotificationChannel() async {
+  /// Create notification channel for mobile platforms
+  static Future<void> _createNotificationChannel() async {
+    if (kIsWeb) {
+      // Web doesn't need notification channels
+      return;
+    }
+
     const channel = AndroidNotificationChannel(
       _channelId,
       _channelName,
@@ -120,6 +121,6 @@ class NotificationHandler {
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
 
-    debugPrint('🔔 Android notification channel created');
+    debugPrint('🔔 Mobile notification channel created');
   }
 }

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
@@ -68,10 +68,19 @@ class RealtimeService with WidgetsBindingObserver {
   bool get isConnected => _isConnected;
   String? get currentUserId => _currentUserId;
 
+  /// Get platform name for logging
+  static String get _platformName {
+    if (kIsWeb) {
+      return 'web';
+    } else {
+      return 'mobile';
+    }
+  }
+
   /// Initialize and connect to realtime service
   Future<void> connect() async {
     debugPrint(
-        '🔄 RealtimeService: connect() called on ${Platform.operatingSystem} - isConnected: $_isConnected');
+        '🔄 RealtimeService: connect() called on $_platformName - isConnected: $_isConnected');
 
     if (_isConnected) {
       debugPrint(
@@ -107,17 +116,14 @@ class RealtimeService with WidgetsBindingObserver {
       };
 
       // Platform-specific transport configuration
-      if (Platform.isIOS) {
-        // iOS benefits from polling fallback and websocket
-        options['transports'] = ['websocket', 'polling'];
-        // Additional iOS-specific options
-        options['forceNew'] = true;
+      if (kIsWeb) {
+        // Web platform uses polling for fallback
+        options['transports'] = ['polling'];
       } else {
-        // Android generally works fine with websocket only
-        options['transports'] = [
-          'websocket',
-          'polling'
-        ]; // Add polling as backup for Android too
+        // Mobile platforms use websocket with polling fallback
+        options['transports'] = ['websocket', 'polling'];
+        // Additional mobile-specific options
+        options['forceNew'] = true;
       }
 
       _socket = io.io(
@@ -170,8 +176,7 @@ class RealtimeService with WidgetsBindingObserver {
   }
 
   void _handleAppResumed() {
-    debugPrint(
-        '📱 RealtimeService: App resumed on ${Platform.operatingSystem}');
+    debugPrint('📱 RealtimeService: App resumed on $_platformName');
 
     // Check if connection is still active when app resumes
     Future.delayed(const Duration(milliseconds: 1000), () {
@@ -201,8 +206,8 @@ class RealtimeService with WidgetsBindingObserver {
 
   void _startConnectionCheck() {
     _stopConnectionCheck();
-    if (Platform.isAndroid) {
-      // More frequent connection checks on Android
+    if (!kIsWeb) {
+      // More frequent connection checks on mobile platforms
       _connectionCheckTimer =
           Timer.periodic(const Duration(seconds: 30), (timer) {
         _checkConnectionHealth();
@@ -234,22 +239,22 @@ class RealtimeService with WidgetsBindingObserver {
     disconnect();
     await Future.delayed(const Duration(milliseconds: 500)); // Brief delay
     await connect();
-    if (Platform.isAndroid) {
-      _startConnectionCheck(); // Start health checks on Android
+    if (!kIsWeb) {
+      _startConnectionCheck(); // Start health checks on mobile platforms
     }
   }
 
   /// Force initialization - useful when app starts or after login
   Future<void> initialize() async {
     debugPrint(
-        '🔧 RealtimeService: initialize() called on ${Platform.operatingSystem} - isConnected: $_isConnected');
+        '🔧 RealtimeService: initialize() called on $_platformName - isConnected: $_isConnected');
 
     if (!_isConnected) {
       debugPrint('🔄 RealtimeService: Not connected, calling connect()...');
       await connect();
-      if (Platform.isAndroid) {
+      if (!kIsWeb) {
         debugPrint(
-            '📱 RealtimeService: Starting Android connection health checks');
+            '📱 RealtimeService: Starting mobile connection health checks');
         _startConnectionCheck();
       }
     } else {
@@ -272,15 +277,14 @@ class RealtimeService with WidgetsBindingObserver {
       'socketUrl': ApiConstants.socketUrl,
       'currentUserId': _currentUserId,
       'hasToken': StorageService.getToken() != null,
-      'platform': Platform.operatingSystem,
+      'platform': _platformName,
     };
   }
 
   void _setupEventListeners() {
     debugPrint('🔧 [WEBSOCKET] Setting up event listeners...');
     _socket!.onConnect((_) {
-      debugPrint(
-          '🔗 RealtimeService: Connected to server on ${Platform.operatingSystem}');
+      debugPrint('🔗 RealtimeService: Connected to server on $_platformName');
       _isConnected = true;
       _connectionController.add(true);
       _setupUserPresence();
@@ -292,14 +296,14 @@ class RealtimeService with WidgetsBindingObserver {
 
     _socket!.onDisconnect((reason) {
       debugPrint(
-          '❌ RealtimeService: Disconnected from server - reason: $reason on ${Platform.operatingSystem}');
+          '❌ RealtimeService: Disconnected from server - reason: $reason on $_platformName');
       _isConnected = false;
       _connectionController.add(false);
     });
 
     _socket!.onReconnect((attempt) {
       debugPrint(
-          '🔄 RealtimeService: Reconnected to server (attempt $attempt) on ${Platform.operatingSystem}');
+          '🔄 RealtimeService: Reconnected to server (attempt $attempt) on $_platformName');
       _isConnected = true; // Fix: Update connection state on reconnect
       _connectionController.add(true);
       _setupUserPresence();
@@ -583,12 +587,12 @@ class RealtimeService with WidgetsBindingObserver {
     if (user != null && _socket?.connected == true) {
       _currentUserId = user['id'];
       debugPrint(
-          '🔄 RealtimeService: Setting up presence for user $_currentUserId on ${Platform.operatingSystem}');
+          '🔄 RealtimeService: Setting up presence for user $_currentUserId on $_platformName');
 
       // Emit user online status
       _socket!.emit('user:online', {
         'userId': _currentUserId,
-        'platform': Platform.operatingSystem,
+        'platform': _platformName,
         'timestamp': DateTime.now().toIso8601String(),
       });
 
@@ -1121,7 +1125,7 @@ class RealtimeNotificationEvent {
 final realtimeServiceProvider = Provider<RealtimeService>((ref) {
   final service = RealtimeService.instance;
   debugPrint(
-      '🔌 RealtimeServiceProvider: Creating provider on ${Platform.operatingSystem}');
+      '🔌 RealtimeServiceProvider: Creating provider on ${RealtimeService._platformName}');
 
   // Listen to auth state changes and connect/disconnect automatically
   ref.listen(authStateProvider, (previous, next) {
@@ -1165,8 +1169,8 @@ final realtimeServiceProvider = Provider<RealtimeService>((ref) {
     }
   });
 
-  // Additional check specifically for Android (longer delay)
-  if (Platform.isAndroid) {
+  // Additional check specifically for mobile platforms (longer delay)
+  if (!kIsWeb) {
     Future.delayed(const Duration(milliseconds: 3000), () {
       final authState = ref.read(authStateProvider);
       if (authState.isAuthenticated == true && !service.isConnected) {

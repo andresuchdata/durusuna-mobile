@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,53 +13,17 @@ class PlatformOptimization {
 
     if (kIsWeb) {
       await _initializeWeb();
-    } else if (Platform.isIOS) {
-      await _initializeIOS();
-    } else if (Platform.isAndroid) {
-      await _initializeAndroid();
+    } else {
+      await _initializeMobile();
     }
 
     _initialized = true;
   }
 
-  /// iOS-specific optimizations
-  static Future<void> _initializeIOS() async {
+  /// Mobile-specific optimizations (iOS and Android)
+  static Future<void> _initializeMobile() async {
     try {
-      // Enable ProMotion on supported devices (iPhone 13 Pro and later)
-      SystemChrome.setSystemUIOverlayStyle(
-        const SystemUiOverlayStyle(
-          systemNavigationBarColor: Color(0x00000000),
-          statusBarColor: Color(0x00000000),
-        ),
-      );
-
-      // Set preferred frame rate for iOS
-      if (Platform.isIOS) {
-        try {
-          debugPrint(
-              '🎯 Requesting ${PerformanceConstants.targetRefreshRate}Hz refresh rate...');
-          await SystemChannels.platform
-              .invokeMethod('SystemChrome.setPreferredFrameRate', {
-            'frameRate': PerformanceConstants.targetRefreshRate,
-          });
-          debugPrint('✅ iOS frame rate request sent successfully');
-        } catch (e) {
-          debugPrint('⚠️ Failed to set iOS frame rate: $e');
-          debugPrint(
-              '💡 This is normal in simulator - physical device required for 120Hz');
-        }
-      }
-
-      debugPrint('✅ iOS optimizations initialized');
-    } catch (e) {
-      debugPrint('❌ iOS optimization error: $e');
-    }
-  }
-
-  /// Android-specific optimizations
-  static Future<void> _initializeAndroid() async {
-    try {
-      // Enable high refresh rate on supported Android devices
+      // Enable system UI optimizations for mobile platforms
       SystemChrome.setSystemUIOverlayStyle(
         const SystemUiOverlayStyle(
           systemNavigationBarColor: Color(0x00000000),
@@ -70,19 +33,32 @@ class PlatformOptimization {
         ),
       );
 
-      // Request high performance mode on Android
-      if (Platform.isAndroid) {
-        try {
-          await SystemChannels.platform
-              .invokeMethod('SystemChrome.setHighPerformanceMode', true);
-        } catch (e) {
-          debugPrint('High performance mode not available: $e');
-        }
+      // Set preferred frame rate for mobile platforms
+      try {
+        debugPrint(
+            '🎯 Requesting ${PerformanceConstants.targetRefreshRate}Hz refresh rate...');
+        await SystemChannels.platform
+            .invokeMethod('SystemChrome.setPreferredFrameRate', {
+          'frameRate': PerformanceConstants.targetRefreshRate,
+        });
+        debugPrint('✅ Mobile frame rate request sent successfully');
+      } catch (e) {
+        debugPrint('⚠️ Failed to set mobile frame rate: $e');
+        debugPrint(
+            '💡 This is normal in simulator - physical device required for 120Hz');
       }
 
-      debugPrint('✅ Android optimizations initialized');
+      // Request high performance mode on mobile platforms
+      try {
+        await SystemChannels.platform
+            .invokeMethod('SystemChrome.setHighPerformanceMode', true);
+      } catch (e) {
+        debugPrint('High performance mode not available: $e');
+      }
+
+      debugPrint('✅ Mobile optimizations initialized');
     } catch (e) {
-      debugPrint('❌ Android optimization error: $e');
+      debugPrint('❌ Mobile optimization error: $e');
     }
   }
 
@@ -97,40 +73,35 @@ class PlatformOptimization {
 
   /// Get optimal scroll physics for the current platform
   static ScrollPhysics getOptimalScrollPhysics() {
-    if (Platform.isIOS) {
+    if (kIsWeb) {
+      return const AlwaysScrollableScrollPhysics();
+    } else {
+      // For mobile platforms, use bouncing scroll physics
       return const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       );
-    } else if (Platform.isAndroid) {
-      return const HighRefreshScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
-      );
     }
-    return const HighRefreshScrollPhysics();
   }
 
   /// Get optimal animation duration for the current platform
   static Duration getOptimalAnimationDuration() {
-    if (Platform.isIOS) {
+    if (kIsWeb) {
       return PerformanceConstants.normalAnimation;
-    } else if (Platform.isAndroid) {
+    } else {
       return PerformanceConstants.fastAnimation;
     }
-    return PerformanceConstants.normalAnimation;
   }
 
   /// Check if high refresh rate is likely supported
   static bool get isHighRefreshRateSupported {
     // This is a heuristic - in a real app you'd use platform channels
     // to check actual device capabilities
-    if (Platform.isIOS) {
-      // iPhone 13 Pro and later support ProMotion (120Hz)
-      return true; // Assume supported for now
-    } else if (Platform.isAndroid) {
-      // Many modern Android devices support 90Hz or 120Hz
+    if (kIsWeb) {
+      return false; // Web doesn't typically support high refresh rates
+    } else {
+      // Mobile platforms often support 90Hz or 120Hz
       return true; // Assume supported for now
     }
-    return false;
   }
 
   /// Get recommended cache extent based on platform and device capabilities

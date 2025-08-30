@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import 'dart:io' show Platform;
+
 import '../../../../core/constants/app_theme.dart';
 import '../../../../shared/widgets/performance_optimized_list.dart';
 import '../../../../shared/services/chat_service.dart';
@@ -84,7 +84,6 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
       }
 
       for (final conversation in conversations) {
-        if (Platform.isAndroid) {}
         realtimeService.joinConversation(conversation.serverId);
       }
     });

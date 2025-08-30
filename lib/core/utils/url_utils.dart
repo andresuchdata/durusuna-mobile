@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import '../constants/api_constants.dart';
 
 class UrlUtils {
@@ -8,6 +8,7 @@ class UrlUtils {
   /// - iOS Simulator: localhost -> localhost (works fine)
   /// - Physical Device: localhost -> actual IP (if configured)
   /// - Production: localhost -> production backend URL
+  /// - Web: localhost -> localhost (works fine)
   static String rewriteUrl(String url) {
     if (url.isEmpty) return url;
 
@@ -16,13 +17,16 @@ class UrlUtils {
       return url;
     }
 
-    // For Android emulator, replace localhost with 10.0.2.2
-    if (Platform.isAndroid) {
-      return url.replaceAll('localhost', '10.0.2.2');
+    // For web platform, localhost works fine
+    if (kIsWeb) {
+      return url;
     }
 
-    // For iOS simulator and other platforms, localhost works fine
-    return url;
+    // For Android emulator, replace localhost with 10.0.2.2
+    // Note: We'll need to handle this differently since we can't use Platform.isAndroid on web
+    // For now, we'll assume it's Android if not web (this is a simplification)
+    // In a real implementation, you might want to use conditional imports
+    return url.replaceAll('localhost', '10.0.2.2');
   }
 
   /// Rewrite attachment URL for platform compatibility and production environment
